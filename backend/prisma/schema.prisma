@@ -1,0 +1,181 @@
+// Para migrar para Postgres: trocar provider para "postgresql" e DATABASE_URL.
+// Evitar SQL raw específico de dialeto. UUID como String. Dinheiro sempre Int (centavos).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite não suporta enums nativos — usar String + validação em código/Zod.
+// No Postgres, trocar para enums nativos.
+
+model User {
+  id                           String    @id @default(uuid())
+  name                         String
+  email                        String    @unique
+  role                         String    @default("PROFESSOR") // Role: ADMINISTRADOR|CHEFE_DEPARTAMENTO|CONSELHEIRO|PROFESSOR|ALUNO (enum nativo no Postgres)
+  status                       String    @default("ATIVO") // ATIVO|INATIVO
+  passwordHash                 String
+  mustChangePassword           Boolean   @default(false)
+  temporaryPasswordExpiresAt   DateTime?
+  failedLoginAttempts          Int       @default(0)
+  lockedUntil                  DateTime?
+  lastLoginAt                  DateTime?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+  requests                     ResourceRequest[] @relation("Requester")
+}
+
+model DepartmentSettings {
+  id                          String   @id @default("default")
+  automaticApprovalLimitCents Int      @default(0)
+  limitValidFrom              DateTime?
+  limitValidTo                DateTime?
+  currency                    String   @default("BRL")
+  currentExchangeRate         Float    @default(5.0)
+  dailyAllowanceInfo          String   @default("")
+  votingDurationHours         Int      @default(24)
+  viewExtensionHours          Int      @default(24)
+  maxViewRequests             Int      @default(1)
+  updatedBy                   String?
+  updatedAt                   DateTime @updatedAt
+}
+
+model FundBalance {
+  id              String   @id @default(uuid())
+  referenceYear   Int      @unique
+  availableCents  Int      @default(0)
+  provisionedCents Int     @default(0)
+  spentCents      Int      @default(0)
+  version         Int      @default(0)
+  updatedBy       String?
+  updatedAt       DateTime @updatedAt
+}
+
+model ResourceRequest {
+  id                    String        @id @default(uuid())
+  requesterId           String
+  requester             User          @relation("Requester", fields: [requesterId], references: [id])
+  type                  String // EQUIPAMENTO|PUBLICACAO|VIAGEM|AUXILIO_ESTUDANTIL
+  title                 String
+  justification         String        @default("")
+  status                String        @default("RASCUNHO")
+  referenceYear         Int
+  requestedAmountCents  Int
+  approvedAmountCents   Int           @default(0)
+  originalCurrency      String        @default("BRL")
+  exchangeRate          Float?
+  convertedAmountCents  Int?
+  submittedAt           DateTime?
+  votingDeadlineAt      DateTime?
+  decidedAt             DateTime?
+  payload               String        @default("{}") // JSON detalhes por tipo
+  // Suspensão p/ reunião ordinária (só chefe) — read-only até liberação
+  suspendedAt           DateTime?
+  suspendedBy           String?
+  suspensionReason      String        @default("")
+  meetingDate           DateTime?
+  deadlineFrozenAt      DateTime?
+  // Decisão colegiada / final
+  decidedBy             String?
+  decisionReason        String        @default("")
+  collegiateMinutes     String        @default("") // ata
+  approvedItems         String        @default("[]")
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  files                 RequestFile[]
+  transactions          FinancialTransaction[]
+}
+
+model RequestFile {
+  id           String   @id @default(uuid())
+  requestId    String
+  request      ResourceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fileType     String
+  originalName String
+  storageKey   String
+  mimeType     String
+  sizeBytes    Int
+  checksum     String
+  uploadedBy   String
+  createdAt    DateTime @default(now())
+}
+
+model FinancialTransaction {
+  id          String   @id @default(uuid())
+  requestId   String?
+  request     ResourceRequest? @relation(fields: [requestId], references: [id])
+  type        String
+  amountCents Int
+  fromState   String
+  toState     String
+  performedBy String?
+  metadata    String   @default("{}")
+  createdAt   DateTime @default(now())
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  beforeData String   @default("{}")
+  afterData  String   @default("{}")
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+}
+
+model EmailQueue {
+  id         String   @id @default(uuid())
+  to         String
+  subject    String
+  body       String
+  status     String   @default("PENDING")
+  attempts   Int      @default(0)
+  lastError  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// Placeholders fase futura (votação/discussão) — tabelas mínimas
+model Vote {
+  id        String   @id @default(uuid())
+  requestId String
+  voterId   String
+  voteType  String // DEFERIR|INDEFERIR|DEFERIR_PARCIALMENTE|ABSTER_SE
+  comment   String   @default("")
+  approvedAmountCents Int @default(0) // exigido no parcial
+  tieBreak  Boolean  @default(false) // desempate do chefe
+  finalizedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([requestId, voterId])
+}
+
+model DeliberationMessage {
+  id        String   @id @default(uuid())
+  requestId String
+  authorId  String
+  parentMessageId String?
+  content   String
+  history   String   @default("[]") // edições anteriores p/ auditoria
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ViewRequest {
+  id            String   @id @default(uuid())
+  requestId     String
+  requestedBy   String
+  justification String
+  deadlineBefore DateTime?
+  deadlineAfter  DateTime?
+  createdAt     DateTime @default(now())
+  @@unique([requestId, requestedBy]) // máx 1 vista por conselheiro por solicitação
+}

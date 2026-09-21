@@ -1,0 +1,18 @@
+:root {
+  --black: #0a0a0b;
+  --black-2: #16161a;
+  --amber: #ffb000;
+  --amber-hover: #e69e00;
+  --amber-soft: #fff4d6;
+  --white: #ffffff;
+  --gray-100: #f4f4f5;
+  --gray-200: #e4e4e7;
+  --gray-300: #d4d4d8;
+  --gray-500: #71717a;
+  --gray-700: #3f3f46;
+  --gray-900: #18181b;
+  --danger: #dc2626;
+  --success: #15803d;
+  --radius: 10px;
+  --font: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}

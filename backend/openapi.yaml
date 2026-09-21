@@ -1,0 +1,30 @@
+openapi: 3.0.3
+info: { title: SGRD API, version: 0.2.0 }
+paths:
+  /api/auth/login: { post: { summary: Login @utfpr.edu.br } }
+  /api/auth/me: { get: { summary: Sessão atual } }
+  /api/auth/change-password: { post: { summary: Troca obrigatória } }
+  /api/users: { get: { summary: Listar }, post: { summary: Criar + convite } }
+  /api/users/batch/preview: { post: { summary: Preview lote JSON dry-run (só admin) } }
+  /api/users/batch/confirm: { post: { summary: Confirma lote JSON (só admin) } }
+  /api/users/{id}/role: { patch: { summary: Alterar papel (RF-005) } }
+  /api/requests: { get: { summary: Listar }, post: { summary: Criar rascunho } }
+  /api/requests/{id}/submit: { post: { summary: Submeter + aprovação automática } }
+  /api/requests/{id}/votes: { get: { summary: Listar votos }, post: { summary: Votar (elegível, 1x, parcial exige comentário+valor) } }
+  /api/requests/{id}/votes/me: { put: { summary: Alterar próprio voto antes do prazo } }
+  /api/requests/{id}/view-requests: { post: { summary: Vista máx 1 por conselheiro, +24h } }
+  /api/requests/{id}/close-voting: { post: { summary: Apuração manual admin/chefe (maioria simples, sem quórum) } }
+  /api/requests/{id}/suspend: { post: { summary: Chefe suspende p/ reunião ordinária (read-only) } }
+  /api/requests/{id}/unsuspend: { post: { summary: Chefe libera, prazo recomposto } }
+  /api/requests/{id}/colegiada-decision: { post: { summary: Chefe insere decisão colegiada + ata } }
+  /api/requests/{id}/messages: { get: { summary: Listar discussão }, post: { summary: Postar (bloqueado suspenso) } }
+  /api/messages/{mid}: { patch: { summary: Editar com histórico }, delete: { summary: Soft-delete } }
+  /api/requests/{id}/mark-spent: { post: { summary: Provisionado->gasto, idempotente } }
+  /api/requests/{id}/reverse-provision: { post: { summary: Devolve p/ disponível } }
+  /api/settings: { get: { summary: Config + saldo } }
+  /api/reports/requests: { get: { summary: Relatório + ?format=csv|pdf } }
+  /api/reports/financial: { get: { summary: Financeiro + CSV } }
+  /api/reports/voting: { get: { summary: Votos + vistas } }
+  /api/reports/accountability: { get: { summary: Prestação + PDF } }
+  /api/reports/dashboard: { get: { summary: Agregados 3 pizzas (Top8 docentes, saldos, categorias) } }
+  /api/reports/dashboard-pdf: { post: { summary: PDF do dashboard com imagens PNG dos gráficos } }

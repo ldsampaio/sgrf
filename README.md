@@ -1,0 +1,38 @@
+# SGRD — Sistema de Gestão de Recursos Departamentais (MVP)
+
+MVC · Backend Node + Express + SQLite (Prisma) · Frontend Vue 3 + Vite (SPA).
+
+Gestão de usuários, solicitações financeiras, aprovação automática/votação do conselho, provisionamento de saldo e relatórios para prestação de contas. Detalhes em `docs/`.
+
+## Início rápido
+
+```bash
+./start-dev.sh              # backend :3000 + frontend :5173
+./start-dev.sh --seed-dev   # + massa de teste (nunca em produção)
+```
+
+Manual:
+```bash
+cd backend && cp .env.example .env
+npx prisma migrate dev && node prisma/seed.js
+npm run dev
+cd ../frontend && npm run dev
+```
+
+Teste backend: `cd backend && npx vitest run`.
+
+## Seeds
+
+- Deploy (`npm run seed`): cria só o admin via `INITIAL_ADMIN_EMAIL` + `INITIAL_ADMIN_TEMPORARY_PASSWORD`.
+- Dev (`SEED_DEV_CONFIRM=1 npm run seed:dev`): 7 usuários `@utfpr.edu.br` (senha `Trocar123!`) + limite, saldos e solicitações de exemplo.
+
+## Principal
+
+- Auth só `@utfpr.edu.br`, bloqueio após 5 tentativas, troca obrigatória, JWT em cookie httpOnly.
+- Papéis: admin/chefe/conselho/professor/aluno; importação em lote (JSON, até 200) com preview dry-run em `POST /api/users/batch/preview|confirm`.
+- Solicitações (equipamento, publicação, viagem, auxílio): `totalAnual <= limite` aprova e provisiona automaticamente; acima vai a votação (maioria simples, desempate do chefe, vista +24h, suspensão read-only).
+- Gastos idempotentes (`mark-spent` / `reverse-provision`); relatórios CSV/PDF em `/api/reports/*` e telas `/council`, `/reports`.
+
+## SQLite → Postgres
+
+Trocar `provider` em `prisma/schema.prisma`, ajustar `DATABASE_URL` e rodar `npx prisma migrate dev`. Código sem SQL raw (UUID string, valores em cents).
