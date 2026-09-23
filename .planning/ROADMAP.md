@@ -34,7 +34,7 @@ This milestone takes the feature-complete but buggy SGRF MVP (v0.1.1) to product
   2. The check passes on a clean checkout of the current codebase (existing 17 tests + build green; no database service, no invented lint/typecheck commands)
   3. A deliberately broken test turns the check red — proven the gate actually catches regressions
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -47,7 +47,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-required-checks-PLAN.md — Mark checks required on main (`backend`+`frontend`, strict:false, enforce_admins:true, verified by readback) + record CI as the regression gate in `AGENTS.md`
+- [x] 01-03-required-checks-PLAN.md — Mark checks required on main (`backend`+`frontend`, strict:false, enforce_admins:true, verified by readback) + record CI as the regression gate in `AGENTS.md`
 
 **Cross-cutting constraints:**
 
@@ -240,7 +240,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. CI Regression Gate | 2/3 | In Progress|  |
+| 1. CI Regression Gate | 3/3 | In Progress|  |
 | 2. Rules Decisions (docs/14 close-out) | 0/3 | Not started | - |
 | 3. Deploy & Environment Contract | 0/3 | Not started | - |
 | 4. Authorization Hardening | 0/3 | Not started | - |
