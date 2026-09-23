@@ -33,9 +33,9 @@ This milestone takes the feature-complete but buggy SGRF MVP (v0.1.1) to product
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Add `.github/workflows/ci.yml` — two jobs, Node 22, per-package `working-directory`, `cache-dependency-path`, `npx prisma generate` before vitest, dummy `DATABASE_URL` at job level, `checkout@v7`/`setup-node@v7` (registry-verified versions)
-- [ ] 01-02: Prove the gate — commit a deliberate test break, confirm red, revert, confirm green
-- [ ] 01-03: Mark the check required for the branch and record CI as the regression gate in `AGENTS.md`
+- [ ] 01-01-ci-workflow-PLAN.md — Add `.github/workflows/ci.yml` (two jobs, Node 22, per-package `working-directory`, `cache-dependency-path`, `npx prisma generate` before vitest, dummy `DATABASE_URL`, `checkout@v7`/`setup-node@v7`), push, confirm green
+- [ ] 01-02-red-proof-PLAN.md — Prove the gate: commit a deliberate test break (unit.test.js line 8 → 'WRONG'), confirm red via `gh run list`, `git revert HEAD` + push, confirm green
+- [ ] 01-03-required-checks-PLAN.md — Mark checks required on main (`backend`+`frontend`, strict:false, enforce_admins:true, verified by readback) + record CI as the regression gate in `AGENTS.md`
 
 ### Phase 2: Rules Decisions (docs/14 close-out)
 **Goal**: The two open business rules — partial-approval aggregation and cancellation-after-approval — are explicitly decided and recorded in `docs/03` + `docs/14` before any code implements them.
