@@ -34,12 +34,12 @@ This milestone takes the feature-complete but buggy SGRF MVP (v0.1.1) to product
   2. The check passes on a clean checkout of the current codebase (existing 17 tests + build green; no database service, no invented lint/typecheck commands)
   3. A deliberately broken test turns the check red — proven the gate actually catches regressions
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-ci-workflow-PLAN.md — Add `.github/workflows/ci.yml` (two jobs, Node 22, per-package `working-directory`, `cache-dependency-path`, `npx prisma generate` before vitest, dummy `DATABASE_URL`, `checkout@v7`/`setup-node@v7`), push, confirm green
+- [x] 01-01-ci-workflow-PLAN.md — Add `.github/workflows/ci.yml` (two jobs, Node 22, per-package `working-directory`, `cache-dependency-path`, `npx prisma generate` before vitest, dummy `DATABASE_URL`, `checkout@v7`/`setup-node@v7`), push, confirm green
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -240,7 +240,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. CI Regression Gate | 0/3 | Not started | - |
+| 1. CI Regression Gate | 1/3 | In Progress|  |
 | 2. Rules Decisions (docs/14 close-out) | 0/3 | Not started | - |
 | 3. Deploy & Environment Contract | 0/3 | Not started | - |
 | 4. Authorization Hardening | 0/3 | Not started | - |
