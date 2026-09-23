@@ -14,8 +14,15 @@ Ordem manual: `cp backend/.env.example backend/.env` → `docker compose up -d d
 ## Testes / verificação
 
 - Backend: `cd backend && npx vitest run` (suítes: `batch`, `unit`, `voting`).
-- Frontend **não tem testes** (`npm test` falha de propósito) — verifique com `npm run build`.
-- Sem lint/typecheck/CI configurados; não invente esses comandos.
+- Frontend **não tem testes** (`npm test` falha de propósito) — verifique com `cd frontend && npm run build`.
+- CI vive em `.github/workflows/ci.yml` (jobs `backend` + `frontend`, obrigatórios na `main` — ver nota do gate abaixo). Sem lint/typecheck configurados; não invente esses comandos.
+
+## Gate de regressão (CI obrigatório)
+
+CI é o gate de regressão: todo push na `main` precisa passar os dois checks obrigatórios (`backend` = `cd backend && npx vitest run`, `frontend` = `cd frontend && npm run build`). Proteção configurada via API com `required_status_checks` contextos `["backend", "frontend"]`, `strict:false` e `enforce_admins:true` (sem `required_pull_request_reviews`, sem `restrictions`).
+- `strict:false` — branches não precisam estar atualizadas antes do merge; revisitar quando PRs virarem o fluxo normal (com PRs, `strict:true` passa a fazer sentido).
+- `enforce_admins:true` — pushes de admin também são bloqueados quando o gate está vermelho; não há bypass de hotfix.
+- Recuperação GH006 (push bloqueado com main vermelha): re-execute o workflow que falhou (`gh run rerun`), ou abra um PR com a correção, ou desabilite temporariamente a regra em Settings → Branches e reative após o verde.
 
 ## Armadilhas verificadas
 

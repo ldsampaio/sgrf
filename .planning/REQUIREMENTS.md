@@ -41,7 +41,7 @@ Requirements for this milestone (bug fixes + security hardening + CI). Each maps
 
 ### CI
 
-- [ ] **CI-01**: Two-job pipeline runs on every push/PR as a required check — backend `npx vitest run` + frontend `npm run build` (Node 22, per-package `working-directory`, per-lockfile npm cache); no workspace tooling, no invented lint/typecheck commands; landed **first** as the regression gate for every other fix
+- [x] **CI-01**: Two-job pipeline runs on every push/PR as a required check — backend `npx vitest run` + frontend `npm run build` (Node 22, per-package `working-directory`, per-lockfile npm cache); no workspace tooling, no invented lint/typecheck commands; landed **first** as the regression gate for every other fix
 
 ## v2 Requirements
 
@@ -96,11 +96,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JOB-03 | Phase 7 | Pending |
 | REP-01 | Phase 8 | Pending |
 | REP-02 | Phase 8 | Pending |
-| CI-01 | Phase 1 | Pending |
+| CI-01 | Phase 1 | Complete |
 
 *Phase 2 (Rules Decisions, docs/14 close-out) carries no requirement ID directly — it is the decision gate for VOT-03/VOT-04; their implementation lands in Phase 6 after Phase 2's decisions and Phase 4's permission map.*
 
 **Coverage:**
+
 - v1 requirements: 16 total
 - Mapped to phases: 16
 - Unmapped: 0 ✓
