@@ -144,7 +144,7 @@ through the production topology without changing any visual element.
 > COPY lives in `## Copywriting Contract` above — this section covers state coverage and
 > references those rows.
 
-Applicable state considerations resolved: 4 covered, 0 backstop, 1 unresolved
+Applicable state considerations resolved: 5 covered, 6 dismissed (reasoned), 1 unresolved
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
@@ -152,7 +152,14 @@ Applicable state considerations resolved: 4 covered, 0 backstop, 1 unresolved
 | error | Login error alert | ✅ covered | Misconfigured cookie/prod URL surfaces through existing `div.alert.error[role=alert]` with server message or "Falha no login" — no silent failure |
 | loading | Login submit button | ✅ covered | In-flight button `:disabled` reading "Entrando…", reset in `finally` — locked unchanged |
 | zero-one-many | Deploy checklist doc | ✅ covered | Three checklist steps each with command + expected result render as markdown checklist (D-13) |
-| overflow | Long server error strings in alert | ⚠ unresolved | Title/alert cells render verbatim with no truncation directive (Phase 1 constraint); planner treats wrapping of long Secure-cookie failure messages as assumption |
+| overflow | Deploy checklist doc | ✅ covered | Renderer-owned wrapping applies (docs/DESIGN.md constraints: no raw HTML, tables ≤ 6 columns — Deploy-Contract Doc Shape §3) |
+| empty | Login form | dismissed | Login form mounts with empty refs by design (locked Phase-1 constraint) — there is no "no data" state to design |
+| partial | Login form | dismissed | Inputs are independent; incomplete credentials surface only via the server round-trip error alert, never as partial rendering |
+| empty | Deploy checklist doc | dismissed | Static markdown doc always carries the 3 checklist steps — no empty state exists |
+| loading | Deploy checklist doc | dismissed | Static markdown; no async load, no skeleton/spinner surface |
+| error | Deploy checklist doc | dismissed | Static markdown; no error UI — validation failures surface at deploy time, not in the doc |
+| partial | Deploy checklist doc | dismissed | Static markdown; steps render fully or the doc is unedited — no partial-data rendering |
+| overflow | Long server error strings in alert | ⚠ unresolved — planner must treat as assumption | Title/alert cells render verbatim with no truncation directive (Phase 1 constraint); planner treats wrapping of long Secure-cookie failure messages as assumption |
 
 ---
 
