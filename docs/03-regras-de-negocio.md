@@ -84,3 +84,17 @@ Um processo agendado deve:
 - enviar notificações.
 
 Também deve existir uma ação manual autorizada para reprocessamento seguro.
+
+## RN-009 — Arbitragem de aprovação parcial
+
+Quando a apuração resultar `PARCIAL`, a solicitação NÃO conclui com valor — move para:
+
+```
+AGUARDANDO_ARBITRAGEM
+```
+
+e o `CHEFE_DEPARTAMENTO` arbitra o valor final em `(0, requestedAmountCents]`, em centavos inteiros, com justificativa obrigatória registrada e auditada (`decidedBy` = chefe, como votos parciais exigem `comment`).
+
+Esta regra substitui o comportamento anterior de primeiro-voto-parcial-vence em `backend/src/services/votingService.js:84` (`validVotes.find(...)`), que concluía com o valor do primeiro voto parcial. Votos parciais como `[8000, 5000, 6000]` não mais se resolvem automaticamente para nenhum desses valores.
+
+(Decidido em 2026-09-23, D-01…D-04.)

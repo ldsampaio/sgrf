@@ -18,3 +18,4 @@ Estas questões devem ser resolvidas antes da implantação em produção. Para 
 | Prazo de senha temporária | 24 horas |
 | Retenção de anexos | política institucional configurável |
 | E-mails falhos | três tentativas e alerta ao administrador |
+| Aprovação parcial (agregação) | decidido 2026-09-23: PARCIAL → AGUARDANDO_ARBITRAGEM, chefe arbitra (0, solicitado] com justificativa auditada; substitui primeiro-voto-parcial-vence; votos [8000, 5000, 6000] não mais se resolvem sozinhos |
