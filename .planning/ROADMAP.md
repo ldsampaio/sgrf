@@ -95,10 +95,18 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 02-01-PLAN.md — Partial-approval arbitration slice: RN-009 (AGUARDANDO_ARBITRAGEM) + closed docs/14 partial row (D-01..D-04)
 - [ ] 02-02-PLAN.md — Cancellation slice: RN-010 status×role matrix + REVERSE + closed docs/14 cancellation row (D-05..D-08)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 02-03-PLAN.md — Quorum + vista slice (RN-011/RN-012/RN-013, OVERRIDDEN/REJECTED markers) + whole-commit verification via PR (D-09..D-13; ROADMAP criterion #4 STALE deviation recorded)
+
+**Cross-cutting constraints:**
+
+- No backend/ or frontend/ file is modified by this plan (per D-12 scope discipline)
 
 ### Phase 3: Deploy & Environment Contract
 
