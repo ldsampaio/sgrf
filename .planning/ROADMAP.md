@@ -34,7 +34,7 @@ This milestone takes the feature-complete but buggy SGRF MVP (v0.1.1) to product
   2. The check passes on a clean checkout of the current codebase (existing 17 tests + build green; no database service, no invented lint/typecheck commands)
   3. A deliberately broken test turns the check red — proven the gate actually catches regressions
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 
 Plans:
 **Wave 1**
@@ -43,7 +43,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-red-proof-PLAN.md — Prove the gate: commit a deliberate test break (unit.test.js line 8 → 'WRONG'), confirm red via `gh run list`, `git revert HEAD` + push, confirm green
+- [x] 01-02-red-proof-PLAN.md — Prove the gate: commit a deliberate test break (unit.test.js line 8 → 'WRONG'), confirm red via `gh run list`, `git revert HEAD` + push, confirm green
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -240,7 +240,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. CI Regression Gate | 1/3 | In Progress|  |
+| 1. CI Regression Gate | 2/3 | In Progress|  |
 | 2. Rules Decisions (docs/14 close-out) | 0/3 | Not started | - |
 | 3. Deploy & Environment Contract | 0/3 | Not started | - |
 | 4. Authorization Hardening | 0/3 | Not started | - |
