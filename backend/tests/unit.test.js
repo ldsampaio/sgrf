@@ -5,7 +5,7 @@ import { calcAmount } from '../src/services/requestService.js';
 describe('auth domain', () => {
   it('aceita @utfpr.edu.br', () => expect(isInstitutionalEmail('A@UTFPR.EDU.BR')).toBe(true));
   it('rejeita externo', () => expect(isInstitutionalEmail('a@gmail.com')).toBe(false));
-  it('normaliza', () => expect(normalizeEmail('A@Utfpr.Edu.Br ')).toBe('WRONG'));
+  it('normaliza', () => expect(normalizeEmail('A@Utfpr.Edu.Br ')).toBe('a@utfpr.edu.br'));
 });
 
 describe('financeiro', () => {
