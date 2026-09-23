@@ -11,7 +11,7 @@ This milestone takes the feature-complete but buggy SGRF MVP (v0.1.1) to product
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: CI Regression Gate** - Two-job pipeline (backend vitest + frontend build) on every push — the gate for everything that follows
+- [x] **Phase 1: CI Regression Gate** - Two-job pipeline (backend vitest + frontend build) on every push — the gate for everything that follows (completed 2026-09-23)
 - [ ] **Phase 2: Rules Decisions (docs/14 close-out)** - Decide and record partial-approval and cancellation rules before any code implements them
 - [ ] **Phase 3: Deploy & Environment Contract** - Production boots only with real secrets; cookie/HTTPS story works off localhost
 - [ ] **Phase 4: Authorization Hardening** - Deny-by-default permission map + ownership fixes on every documented endpoint
@@ -240,7 +240,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. CI Regression Gate | 3/3 | In Progress|  |
+| 1. CI Regression Gate | 3/3 | Complete    | 2026-09-23 |
 | 2. Rules Decisions (docs/14 close-out) | 0/3 | Not started | - |
 | 3. Deploy & Environment Contract | 0/3 | Not started | - |
 | 4. Authorization Hardening | 0/3 | Not started | - |
