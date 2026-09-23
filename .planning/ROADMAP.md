@@ -12,7 +12,7 @@ This milestone takes the feature-complete but buggy SGRF MVP (v0.1.1) to product
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: CI Regression Gate** - Two-job pipeline (backend vitest + frontend build) on every push — the gate for everything that follows (completed 2026-09-23)
-- [ ] **Phase 2: Rules Decisions (docs/14 close-out)** - Decide and record partial-approval and cancellation rules before any code implements them
+- [x] **Phase 2: Rules Decisions (docs/14 close-out)** - Decide and record partial-approval and cancellation rules before any code implements them (completed 2026-09-23)
 - [ ] **Phase 3: Deploy & Environment Contract** - Production boots only with real secrets; cookie/HTTPS story works off localhost
 - [ ] **Phase 4: Authorization Hardening** - Deny-by-default permission map + ownership fixes on every documented endpoint
 - [ ] **Phase 5: Session Refresh** - Silent single-flight token refresh; users stay logged in past 15 minutes
@@ -92,17 +92,17 @@ Plans:
   3. Each decision lands as a docs commit before any implementation plan starts — no rule gets re-guessed in code
   4. Out-of-milestone `docs/14` items (quorum, vista-limit conflict) are explicitly deferred to v2, not silently dropped
 
-**Plans**: 3 plans
+**Plans**: 3/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Partial-approval arbitration slice: RN-009 (AGUARDANDO_ARBITRAGEM) + closed docs/14 partial row (D-01..D-04)
-- [ ] 02-02-PLAN.md — Cancellation slice: RN-010 status×role matrix + REVERSE + closed docs/14 cancellation row (D-05..D-08)
+- [x] 02-01-PLAN.md — Partial-approval arbitration slice: RN-009 (AGUARDANDO_ARBITRAGEM) + closed docs/14 partial row (D-01..D-04)
+- [x] 02-02-PLAN.md — Cancellation slice: RN-010 status×role matrix + REVERSE + closed docs/14 cancellation row (D-05..D-08)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-03-PLAN.md — Quorum + vista slice (RN-011/RN-012/RN-013, OVERRIDDEN/REJECTED markers) + whole-commit verification via PR (D-09..D-13; ROADMAP criterion #4 STALE deviation recorded)
+- [x] 02-03-PLAN.md — Quorum + vista slice (RN-011/RN-012/RN-013, OVERRIDDEN/REJECTED markers) + whole-commit verification via PR (D-09..D-13; ROADMAP criterion #4 STALE deviation recorded)
 
 **Cross-cutting constraints:**
 
@@ -249,7 +249,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. CI Regression Gate | 3/3 | Complete    | 2026-09-23 |
-| 2. Rules Decisions (docs/14 close-out) | 0/3 | Not started | - |
+| 2. Rules Decisions (docs/14 close-out) | 3/3 | Complete | 2026-09-23 |
 | 3. Deploy & Environment Contract | 0/3 | Not started | - |
 | 4. Authorization Hardening | 0/3 | Not started | - |
 | 5. Session Refresh | 0/3 | Not started | - |
