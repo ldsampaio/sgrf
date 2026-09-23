@@ -98,3 +98,25 @@ e o `CHEFE_DEPARTAMENTO` arbitra o valor final em `(0, requestedAmountCents]`, e
 Esta regra substitui o comportamento anterior de primeiro-voto-parcial-vence em `backend/src/services/votingService.js:84` (`validVotes.find(...)`), que concluía com o valor do primeiro voto parcial. Votos parciais como `[8000, 5000, 6000]` não mais se resolvem automaticamente para nenhum desses valores.
 
 (Decidido em 2026-09-23, D-01…D-04.)
+
+## RN-010 — Cancelamento após aprovação
+
+O cancelamento exige justificativa em TODA solicitação; ausente, o backend responde 400.
+
+A matriz por status e papel:
+
+```
+dono (solicitante): somente RASCUNHO e EM_VOTACAO
+ADMINISTRADOR: qualquer status não-terminal (inclui INDEFERIDO como limpeza)
+CHEFE_DEPARTAMENTO: qualquer status antes de CONCLUIDO
+CONCLUIDO (gasto): NUNCA cancelável
+CANCELADO: NUNCA cancelável
+```
+
+Papéis válidos: ADMINISTRADOR, CHEFE_DEPARTAMENTO, CONSELHEIRO, PROFESSOR, ALUNO.
+
+O conjunto cancelável é todo status não-terminal exceto o próprio CANCELADO; `INDEFERIDO` é cancelável pelo admin como limpeza; terminais `CONCLUIDO` e `CANCELADO` são imutáveis.
+
+Cancelar solicitação aprovada ou provisionada grava `FinancialTransaction` compensatória auditada de tipo `REVERSE` (padrão `reverseProvision`), com a justificativa nos metadados da transação `REVERSE` e nos eventos `AuditEvent` `request_cancelled` e `provision_reversed`.
+
+(Decidido em 2026-09-23, D-05…D-08.)
