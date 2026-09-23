@@ -3,8 +3,19 @@ phase: 01-ci-regression-gate
 verified: 2026-09-23T21:25:00Z
 status: passed
 score: 4/4 must-haves verified
-covered_files: []
-covered_digest: "v1:manual-fingerprint-unavailable"
+covered_files:
+  - .github/workflows/ci.yml
+  - .planning/REQUIREMENTS.md
+  - .planning/phases/01-ci-regression-gate/01-01-ci-workflow-PLAN.md
+  - .planning/phases/01-ci-regression-gate/01-01-ci-workflow-SUMMARY.md
+  - .planning/phases/01-ci-regression-gate/01-02-red-proof-PLAN.md
+  - .planning/phases/01-ci-regression-gate/01-02-red-proof-SUMMARY.md
+  - .planning/phases/01-ci-regression-gate/01-03-required-checks-PLAN.md
+  - .planning/phases/01-ci-regression-gate/01-03-required-checks-SUMMARY.md
+  - .planning/phases/01-ci-regression-gate/01-REVIEW.md
+  - AGENTS.md
+  - backend/tests/unit.test.js
+covered_digest: "v1:sha256:a7596b21f9b3355b6a70e2fbcdc2d4510e3c402595baced97501c4d9ea6b774e"
 behavior_unverified: 0
 overrides_applied: 0
 ---
