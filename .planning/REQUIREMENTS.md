@@ -81,28 +81,30 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | — | Pending |
-| SEC-02 | — | Pending |
-| SEC-03 | — | Pending |
-| SEC-04 | — | Pending |
-| SES-01 | — | Pending |
-| SES-02 | — | Pending |
-| VOT-01 | — | Pending |
-| VOT-02 | — | Pending |
-| VOT-03 | — | Pending |
-| VOT-04 | — | Pending |
-| JOB-01 | — | Pending |
-| JOB-02 | — | Pending |
-| JOB-03 | — | Pending |
-| REP-01 | — | Pending |
-| REP-02 | — | Pending |
-| CI-01 | — | Pending |
+| SEC-01 | Phase 4 | Pending |
+| SEC-02 | Phase 3 | Pending |
+| SEC-03 | Phase 8 | Pending |
+| SEC-04 | Phase 3 | Pending |
+| SES-01 | Phase 5 | Pending |
+| SES-02 | Phase 8 | Pending |
+| VOT-01 | Phase 6 | Pending |
+| VOT-02 | Phase 6 | Pending |
+| VOT-03 | Phase 6 | Pending |
+| VOT-04 | Phase 6 | Pending |
+| JOB-01 | Phase 7 | Pending |
+| JOB-02 | Phase 7 | Pending |
+| JOB-03 | Phase 7 | Pending |
+| REP-01 | Phase 8 | Pending |
+| REP-02 | Phase 8 | Pending |
+| CI-01 | Phase 1 | Pending |
+
+*Phase 2 (Rules Decisions, docs/14 close-out) carries no requirement ID directly — it is the decision gate for VOT-03/VOT-04; their implementation lands in Phase 6 after Phase 2's decisions and Phase 4's permission map.*
 
 **Coverage:**
 - v1 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16 ⚠️ (roadmap creation fills this)
+- Mapped to phases: 16
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-09-23*
-*Last updated: 2026-09-23 after initial definition*
+*Last updated: 2026-09-23 after roadmap creation (traceability filled)*
