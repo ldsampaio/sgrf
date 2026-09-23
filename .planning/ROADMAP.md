@@ -96,9 +96,9 @@ Plans:
 
 Plans:
 
-- [ ] 02-01: Decide partial-approval aggregation rule (median / majority amount / chefe-decides) — record date + rationale
-- [ ] 02-02: Decide cancellation-after-approval rule (ADMINISTRADOR/CHEFE_DEPARTAMENTO only, mandatory justification, audited compensating reversal)
-- [ ] 02-03: One commit updates `docs/03` + `docs/14`; mark quorum/vista-limit as deferred to v2
+- [ ] 02-01-PLAN.md — Partial-approval arbitration slice: RN-009 (AGUARDANDO_ARBITRAGEM) + closed docs/14 partial row (D-01..D-04)
+- [ ] 02-02-PLAN.md — Cancellation slice: RN-010 status×role matrix + REVERSE + closed docs/14 cancellation row (D-05..D-08)
+- [ ] 02-03-PLAN.md — Quorum + vista slice (RN-011/RN-012/RN-013, OVERRIDDEN/REJECTED markers) + whole-commit verification via PR (D-09..D-13; ROADMAP criterion #4 STALE deviation recorded)
 
 ### Phase 3: Deploy & Environment Contract
 
