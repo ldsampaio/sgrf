@@ -120,3 +120,31 @@ O conjunto cancelável é todo status não-terminal exceto o próprio CANCELADO;
 Cancelar solicitação aprovada ou provisionada grava `FinancialTransaction` compensatória auditada de tipo `REVERSE` (padrão `reverseProvision`), com a justificativa nos metadados da transação `REVERSE` e nos eventos `AuditEvent` `request_cancelled` e `provision_reversed`.
 
 (Decidido em 2026-09-23, D-05…D-08.)
+
+## RN-011 — Ausência de quórum
+
+Não há quórum mínimo: decide a apuração dos votos válidos lançados (`tally()` inalterado, maioria simples dos válidos, abstenção ignora).
+
+Nenhum status "sem quórum" é introduzido; a recomendação anterior (maioria dos conselheiros elegíveis + ação manual) está superada pela decisão abaixo registrada em `docs/14-decisoes-em-aberto.md`.
+
+(Decidido em 2026-09-23, D-09.)
+
+## RN-012 — Pedido de vista
+
+Cada conselheiro tem direito a 1 vista por solicitação; as prorrogações de prazo acumulam-se.
+
+Garantido pelo comportamento atual `@@unique([requestId, requestedBy])` (máx 1 vista por conselheiro por solicitação; segunda tentativa responde 409). O teto anterior de máximo de um por solicitação está descartado pela decisão abaixo registrada em `docs/14-decisoes-em-aberto.md`.
+
+(Decidido em 2026-09-23, D-10.)
+
+## RN-013 — Interrupção da votação e reunião extraordinária
+
+Conselheiros podem solicitar a interrupção da votação; o chefe pauta o pedido em reunião extraordinária do conselho, entrando em suspensão pelo fluxo existente:
+
+```
+SUSPENSO_REUNIAO_ORDINARIA
+```
+
+Nenhum novo status é criado. Após a reunião, somente `ADMINISTRADOR` ou `CHEFE_DEPARTAMENTO` lançam manualmente o resultado da deliberação do conselho (via `collegiateDecision`, a partir do estado suspenso).
+
+(Decidido em 2026-09-23, D-11.)
