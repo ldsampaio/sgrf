@@ -1,7 +1,8 @@
 ---
 phase: "5"
 slug: "session-refresh"
-status: draft
+status: approved
+reviewed_at: "2026-09-23"
 shadcn_initialized: false
 preset: none
 created: "2026-09-23"
@@ -31,9 +32,10 @@ roadmap success criteria — no phase CONTEXT.md exists):
    no spinner, no banner, no navigation, no lost form state.
 2. N parallel requests hitting 401 at the same moment trigger **exactly one refresh** (single-flight)
    — from the user's perspective, nothing flickers and no view re-renders.
-3. When the refresh cookie is dead, the user is redirected to login **exactly once** — and lands
-   there with a clear, non-alarming explanation (the new `.alert.warn` notice), never in a
-   `/login` ⇄ dashboard bounce loop.
+3. When the refresh cookie is dead, the user is redirected to login **exactly once** — and the
+   refresh request itself is never retried (ROADMAP criterion quoted verbatim) — landing there with
+   a clear, non-alarming explanation (the new `.alert.warn` notice), never in a `/login` ⇄ dashboard
+   bounce loop. *Addendum beyond the roadmap text:* the notice copy itself, specified below.
 4. `npm run build` passes; `services/api.js` imports no router (no import cycle); **no per-view 401
    handling appears anywhere.**
 
@@ -41,6 +43,10 @@ roadmap success criteria — no phase CONTEXT.md exists):
 - `gsd-planner`: plan tasks may only create/modify `frontend/src/services/api.js` and
   `frontend/src/views/Login.vue` within `frontend/`. Success criteria are proven by the manual
   protocol (plan 05-02), not by UI screenshots.
+  **Alignment warning (checker recommendation):** ROADMAP plans 05-01…05-03 name only
+  `frontend/src/services/api.js`. The `Login.vue` notice + `?reason=session-expired` mechanism is
+  specified *here*, not in the roadmap plan text. When `/gsd-plan-phase 5` runs, the plan files must
+  carry this spec's two-file boundary verbatim — otherwise plan-vs-roadmap will read as drift.
 - `gsd-executor`: the Interaction Contract section below is normative — implement it verbatim.
 - `gsd-ui-checker`: dimensions are evaluated against (a) the one new notice on Login and
   (b) *invisibility* of the refresh everywhere else. Sections marked "inherited / unchanged"
@@ -90,10 +96,11 @@ scaffolding a registry would be invented scope. Registry safety gate: not applic
 | 2xl | 48px | Major section breaks (`.page` padding `3rem`) |
 | 3xl | 64px | Page-level spacing (`.section` padding, footer spacing) |
 
-Exceptions (existing, unchanged): **44px minimum touch target** on `.btn`/`.input`
-(`min-height: 44px` [CITED: base.css:71,91]); legacy 12px/20px/28px rem-values in `base.css`.
-The new session-expired notice adds no spacing of its own — it reuses `.alert`'s existing
-`padding: 0.7rem 0.9rem; margin: 0.7rem 0` [CITED: base.css:101].
+Exceptions (existing, unchanged — every non-scale value in this section, declared in one place):
+**44px minimum touch target** on `.btn`/`.input` (`min-height: 44px` [CITED: base.css:71,91]);
+legacy 12px/20px/28px rem-values in `base.css`; `.alert` padding `0.7rem 0.9rem` /
+margin `0.7rem 0` [CITED: base.css:101]. The new session-expired notice adds no spacing of its
+own — it reuses `.alert`'s existing spacing verbatim.
 
 ---
 
@@ -206,25 +213,72 @@ success criteria, PITFALLS.md Pitfall 3 + UX-pitfalls table.
 
 ## UI Considerations
 
-> State-coverage rows for the surfaces Phase 5 actually touches (authored by gsd-ui-researcher —
-> no orchestrator probe run was supplied for this phase; rows follow the locked probe status
-> vocabulary). Shape-rooted to: the interceptor's behavior across all views, and `Login.vue`.
-> Empty/error COPY lives in the Copywriting Contract above — referenced, not restated.
+> Populated by the ui-phase UI-consideration probe (Step 9.5), run AFTER checker verification.
+> Probe ran over 6 elements (the surfaces Phase 5 actually touches) with user-confirmed kind
+> overrides at the propose-then-confirm step: **+`static-content` added to E4 and E5** (E4
+> classified empty before the override — its state coverage would otherwise have been silently
+> dropped); `list-collection` on E2 kept as the classifier reported (false positive, retained for
+> honesty). 31 applicable considerations: **20 resolved (explicit) + 11 dismissed (reason) +
+> 0 backstop + 0 unresolved.**
+>
+> Empty/error COPY lives in `## Copywriting Contract` — referenced here, not restated (de-dup).
+> Rows are REPLACED on re-run — idempotent.
 
-Applicable state considerations resolved: **6 covered, 0 backstop, 0 unresolved.**
+Applicable state considerations resolved: **20 explicit, 0 backstop, 0 unresolved**, 11 dismissed with reason.
 
-| Category | Element(s) | Status | Resolution / Reason |
-|----------|------------|--------|---------------------|
-| loading | Interceptor silent refresh (all authenticated views) | ✅ covered | During the single-flight refresh nothing new renders — no spinner/skeleton/banner, no remount, form state preserved; existing view loading refs (`Entrando…`/`Salvando…`) behave exactly as before the interceptor existed |
-| error | Interceptor refresh failure → Login | ✅ covered | Dead refresh cookie → exactly one navigation to `/login?reason=session-expired`; Login renders `.alert.warn[role=status]` with the locked notice copy; no second redirect, no `/login`⇄dashboard loop (redirect-once flag) |
-| error | Transient failures (network error / 5xx / 429) | ✅ covered | Interceptor never refreshes or redirects on non-401 outcomes — the user stays on the current view with its existing per-view `err` alert; no new global error surface is added |
-| error | `PASSWORD_CHANGE_REQUIRED`-class 403 | ✅ covered | 403 never enters the refresh/redirect path — the request rejects through untouched, so the future forced-change routing (SES-02, Phase 8) remains reachable; interceptor scope check is status === 401 only |
-| populated | Login after session-expired redirect | ✅ covered | Login mounts with empty `email`/`password`, existing placeholders and CTA intact, session-expired `.alert.warn` shown above the fields per the navigation contract — manual login flow fully usable alongside it |
-| long-text | Session-expired notice in 440px Login card | ✅ covered | Fixed short string renders as block text in `.alert` (existing padding/wrap behavior, no truncation directive in `Login.vue`) — wraps inside `max-width:440px`; no overflow possible from this copy |
+### Resolved — explicit (lift into `must_haves.truths`)
 
-<!-- Status vocabulary: ✅ covered → plain truth (lifts into must_haves.truths); 🧪 backstop →
-     {statement, verification: backstop}; ⚠ unresolved → planner assumption. Rows are REPLACED on
-     re-run — idempotent. -->
+| Category | Element | Status | Truth |
+|----------|---------|--------|-------|
+| loading | E1 Interceptor silent refresh (all authenticated views) | ✅ covered | During the single-flight refresh nothing new renders — no spinner, skeleton, banner, or route change, and form state is preserved; existing view loading refs (`Entrando…`/`Salvando…`) behave exactly as they did before the interceptor existed *(contract truth — `services/api.js` currently has no interceptor)* |
+| error | E1 Interceptor silent refresh | ✅ covered | Refresh rejected → exactly one `window.location.assign('/login?reason=session-expired')` (redirect-once flag); network/5xx/429 reject through with **no** refresh and **no** redirect — see Interaction Contract rules 4–5; the notice copy itself is the Copywriting row above |
+| empty | E2 Session-expired notice (Login) | ✅ covered | A plain `/login` visit (no `reason` param) renders **no** `.alert.warn` — the block is absent; only `?reason=session-expired` mounts it |
+| error | E2 Session-expired notice | ✅ covered | The `.alert.warn` notice never displays credential errors, and credential errors never use `.alert.warn` — a failed login after redirect shows `div.alert.error[role=alert]` alongside it *(copy: Copywriting Contract, Error state row)* |
+| populated | E2 Session-expired notice | ✅ covered | Login mounts with empty `email`/`password`, existing placeholders and the `Entrar` CTA intact, `.alert.warn[role=status]` above the fields showing the locked copy — manual login fully usable in the same render |
+| overflow | E2 Session-expired notice | ✅ covered | Notice renders as block text inside the 440px card (`max-width:440px`) with `.alert`'s existing `padding: 0.7rem 0.9rem` [CITED: base.css:101] — wraps in place, no horizontal scroll |
+| long-text | E2 Session-expired notice | ✅ covered | Copy is a fixed short string locked verbatim; no truncation directive in `Login.vue`, so it wraps — overflow is not possible from this copy |
+| empty | E3 Login form (existing baseline) | ✅ covered | Mounts with empty `email`/`password` refs (`''`) and placeholders `voce@utfpr.edu.br` / `••••••••` [CITED: Login.vue:8-9,18] |
+| loading | E3 Login form | ✅ covered | Submit button `:disabled` with label `Entrando…` while auth is in flight; `finally` sets `loading=false` [CITED: Login.vue:10,24] |
+| error | E3 Login form | ✅ covered | Failed auth renders `div.alert.error[role=alert]` (`v-if="err"`) with `e.response?.data?.error || 'Falha no login'` [CITED: Login.vue:7,23] |
+| partial | E3 Login form | ✅ covered | No client-side `required`/validation blocks submission — incomplete credentials surface only after the server round-trip via the error alert |
+| long-text | E3 Login form | ✅ covered | Server error message renders verbatim as block text inside the 440px card — no truncation directive exists in `Login.vue` |
+| overflow | E4 Transient failures (network/5xx/429) | ✅ covered | The pre-existing per-view `.alert.error` is a block element that wraps within its card; the interceptor adds **zero** new rendered output, so it introduces no overflow surface |
+| long-text | E4 Transient failures | ✅ covered | No new text node is created by the interceptor — error text stays inside each view's existing alert, which wraps rather than truncates |
+| loading | E5 `PASSWORD_CHANGE_REQUIRED`-class 403 | ✅ covered | A 403 never enters the refresh path (`status === 401` only), so no spinner/wait state is introduced for it — the view's own loading ref settles normally on the rejected response |
+| error | E5 403 passthrough | ✅ covered | 403 rejects through untouched to the view's existing per-view `err` alert; the interceptor's scope check is `status === 401` only, so forced-change routing (SES-02, Phase 8) stays reachable *(copy: Copywriting Contract, Error state row)* |
+| overflow | E5 403 passthrough | ✅ covered | Rejection surfaces through the existing `.alert.error`, a block element wrapping inside its card — no new container, no new overflow path |
+| long-text | E5 403 passthrough | ✅ covered | Server-provided 403 message renders verbatim in the existing alert and wraps; the interceptor adds no truncation and no new text node |
+| loading | E6 Redirect-once navigation guard | ✅ covered | The module-level redirecting flag is set **before** `assign()` is called, so N concurrent rejected retries observe it and issue no further navigation — no intermediate or stacked loading state ever renders |
+| error | E6 Redirect-once navigation guard | ✅ covered | Dead refresh cookie → exactly one navigation to `/login?reason=session-expired`; the redirect-once flag prevents any `/login` ⇄ dashboard loop and any stacked navigations *(notice copy: Copywriting Contract)* |
+
+### Dismissed — with reason (do NOT lift into `must_haves`)
+
+**Dismissal reason (all 11 rows, recorded 2026-09-23 per user decision during the Step 9.5 probe):**
+the interceptor renders nothing in any state — there is no surface on which these shape-rooted
+states could appear; where the category's only real surface is a view's existing alert, that view's
+coverage is owned by the phase that changes it.
+
+| Element | Category | Why dismissed |
+|---------|----------|---------------|
+| E1 Interceptor silent refresh | empty | No data surface — the interceptor holds no rendered content to be empty |
+| E1 Interceptor silent refresh | partial | No partial-data surface — replay reuses the original request config verbatim |
+| E1 Interceptor silent refresh | overflow | Renders nothing — no container to overflow |
+| E1 Interceptor silent refresh | long-text | Renders nothing — no text node to length-test |
+| E2 Session-expired notice | loading | Notice visibility is decided synchronously from `location.search` at mount — no async load exists for it |
+| E2 Session-expired notice | partial | Single fixed string — no partial/incomplete data state applies |
+| E2 Session-expired notice | zero-one-many | `list-collection` was a classifier false positive: exactly one notice instance can ever exist, never zero or many |
+| E5 403 passthrough | empty | No new surface — the interceptor renders nothing on a 403 |
+| E5 403 passthrough | partial | No partial-data surface on the passthrough path |
+| E6 Redirect-once navigation guard | overflow | Navigation guard produces no rendered content to overflow |
+| E6 Redirect-once navigation guard | long-text | Only a fixed URL string is produced — no variable-length text |
+
+**Non-regression truth (the only UI-adjacent guarantee beyond the notice):** the refresh is
+invisible — `cd frontend && npm run build` stays green and no user-observable change appears on any
+view other than the one new Login notice.
+
+<!-- Status vocabulary: ✅ covered → plain truth (resolved, explicit, lifts into must_haves.truths);
+     🧪 backstop → {statement, verification: backstop}; ⚠ unresolved → planner assumption;
+     dismissed → reasoned no-lift. Rows are REPLACED on re-run — idempotent. -->
 
 ---
 
@@ -243,18 +297,21 @@ library involved; the interceptor uses documented axios APIs already installed.
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS — 2 locked strings (session-expired notice, navigation contract);
+- [x] Dimension 1 Copywriting: PASS — 2 locked strings (session-expired notice, navigation contract);
       no new CTAs/empty states; error copy explicitly unchanged-and-referenced; zero destructive actions
-- [ ] Dimension 2 Visuals: PASS — exactly one new rendered element (`.alert.warn` on Login, existing
+- [x] Dimension 2 Visuals: PASS — exactly one new rendered element (`.alert.warn` on Login, existing
       class); all other surfaces contractually unchanged; refresh invisibility is the visual guarantee
-- [ ] Dimension 3 Color: PASS — inherited 60/30/10 documented; no token changes; `.alert.warn`
+- [x] Dimension 3 Color: PASS — inherited 60/30/10 documented; no token changes; `.alert.warn`
       spark-border recorded as attention-semantic addendum, not a new accent allocation
-- [ ] Dimension 4 Typography: PASS — inherited contract: 4 sizes (16/12/20/32), 2 weights (300/600);
+- [x] Dimension 4 Typography: PASS — inherited contract: 4 sizes (16/12/20/32), 2 weights (300/600);
       notice renders at existing `.alert` body styling; no type changes
-- [ ] Dimension 5 Spacing: PASS — 4-based scale (4→64) restated; notice reuses `.alert`'s existing
+- [x] Dimension 5 Spacing: PASS — 4-based scale (4→64) restated; notice reuses `.alert`'s existing
       spacing; 44px touch target + legacy rem exceptions declared; no new spacing
-- [ ] Dimension 6 Registry Safety: PASS — Tool: none, no registries, gate not required; zero new deps
-- [ ] Dimension 7 Inventory Provenance: PASS — section omitted per `Tool: none` rule (no installed
+- [x] Dimension 6 Registry Safety: PASS — Tool: none, no registries, gate not required; zero new deps
+- [x] Dimension 7 Inventory Provenance: PASS — section omitted per `Tool: none` rule (no installed
       component package exists; design system is hand-written CSS + 5 Vue components, listed in Design System)
 
-**Approval:** pending (status: draft — awaiting gsd-ui-checker verification)
+**Approval:** approved 2026-09-23 (verified independently by gsd-ui-checker — 7/7 PASS, 0 FLAGs
+blocking; 3 non-blocking recommendations all applied: two-file boundary warning added to the Phase
+Scope Note, ROADMAP criterion 3 now quoted verbatim with the notice marked as addendum, and
+`.alert` `0.7rem/0.9rem` folded into the declared-spacing exceptions line)
