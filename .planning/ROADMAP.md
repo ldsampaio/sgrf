@@ -124,9 +124,9 @@ Plans:
 
 Plans:
 
-- [ ] 03-01: `env.js` production fail-fast on insecure *values* (not just presence), gated strictly on `NODE_ENV=production`; add CI dummy `JWT_*` env
-- [ ] 03-02: `COOKIE_SECURE` env var + resolve HTTPS topology (Caddy TLS front vs documented TLS termination); verify login via `http://<LAN-IP>` — localhost's Secure-cookie exception hides the bug
-- [ ] 03-03: Document the environment contract (secrets, `FRONTEND_URL`, cookie/HTTPS) and confirm the dev flow is untouched
+- [ ] 03-01-PLAN.md — `env.js` production fail-fast on insecure *values* (not just presence), gated strictly on `NODE_ENV=production`; add CI dummy `JWT_*` env
+- [ ] 03-02-PLAN.md — `COOKIE_SECURE` env var + Tunnel topology wiring (`tokens.js`, `clearCookie` attribute match, compose); public-`https`-only verification
+- [ ] 03-03-PLAN.md — Document the environment contract (`docs/16-contrato-deploy.md` checklist + `.env.example` production notes) and human-verify public-URL login + dev flow intact
 
 ### Phase 4: Authorization Hardening
 
