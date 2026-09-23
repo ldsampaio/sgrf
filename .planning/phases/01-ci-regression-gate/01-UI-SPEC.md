@@ -1,7 +1,8 @@
 ---
 phase: "1"
 slug: "ci-regression-gate"
-status: draft
+status: approved
+reviewed_at: "2026-09-23"
 shadcn_initialized: false
 preset: none
 created: "2026-09-23"
@@ -149,21 +150,66 @@ are CI/GitHub surface labels, fixed below so no plan improvises them:
 ## UI Considerations
 
 > Populated by the ui-phase UI-consideration probe (Step 9.5). Shape-rooted UI *state* coverage.
+> Probe ran over 11 elements (existing SPA surfaces + docs/DESIGN.md) with user-confirmed kind
+> overrides (E10 → static-content only; E9 → media + list-collection). 61 applicable
+> considerations: **26 resolved (explicit)** + **35 dismissed (reason)** + 0 unresolved.
 
-Applicable state considerations resolved: **none applicable — this phase creates zero UI
-surfaces**, so no form/list/nav/media/interactive-control/static-content element exists to probe
-(empty/loading/error/populated/partial/overflow/zero-one-many/long-text all N/A).
+**Scope framing (unchanged):** Phase 1 ships CI infrastructure only and modifies no UI file. The
+considerations below record state coverage of the *existing, unchanged* surfaces — they document
+today's behavior so later UI phases inherit a known baseline; they add no implementation task to
+this phase.
 
-| Category | Element(s) | Status | Resolution / Reason |
-|----------|------------|--------|---------------------|
-| — | — | ✅ covered | No probe run: phase footprint is `.github/workflows/ci.yml` + `AGENTS.md` only; existing Vue surfaces are untouched (verified against 01-RESEARCH.md "No src/ changes") and their state coverage is owned by whichever phase next modifies them |
+### Resolved — explicit (lift into `must_haves.truths`)
+
+| Category | Element | Status | Truth |
+|----------|---------|--------|-------|
+| empty | E1 Login form | ✅ covered | `Login.vue` mounts with empty `email`/`password` refs (`''`) and placeholders `voce@utfpr.edu.br` / `••••••••` showing the expected format |
+| loading | E1 Login form | ✅ covered | While auth is in flight the submit button is `:disabled` and its label reads `Entrando…` (`loading ? 'Entrando…' : 'Entrar'`); `finally` resets `loading=false` |
+| error | E1 Login form | ✅ covered | Failed auth renders `div.alert.error[role=alert]` (`v-if="err"`) with the server message (`e.response?.data?.error`) or fallback `'Falha no login'` |
+| partial | E1 Login form | ✅ covered | No client-side `required`/validation blocks submission — incomplete or invalid credentials surface only after the server round-trip via the error alert |
+| long-text | E1 Login form | ✅ covered | The error alert renders the server message verbatim as block text inside the 440px card (`max-width:440px`); no truncation directive exists in `Login.vue` |
+| empty | E3 Requests form+table | ✅ covered | Form mounts with defaults `type:'EQUIPAMENTO'`, `title:''`, `justification:''`, `valueCents:0` (MoneyInput displays the BRL mask at 0) |
+| loading | E3 Requests form+table | ✅ covered | While creating, the submit button is `:disabled` and reads `Salvando…` (`loading ? 'Salvando…' : 'Criar rascunho'`) |
+| error | E3 Requests form+table | ✅ covered | Create failure renders `div.alert.error[role=alert]` (`v-if="err"`) with server error or fallback `'Falha'` |
+| partial | E3 Requests form+table | ✅ covered | Only `Título` carries `required`; Justificativa/Especificação accept empty (`spec` falls back to `'n/a'` in the payload) — a partially filled draft is a valid submit state |
+| populated | E3 Requests form+table | ✅ covered | Each `v-for` row renders `r.title`, `<StatusBadge :status>`, `formatBRL(r.requestedAmountCents)`, and a `Submeter` button gated `v-if="r.status === 'RASCUNHO'"` |
+| overflow | E3 Requests form+table | ✅ covered | Title cell renders `{{ r.title }}` verbatim — no truncation, ellipsis, or `title` attribute is set at the call site in `Requests.vue` |
+| zero-one-many | E3 Requests form+table | ✅ covered | At zero items the table renders its `<thead>` over an empty `<tbody>` — no empty-state message exists in the template; `list` starts `[]` and rows appear linearly (no pagination) |
+| long-text | E3 Requests form+table | ✅ covered | `Título` is a single-line `<input>` (long text stays on one line, scrolling inside the input); `Justificativa` is a `<textarea rows=2>` that wraps |
+| empty | E8 Date/Money inputs | ✅ covered | `DateInput` mounts showing `modelValue` (default `''`) with placeholder `dd/mm/aaaa`; `MoneyInput` mounts showing `formatCentsInput(0)` |
+| loading | E8 Date/Money inputs | ✅ covered | No async state exists — mask formatting is synchronous in the `@input` handler, so no loading/skeleton state can occur inside these controls |
+| error | E8 Date/Money inputs | ✅ covered | `DateInput` has no validation UI; `MoneyInput` renders an optional `hint` div (`v-if="hint"`) — validation messaging is parent-controlled, none is intrinsic |
+| partial | E8 Date/Money inputs | ✅ covered | Progressive masks: `MoneyInput` accepts digits only, `slice(0, 12)`, reformatting centavos on each keystroke; `DateInput` applies `maskDateDigits` incrementally |
+| long-text | E8 Date/Money inputs | ✅ covered | Input values are length-bounded by the masks (12 digits / date mask); `label` and `hint` are block elements that wrap |
+| loading | E5 Reports | ✅ covered | No in-flight indicator exists: `load()` awaits the API without a loading ref, buttons stay enabled during the request, and no spinner/skeleton is declared |
+| error | E5 Reports | ✅ covered | `load()` catches nothing — a failed `api.get` leaves the previous `<pre>` output (or none) and surfaces no error message; `Reports.vue` has no `err` alert |
+| overflow | E5 Reports | ✅ covered | Output renders in `<pre>` with inline `overflow:auto` — long JSON scrolls horizontally within the card |
+| long-text | E5 Reports | ✅ covered | Output is hard-truncated at 3000 characters: `JSON.stringify(data, null, 1).slice(0, 3000)` |
+| overflow | E10 docs/DESIGN.md | ✅ covered | The file contains no raw HTML or fenced width constraints — markdown tables (max 6 columns) and prose wrap or scroll per the consuming renderer; horizontal overflow cannot originate from the file itself |
+| long-text | E10 docs/DESIGN.md | ✅ covered | Prose is single long markdown lines (renderer wraps); longest atomic tokens are hex/gradient literals (`#FBBA00 → #DB8800`, `rgba(251,186,0,0.15–0.35)`) that must stay unbroken on a line |
+| overflow | E11 StatusBadge | ✅ covered | Renders `{{ status }}` verbatim in `<span class="badge">` with no truncation/`nowrap` declared in the component — the full status word (longest known: `SUSPENSO_REUNIAO_ORDINARIA`) always displays |
+| long-text | E11 StatusBadge | ✅ covered | Fixed vocabulary maps to classes (`APROVADO*`/`CONCLUIDO`→ok, `EM_VOTACAO`/`AGUARDANDO_DESEMPATE`→pending, `SUSPENSO_REUNIAO_ORDINARIA`→dark); any other value falls to `.muted` — unknown or long values render fully, never hidden |
+
+### Dismissed — with reason (do NOT lift into `must_haves`)
+
+**Dismissal reason (all 35 rows, recorded 2026-09-23 per user decision during the Step 9.5 probe):**
+Phase 1 does not modify this surface — state coverage is owned by the next phase that changes it.
+
+| Element | Categories dismissed |
+|---------|----------------------|
+| E2 Dashboard (table + KPI + filter + chart) | empty, loading, error, populated, partial, overflow, zero-one-many, long-text |
+| E4 Council (table + inputs + approval panels) | empty, loading, error, populated, partial, overflow, zero-one-many, long-text |
+| E6 Admin (user table + search/role gating) | empty, loading, error, populated, partial, overflow, zero-one-many, long-text |
+| E7 AppShell nav (30 links + role gating + mobile overlay) | loading, error, overflow, long-text |
+| E9 PieChart (canvas + legend) | empty, loading, error, populated, partial, zero-one-many |
 
 **Non-regression truth (the only UI-adjacent guarantee this phase offers):** `cd frontend && npm run
 build` compiles the unchanged SPA green in CI on every push/PR — a red `frontend` check means a
 dependency/build regression, surfaced in the GitHub checks panel, not in the app itself.
 
-<!-- Status vocabulary: ✅ covered → plain truth; 🧪 backstop → {statement, verification: backstop};
-     ⚠ unresolved → planner assumption. Rows are REPLACED on re-run — idempotent. -->
+<!-- Status vocabulary: ✅ covered → plain truth (resolved, explicit); 🧪 backstop → {statement,
+     verification: backstop}; ⚠ unresolved → planner assumption; dismissed → reasoned no-lift.
+     Rows are REPLACED on re-run — idempotent. -->
 
 ---
 
@@ -184,18 +230,18 @@ ls-remote`), which is a CI supply-chain concern outside this contract's registry
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS — no product copy in scope; CI labels (`CI`, `backend`,
+- [x] Dimension 1 Copywriting: PASS — no product copy in scope; CI labels (`CI`, `backend`,
   `frontend`) locked verbatim; honest not-applicable rows instead of invented screens
-- [ ] Dimension 2 Visuals: PASS — no visual surfaces in phase; non-regulation truth recorded
+- [x] Dimension 2 Visuals: PASS — no visual surfaces in phase; non-regression truth recorded
   (frontend build stays green, no `.vue`/CSS edits permitted)
-- [ ] Dimension 3 Color: PASS — inherited 60/30/10 (`#0f0f0f` / `#171717` / `#fbba00`) documented
+- [x] Dimension 3 Color: PASS — inherited 60/30/10 (`#0f0f0f` / `#171717` / `#fbba00`) documented
   with exhaustive accent-reserved list; unchanged this phase
-- [ ] Dimension 4 Typography: PASS — inherited contract: 4 sizes (16/12/20/32), 2 weights
+- [x] Dimension 4 Typography: PASS — inherited contract: 4 sizes (16/12/20/32), 2 weights
   (300/600), line-heights 1.6/1.4/1.25/1.15; unchanged this phase
-- [ ] Dimension 5 Spacing: PASS — 4-based scale (4→64) documented; 44px touch target + legacy
+- [x] Dimension 5 Spacing: PASS — 4-based scale (4→64) documented; 44px touch target + legacy
   rem-values declared as exceptions; no new spacing
-- [ ] Dimension 6 Registry Safety: PASS — Tool: none, no registries, gate not required
-- [ ] Dimension 7 Inventory Provenance: PASS — section omitted per `Tool: none` rule (no
+- [x] Dimension 6 Registry Safety: PASS — Tool: none, no registries, gate not required
+- [x] Dimension 7 Inventory Provenance: PASS — section omitted per `Tool: none` rule (no
   installed component package exists to enumerate; design system is hand-written CSS)
 
-**Approval:** pending
+**Approval:** approved 2026-09-23 (verified independently by gsd-ui-checker — 7/7 PASS, 0 FLAGs)
