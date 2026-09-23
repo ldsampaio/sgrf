@@ -1,4 +1,5 @@
 <template>
+  <p class="eyebrow">Visão geral</p>
   <h1 style="margin-top:0">Dashboard</h1>
   <div class="card accent">
     <div class="field" style="max-width:200px"><label>Ano</label>

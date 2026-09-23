@@ -1,6 +1,6 @@
 # SGRD — Sistema de Gestão de Recursos Departamentais (MVP)
 
-MVC · Backend Node + Express + SQLite (Prisma) · Frontend Vue 3 + Vite (SPA).
+MVC · Backend Node + Express + Postgres (Prisma) · Frontend Vue 3 + Vite (SPA).
 
 Gestão de usuários, solicitações financeiras, aprovação automática/votação do conselho, provisionamento de saldo e relatórios para prestação de contas. Detalhes em `docs/`.
 
@@ -33,6 +33,13 @@ Teste backend: `cd backend && npx vitest run`.
 - Solicitações (equipamento, publicação, viagem, auxílio): `totalAnual <= limite` aprova e provisiona automaticamente; acima vai a votação (maioria simples, desempate do chefe, vista +24h, suspensão read-only).
 - Gastos idempotentes (`mark-spent` / `reverse-provision`); relatórios CSV/PDF em `/api/reports/*` e telas `/council`, `/reports`.
 
-## SQLite → Postgres
+## Deploy (v0.1.1, Docker)
 
-Trocar `provider` em `prisma/schema.prisma`, ajustar `DATABASE_URL` e rodar `npx prisma migrate dev`. Código sem SQL raw (UUID string, valores em cents).
+```bash
+export JWT_ACCESS_SECRET JWT_REFRESH_SECRET INITIAL_ADMIN_EMAIL INITIAL_ADMIN_TEMPORARY_PASSWORD
+docker compose up -d --build   # app em ${APP_PORT:-8081} + Postgres interno
+```
+
+Imagem única: o Express serve o build do Vite + API na mesma porta (`SERVE_FRONTEND=true`).
+Banco e uploads persistem nos volumes `pgdata` e `app-uploads`. Código sem SQL raw
+(UUID string, valores em cents).

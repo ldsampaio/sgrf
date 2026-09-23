@@ -19,9 +19,12 @@ for arg in "$@"; do
 done
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Faltando: $1"; exit 1; }; }
-need node; need npm
+need node; need npm; need docker
 
 [ -f "$BACKEND/.env" ] || { echo "Criando backend/.env a partir de .env.example"; cp "$BACKEND/.env.example" "$BACKEND/.env"; }
+
+echo "== postgres local (compose, só o db) =="
+(cd "$ROOT" && docker compose up -d db)
 
 echo "== backend: install + migrate =="
 npm --prefix "$BACKEND" install --no-audit --no-fund

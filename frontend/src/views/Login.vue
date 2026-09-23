@@ -1,7 +1,8 @@
 <template>
   <div class="grid" style="max-width:440px;margin:4rem auto">
     <div class="card accent">
-      <h1 style="margin:0">SGRD <span style="color:var(--amber-hover)">·</span> Login</h1>
+      <p class="eyebrow">Acesso institucional</p>
+      <h1 style="margin:0">SGRD <span class="spark-text">·</span> Login</h1>
       <p class="hint">Acesso institucional @utfpr.edu.br</p>
       <div class="alert error" v-if="err" role="alert">{{ err }}</div>
       <div class="field"><label>E-mail</label><input class="input" v-model="email" placeholder="voce@utfpr.edu.br" autocomplete="username" /></div>

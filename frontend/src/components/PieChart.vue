@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div v-if="total === 0" class="hint" style="border:1px dashed var(--gray-300);border-radius:8px;padding:1.5rem;text-align:center">
+    <div v-if="total === 0" class="hint" style="border:1px dashed var(--graphite);border-radius:16px;padding:1.5rem;text-align:center">
       Sem dados para exibir
     </div>
     <canvas v-else ref="cv"></canvas>
@@ -22,7 +22,7 @@ const props = defineProps({ labels: { type: Array, default: () => [] }, values: 
 const emit = defineEmits(['ready']);
 const cv = ref(null);
 let chart = null;
-const colors = ['#0A0A0B', '#FFB000', '#3F3F46', '#A1A1AA', '#E4E4E7', '#71717A', '#E69E00', '#16161A', '#D4D4D8'];
+const colors = ['#FBBA00', '#DB8800', '#FFD466', '#F9F9F9', '#B3B3B3', '#2A2A2A', '#171717', '#8a6d00', '#5c5c5c'];
 const total = computed(() => props.values.reduce((s, v) => s + Number(v || 0), 0));
 
 function pct(i) {
@@ -38,7 +38,7 @@ function render() {
     data: { labels: props.labels, datasets: [{ data: props.values, backgroundColor: props.labels.map((_, i) => colors[i % colors.length]) }] },
     options: {
       responsive: true,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${formatBRL(c.raw)} (${pct(c.dataIndex)})` } } },
+      plugins: { legend: { display: false, labels: { color: '#F9F9F9' } }, tooltip: { callbacks: { label: (c) => ` ${formatBRL(c.raw)} (${pct(c.dataIndex)})` } } },
     },
   });
   emit('ready', () => chart.toBase64Image());

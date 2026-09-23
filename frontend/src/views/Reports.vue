@@ -1,4 +1,5 @@
 <template>
+  <p class="eyebrow">Exportação · prestação de contas</p>
   <h1 style="margin-top:0">Relatórios</h1>
   <div class="card accent">
     <div class="field"><label>Tipo</label>
@@ -9,7 +10,7 @@
       <button class="btn ghost" @click="load(true)">Exportar CSV</button>
       <a v-if="kind==='requests'||kind==='accountability'" :href="pdfUrl" target="_blank"><button class="btn dark">Exportar PDF</button></a>
     </div>
-    <pre v-if="data" style="background:var(--black);color:var(--white);padding:1rem;border-radius:8px;overflow:auto">{{ JSON.stringify(data, null, 1).slice(0, 3000) }}</pre>
+    <pre v-if="data" style="background:var(--deep);color:var(--online);border:1px solid var(--graphite);padding:1rem;border-radius:16px;overflow:auto">{{ JSON.stringify(data, null, 1).slice(0, 3000) }}</pre>
   </div>
 </template>
 <script setup>

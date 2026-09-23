@@ -1,16 +1,15 @@
-// Para migrar para Postgres: trocar provider para "postgresql" e DATABASE_URL.
-// Evitar SQL raw específico de dialeto. UUID como String. Dinheiro sempre Int (centavos).
+// SQLite → Postgres concluído (v0.1.1): provider postgresql.
+// UUID como String. Dinheiro sempre Int (centavos).
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// SQLite não suporta enums nativos — usar String + validação em código/Zod.
-// No Postgres, trocar para enums nativos.
+// Enums como String + validação em código/Zod (compatível com SQLite e Postgres).
 
 model User {
   id                           String    @id @default(uuid())

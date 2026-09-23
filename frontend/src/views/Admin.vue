@@ -1,4 +1,5 @@
 <template>
+  <p class="eyebrow">Área restrita</p>
   <h1 style="margin-top:0">Admin</h1>
   <div class="card accent">
     <h2 style="margin-top:0">Importar lote (JSON, só admin)</h2>

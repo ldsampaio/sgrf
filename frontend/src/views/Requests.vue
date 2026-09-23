@@ -1,5 +1,6 @@
 <template>
   <h1 style="margin-top:0">Solicitações</h1>
+  <p class="eyebrow">Rascunho · submissão · acompanhamento</p>
   <div class="card accent">
     <h2 style="margin-top:0">Nova solicitação (rascunho)</h2>
     <div class="alert error" v-if="err" role="alert">{{ err }}</div>

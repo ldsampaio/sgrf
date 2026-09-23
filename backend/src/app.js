@@ -1,4 +1,6 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -23,6 +25,14 @@ function createApp() {
   app.use('/api/finance', require('./routes/settings.routes'));
   app.use('/api/messages', require('./routes/messages.routes'));
   app.use('/api/reports', require('./routes/reports.routes'));
+
+  // Deploy em imagem única: serve o build do frontend (Vite) na mesma origem.
+  // Ativado via SERVE_FRONTEND=true (FRONTEND_DIST aponta p/ frontend/dist).
+  // O fallback abaixo é exigido pelo createWebHistory (/council, /reports...).
+  if (env.serveFrontend && fs.existsSync(env.frontendDist)) {
+    app.use(express.static(env.frontendDist));
+    app.get(/^\/(?!api).*/, (req, res) => res.sendFile(path.join(env.frontendDist, 'index.html')));
+  }
 
   app.use(errorHandler);
   return app;

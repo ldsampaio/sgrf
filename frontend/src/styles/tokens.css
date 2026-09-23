@@ -1,18 +1,47 @@
 :root {
-  --black: #0a0a0b;
-  --black-2: #16161a;
-  --amber: #ffb000;
-  --amber-hover: #e69e00;
-  --amber-soft: #fff4d6;
-  --white: #ffffff;
-  --gray-100: #f4f4f5;
-  --gray-200: #e4e4e7;
-  --gray-300: #d4d4d8;
-  --gray-500: #71717a;
-  --gray-700: #3f3f46;
-  --gray-900: #18181b;
-  --danger: #dc2626;
-  --success: #15803d;
-  --radius: 10px;
-  --font: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Brand — Codemaster / DESIGN.md */
+  --spark: #fbba00;
+  --offline: #0f0f0f;
+  --online: #f9f9f9;
+  --suntech-from: #fbba00;
+  --suntech-to: #db8800;
+  /* Supporting neutrals */
+  --deep: #050505;
+  --raised: #171717;
+  --ember: #db8800;
+  --bright: #ffd466;
+  --fog: #b3b3b3;
+  --graphite: #2a2a2a;
+  --ghost-watermark: #1a1a1a;
+  /* Semantic */
+  --text-on-dark: #f9f9f9;
+  --text-on-light: #0f0f0f;
+  --danger: #ff6b6b;
+  --danger-bg: rgba(255, 107, 107, 0.1);
+  --success: #ffd466;
+  --success-bg: rgba(251, 186, 0, 0.12);
+  /* Glow (elevation on dark) */
+  --glow-1: rgba(251, 186, 0, 0.15) 0px 4px 16px;
+  --glow-2: rgba(251, 186, 0, 0.25) 0px 12px 32px;
+  --glow-3: rgba(251, 186, 0, 0.35) 0px 40px 80px;
+  /* Shape + spacing */
+  --radius-sm: 16px;
+  --radius-card: 20px;
+  --radius-lg: 28px;
+  --radius-pill: 999px;
+  --font: "Readex Pro", Arial, sans-serif;
+  /* Legacy aliases (compat with existing templates) */
+  --black: #0f0f0f;
+  --black-2: #171717;
+  --amber: #fbba00;
+  --amber-hover: #db8800;
+  --amber-soft: rgba(251, 186, 0, 0.12);
+  --white: #f9f9f9;
+  --gray-100: #171717;
+  --gray-200: #2a2a2a;
+  --gray-300: #2a2a2a;
+  --gray-500: #b3b3b3;
+  --gray-700: #b3b3b3;
+  --gray-900: #f9f9f9;
+  --radius: 20px;
 }

@@ -1,0 +1,51 @@
+# SGRF/SGRD v0.1.1 — deploy: app (imagem única, API + SPA) + Postgres.
+# Porta externa via APP_PORT (default 8081). Segredos via ambiente (ver backend/.env.example).
+name: sgrf
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sgrd
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sgrd}
+      POSTGRES_DB: sgrd
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sgrd"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8081}:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://sgrd:${DB_PASSWORD:-sgrd}@db:5432/sgrd
+      SERVE_FRONTEND: "true"
+      FRONTEND_DIST: /app/frontend-dist
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:${APP_PORT:-8081}}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?defina JWT_ACCESS_SECRET no ambiente}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?defina JWT_REFRESH_SECRET no ambiente}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:?defina INITIAL_ADMIN_EMAIL no ambiente}
+      INITIAL_ADMIN_TEMPORARY_PASSWORD: ${INITIAL_ADMIN_TEMPORARY_PASSWORD:?defina INITIAL_ADMIN_TEMPORARY_PASSWORD no ambiente}
+      SMTP_ENABLED: ${SMTP_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-SGRD <nao-responder@utfpr.edu.br>}
+    volumes:
+      - app-uploads:/app/uploads
+
+volumes:
+  pgdata:
+  app-uploads:

@@ -1,4 +1,5 @@
 <template>
+  <p class="eyebrow">Votação auditável · horário de Brasília</p>
   <h1 style="margin-top:0">Conselho — Votação</h1>
   <div class="alert error" v-if="err" role="alert">{{ err }}</div>
   <div class="card">
