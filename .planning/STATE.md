@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v0.1.1
 current_phase: 1
 current_phase_name: CI Regression Gate
-status: executing
-stopped_at: Completed 01-02-red-proof-PLAN.md
-last_updated: "2026-09-23T20:10:42.524Z"
+status: verifying
+stopped_at: Completed 01-03-required-checks-PLAN.md
+last_updated: "2026-09-23T20:15:36.772Z"
 last_activity: 2026-09-23
 last_activity_desc: Phase 1 execution started
-state_head: e6f1c368b642106f4f5e83daddc908fbceb7082f
+state_head: fadff3af3c6aef4164c88f238367b4c5b4038d47
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-23)
 
 Phase: 1 (CI Regression Gate) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-23 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 |------|----------|-------|-------|
 | Phase 01-ci-regression-gate P01 | 2min | 2 tasks | 1 files |
 | Phase 01-ci-regression-gate P02 | 3min | 2 tasks | 1 files |
+| Phase 01-ci-regression-gate P03 | 4min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Recent decisions affecting current work:
 - [Roadmap] CI action versions: `checkout@v7`/`setup-node@v7` (registry-verified STACK.md wins); ARCHITECTURE.md's v4 snippet is illustrative
 - [Roadmap] SEC-03 kept atomic — trust proxy + rate limits + uniform 401 land together in Phase 8 (trust proxy never splits from rate-limit expansion)
 - [Roadmap] Ordering locked: CI (P1) → docs/14 decisions (P2) → VOT-03/04 implementation (P6); VOT-01 (P6) before JOB-02 (P7); JOB-01 (P7) before SES-02 (P8)
+- [Phase 1]: Protection PUT via JSON body: gh form fields serialize enforce_admins as string and 422; use gh api --input with real booleans/nulls
+- [Phase 1]: Under required checks, land via PR: direct pushes to protected main are declined before CI can run on the SHA (gate working as designed); future phases must use PR flow
 
 ### Pending Todos
 
@@ -93,6 +96,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-23T20:10:42.513Z
-Stopped at: Completed 01-02-red-proof-PLAN.md
+Last session: 2026-09-23T20:15:36.761Z
+Stopped at: Completed 01-03-required-checks-PLAN.md
 Resume file: None
