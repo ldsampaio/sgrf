@@ -146,9 +146,9 @@ Plans:
 
 Plans:
 
-- [ ] 04-01: `middlewares/permissions.js` (new) — static `PERMISSIONS` map transcribed from `docs/06` + `requirePermission(action)` wired across requests/messages/settings/reports routes; 403 on undeclared action
-- [ ] 04-02: Ownership/scoping fixes in controllers — cancel, message remove, shared visibility helper for `getOne`/`list` (reused by `reports.scopeFilter`), `listVotes`, settings `transactions`, `force-password-reset` guard
-- [ ] 04-03: supertest allow+deny matrix (spike the DB story first: mock Prisma vs test Postgres) with opportunistic regression tests alongside each fix
+- [ ] 04-01-PLAN.md — `middlewares/permissions.js` (new) — static `PERMISSIONS` map transcribed from `docs/06` + `requirePermission(action)` wired across requests/messages/settings/reports routes; 403 on undeclared action
+- [ ] 04-02-PLAN.md — Ownership/scoping fixes in controllers — cancel, message remove, shared visibility helper for `getOne`/`list` (reused by `reports.scopeFilter`), `listVotes`, settings `transactions`, `force-password-reset` guard
+- [ ] 04-03-PLAN.md — supertest allow+deny matrix (mock-Prisma story, no CI change) + router-stack coverage test proving undeclared fails closed
 
 ### Phase 5: Session Refresh
 
