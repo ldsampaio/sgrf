@@ -164,14 +164,16 @@ Plans:
   3. When the refresh cookie is dead, the user is redirected to login exactly once — and the refresh request itself is never retried
   4. `npm run build` passes and `services/api.js` imports no router (no import cycle) and no per-view 401 handling appears
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 **UI hint**: yes
 
 Plans:
 
-- [ ] 05-01: Single-flight 401 interceptor in `frontend/src/services/api.js` — shared refresh promise, per-request `_retry` flag, `window.location.assign('/login')` on refresh failure, no router import
-- [ ] 05-02: Manual verification protocol — drop TTL to 10s and confirm exactly one refresh per expiry; fire N parallel 401s and confirm one refresh; dead-cookie bounce
-- [ ] 05-03: Regression pass — `npm run build` green, interceptor exists only on the shared axios instance, document the manual protocol results
+- [x] 05-01-PLAN.md — Tracer: single-flight 401 interceptor in `frontend/src/services/api.js` (shared promise, `_retry`, bounce `?reason=session-expired&redirect=`) + Login notice/redirect + Requests draft restore; build green
+- [ ] 05-02-PLAN.md — Manual verification protocol (DoD): TTL ~10s one-refresh/expiry, N-parallel 401s → one refresh, dead-cookie bounce-once + notice + return-to-origin (local-only rig, reverted)
+- [ ] 05-03-PLAN.md — Structural regression pass: interceptor only on shared instance, no router import in service, 401-only + 403 passthrough, recorded greps + build green
+
+**Execution trace:** Phase 5 plans written 2026-09-24. Plan-checker verification: PASS (3/3 plans, 0 blockers). Pending: execute `/gsd-execute-phase 05` to implement.
 
 ### Phase 6: Voting & Money State Machine
 
@@ -254,7 +256,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Rules Decisions (docs/14 close-out) | 3/3 | Complete | 2026-09-23 |
 | 3. Deploy & Environment Contract | 4/3 | Complete    | 2026-09-24 |
 | 4. Authorization Hardening | 3/3 | Complete    | 2026-09-24 |
-| 5. Session Refresh | 0/3 | Not started | - |
+| 5. Session Refresh | 1/3 | In Progress|  |
 | 6. Voting & Money State Machine | 0/5 | Not started | - |
 | 7. Background Jobs | 0/4 | Not started | - |
 | 8. Reports/Audit & Auth Polish | 0/4 | Not started | - |

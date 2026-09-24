@@ -16,7 +16,7 @@ Requirements for this milestone (bug fixes + security hardening + CI). Each maps
 
 ### Session
 
-- [ ] **SES-01**: Users stay logged in past 15 minutes — single-flight 401 response interceptor on the shared axios instance refreshes once (`POST /auth/refresh`) and retries the original request; redirect to login only when refresh itself fails; no router import (import cycle)
+- [x] **SES-01**: Users stay logged in past 15 minutes — single-flight 401 response interceptor on the shared axios instance refreshes once (`POST /auth/refresh`) and retries the original request; redirect to login only when refresh itself fails; no router import (import cycle)
 - [ ] **SES-02**: `mustChangePassword` blocks API access (403 until `changePassword`) and router navigation allows only the change-password flow + logout — the documented "troca obrigatória de senha" guarantee is actually enforced
 
 ### Voting & Finance Rules
@@ -85,7 +85,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-02 | Phase 3 | Complete |
 | SEC-03 | Phase 8 | Pending |
 | SEC-04 | Phase 3 | Complete |
-| SES-01 | Phase 5 | Pending |
+| SES-01 | Phase 5 | Complete |
 | SES-02 | Phase 8 | Pending |
 | VOT-01 | Phase 6 | Pending |
 | VOT-02 | Phase 6 | Pending |
