@@ -68,7 +68,8 @@ function restoreDraft() {
     if (!raw) return;
     const d = JSON.parse(raw);
     if (d && typeof d.title === 'string') {
-      form.value.type = typeof d.type === 'string' ? d.type : form.value.type;
+      const TYPES = ['EQUIPAMENTO', 'PUBLICACAO', 'VIAGEM', 'AUXILIO_ESTUDANTIL'];
+      form.value.type = TYPES.includes(d.type) ? d.type : form.value.type;
       form.value.title = d.title ?? '';
       form.value.justification = typeof d.justification === 'string' ? d.justification : '';
       form.value.spec = typeof d.spec === 'string' ? d.spec : '';
