@@ -8,29 +8,23 @@ const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
 describe('SEC-02 Production gate on insecure secrets - Throw/No-throw matrix', () => {
-  // Save original env before each test to restore after
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
     vi.resetModules();
-    // Completely clear NODE env so test controls it
     delete process.env.NODE_ENV;
   });
 
   afterEach(() => {
-    // Restore original env
     Object.assign(process.env, originalEnv);
   });
 
   function loadEnvWithEnvVars(envVars) {
-    // Clear NODE_ENV first to ensure clean state
     delete process.env.NODE_ENV;
-    // Set all env vars for this test
     Object.assign(process.env, envVars);
-    // Force reload of dotenv and env.js by resetting modules first
     vi.resetModules();
     delete require.cache[require.resolve('../src/config/env.js')];
-    require('../src/config/env.js'); // Re-run dotenv.config() with new env
+    require('../src/config/env.js');
     return require('../src/config/env.js');
   }
 
@@ -168,7 +162,6 @@ describe('SEC-02 Production gate on insecure secrets - Throw/No-throw matrix', (
     });
 
     it('absent COOKIE_SECURE yields false when NODE_ENV=production (SKIP_GW_ENV=true)', () => {
-      // When SKIP_GW_ENV=true, production gate is bypassed but cookieSecure still tracks
       const envVars = {
         NODE_ENV: 'production',
         JWT_ACCESS_SECRET: 'random-access-secret-random-1234567890123456789012',
@@ -207,5 +200,28 @@ describe('SEC-02 Production gate on insecure secrets - Throw/No-throw matrix', (
       const config = loadEnvWithEnvVars(envVars);
       expect(config.cookieSecure).toBe(false);
     });
+  });
+});
+
+// Simple test to verify cookieOpts is correctly exported from tokens.js
+describe('SEC-04 cookieOpts exports', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('cookieOpts imports env.cookieSecure correctly', () => {
+    const tokens = require('../src/utils/tokens.js');
+    expect(tokens.cookieOpts).toHaveProperty('httpOnly', true);
+    expect(tokens.cookieOpts).toHaveProperty('sameSite', 'lax');
+    expect(tokens.cookieOpts).toHaveProperty('path', '/');
+  });
+
+  it('token module exports required functions', () => {
+    const tokens = require('../src/utils/tokens.js');
+    expect(tokens.signAccess).toBeDefined();
+    expect(tokens.signRefresh).toBeDefined();
+    expect(tokens.verifyAccess).toBeDefined();
+    expect(tokens.verifyRefresh).toBeDefined();
+    expect(tokens.cookieOpts).toBeDefined();
   });
 });

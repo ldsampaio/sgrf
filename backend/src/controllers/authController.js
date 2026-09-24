@@ -64,8 +64,8 @@ async function refresh(req, res) {
 }
 
 async function logout(req, res) {
-  res.clearCookie('access_token', { path: '/' });
-  res.clearCookie('refresh_token', { path: '/' });
+  res.clearCookie('access_token', { ...cookieOpts, path: '/' });
+  res.clearCookie('refresh_token', { ...cookieOpts, path: '/' });
   res.json({ ok: true });
 }
 
