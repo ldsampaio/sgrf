@@ -3,6 +3,7 @@ const PDFDocument = require('pdfkit');
 const prisma = require('../config/db');
 const { audit } = require('../services/auditService');
 const { authJwt } = require('../middlewares/auth');
+const { requirePermission } = require('../middlewares/permissions');
 
 const router = express.Router();
 router.use(authJwt);
@@ -26,7 +27,7 @@ function toCSV(rows, cols) {
   return [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
 }
 
-router.get('/requests', async (req, res, next) => {
+router.get('/requests', requirePermission('reports:requests'), async (req, res, next) => {
   try {
     const where = scopeFilter(req.user, req.query);
     const requests = await prisma.resourceRequest.findMany({ where, orderBy: { createdAt: 'desc' }, take: 500 });
@@ -51,7 +52,7 @@ router.get('/requests', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/financial', async (req, res, next) => {
+router.get('/financial', requirePermission('reports:financial'), async (req, res, next) => {
   try {
     if (!['ADMINISTRADOR', 'CHEFE_DEPARTAMENTO'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Sem permissão' });
@@ -66,7 +67,7 @@ router.get('/financial', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/voting', async (req, res, next) => {
+router.get('/voting', requirePermission('reports:voting'), async (req, res, next) => {
   try {
     const votes = await prisma.vote.findMany({ orderBy: { createdAt: 'desc' }, take: 500 });
     const vistas = await prisma.viewRequest.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
@@ -74,7 +75,7 @@ router.get('/voting', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.get('/accountability', async (req, res, next) => {
+router.get('/accountability', requirePermission('reports:accountability'), async (req, res, next) => {
   try {
     const requests = await prisma.resourceRequest.findMany({
       where: { status: { in: ['APROVADO', 'APROVADO_AUTOMATICAMENTE', 'APROVADO_PARCIALMENTE', 'CONCLUIDO'] } },
@@ -98,12 +99,12 @@ router.get('/accountability', async (req, res, next) => {
 });
 
 // Stub RPA Fase 7
-router.get('/integration/provisioned', async (req, res) => {
+router.get('/integration/provisioned', requirePermission('reports:integration'), async (req, res) => {
   res.json({ note: 'Fase 7 — stub', hint: 'usar /api/reports/financial por enquanto' });
 });
 
 // Dashboard agregados: 3 pizzas (docentes Top8, saldos, categorias)
-router.get('/dashboard', async (req, res, next) => {
+router.get('/dashboard', requirePermission('reports:dashboard'), async (req, res, next) => {
   try {
     const year = Number(req.query.year || new Date().getFullYear());
     const where = scopeFilter(req.user, { ...req.query, mine: ['ALUNO', 'PROFESSOR'].includes(req.user.role) ? '1' : req.query.mine });
@@ -150,7 +151,7 @@ function dataURLtoBuffer(dataURL) {
 }
 
 // PDF do dashboard com gráficos (imagens PNG vindas do frontend)
-router.post('/dashboard-pdf', async (req, res, next) => {
+router.post('/dashboard-pdf', requirePermission('reports:dashboard'), async (req, res, next) => {
   try {
     const year = Number(req.body?.year || new Date().getFullYear());
     const images = req.body?.images || {};
