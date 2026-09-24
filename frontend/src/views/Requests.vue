@@ -25,7 +25,7 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { api } from '../services/api';
 import MoneyInput from '../components/MoneyInput.vue';
 import StatusBadge from '../components/StatusBadge.vue';
@@ -33,13 +33,38 @@ import { formatBRL } from '../utils/masks';
 const list = ref([]); const loading = ref(false); const err = ref('');
 const form = ref({ type: 'EQUIPAMENTO', title: '', justification: '', spec: '' });
 const valueCents = ref(0);
+const DRAFT_KEY = 'sgrf:pending-draft';
+// Suppress flag: programmatic resets (restore on mount, clear on submit)
+// must not re-persist through the watcher — only genuine user input writes.
+let suppressPersist = false;
+// Proactive form-side persist (D-09…D-10): every input/change overwrites the
+// single-slot snapshot, so a forced-logout bounce always finds the latest
+// draft. The interceptor only bounces — no cross-module hook. Every storage
+// access is try/catch (D-12: same-origin per-tab storage, no encryption).
+function persistDraft() {
+  if (suppressPersist) return;
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+      type: form.value.type,
+      title: form.value.title,
+      justification: form.value.justification,
+      spec: form.value.spec,
+      valueCents: valueCents.value,
+    }));
+  } catch { /* storage unavailable → best-effort, ignore */ }
+}
+function clearDraft() {
+  try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* best-effort */ }
+}
+watch([() => form.value.type, () => form.value.title, () => form.value.justification, () => form.value.spec, valueCents], persistDraft, { flush: 'sync' });
 // Best-effort draft restore (D-09…D-11): after a forced-logout bounce the
 // Requests form reopens with its pre-bounce snapshot. The slot is cleared
 // unconditionally on mount so orphan snapshots never linger; malformed content
 // opens an empty form and never blocks navigation.
 function restoreDraft() {
+  suppressPersist = true;
   try {
-    const raw = sessionStorage.getItem('sgrf:pending-draft');
+    const raw = sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return;
     const d = JSON.parse(raw);
     if (d && typeof d.title === 'string') {
@@ -50,9 +75,7 @@ function restoreDraft() {
       valueCents.value = Number.isFinite(d.valueCents) ? d.valueCents : 0;
     }
   } catch { /* corrupt slot → open empty (D-11) */ }
-  finally {
-    try { sessionStorage.removeItem('sgrf:pending-draft'); } catch { /* best-effort */ }
-  }
+  finally { clearDraft(); suppressPersist = false; }
 }
 async function load() { const { data } = await api.get('/requests'); list.value = data.requests; }
 async function create() {
@@ -63,7 +86,10 @@ async function create() {
       type: form.value.type, title: form.value.title, justification: form.value.justification,
       payload: { estimatedValue: v, publicationFee: v, estimatedAmount: v, technicalSpecification: form.value.spec || 'n/a', dailyCount: 1, dailyRate: v, passageAmount: 0, currency: 'BRL' },
     });
+    suppressPersist = true;
     form.value.title = ''; valueCents.value = 0;
+    clearDraft();
+    suppressPersist = false;
     await load();
   } catch (e) { err.value = e.response?.data?.error || 'Falha'; } finally { loading.value = false; }
 }
