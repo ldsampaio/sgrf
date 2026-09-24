@@ -1,7 +1,7 @@
 ---
 phase: 03-deploy-environment-contract
 completed_at: 2026-09-24T14:25:00Z
-status: complete (3/3 plans done; human verification of manual steps pending)
+status: complete (3/3 plans done; human verification confirmed 2026-09-24)
 ---
 
 # Phase 03 Summary: Deploy & Environment Contract
@@ -68,10 +68,9 @@ Phase 03 focused on resolving the deploy configuration and environment contract 
 Phase 03 is **complete** at this writing:
 - ✅ Plan 03-01: Complete
 - ✅ Plan 03-02: Complete
-- ✅ Plan 03-03: Complete (docs + env notes; manual steps 2–3 deferred, recorded as pending gaps in 03-03-SUMMARY.md)
+- ✅ Plan 03-03: Complete (docs + env notes; manual steps 2–3 confirmed pass by operator 2026-09-24)
 
-Remaining verification (operator, next deploy):
-- Run checklist steps 2 (public-URL Secure login + logout) and 3 (`./start-dev.sh` + localhost login) from docs/16-contrato-deploy.md on the real hosts and report pass/fail.
+Phase 3 is fully verified — no items remain open.
 
 ## Artifacts Created
 
