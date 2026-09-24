@@ -39,3 +39,8 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# GSD runtime artifacts
+.gsd/
+.planning/research/.cache/
+state.json.tmp
