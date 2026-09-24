@@ -1,10 +1,10 @@
 ---
 phase: 04-authorization-hardening
-verified: 2026-09-24T19:30:00Z
+verified: 2026-09-24T19:06:04Z
 status: passed
 score: 10/10 must-haves verified
 covered_files: [".planning/phases/04-authorization-hardening/04-01-PLAN.md", ".planning/phases/04-authorization-hardening/04-02-PLAN.md", ".planning/phases/04-authorization-hardening/04-03-PLAN.md", ".planning/phases/04-authorization-hardening/04-01-SUMMARY.md", ".planning/phases/04-authorization-hardening/04-02-SUMMARY.md", ".planning/phases/04-authorization-hardening/04-03-SUMMARY.md", ".planning/phases/04-authorization-hardening/04-REVIEW.md", "backend/src/middlewares/permissions.js", "backend/src/middlewares/visibility.js", "backend/src/controllers/requestController.js", "backend/src/controllers/deliberationController.js", "backend/src/controllers/votingController.js", "backend/src/controllers/userController.js", "backend/src/routes/requests.routes.js", "backend/src/routes/messages.routes.js", "backend/src/routes/settings.routes.js", "backend/src/routes/reports.routes.js", "backend/src/routes/users.routes.js", "backend/tests/authz/matrix.test.js", "backend/tests/authz/route-coverage.test.js", "backend/tests/authz/helpers.js", "backend/tests/authz/mockDbState.js", "docs/06-permissoes.md"]
-covered_digest: "v1:sha256:c558aac3cb866333dad06f8c3276891f5baa1f410ec6a692fdb5ad8bf30ba697"
+covered_digest: "v1:sha256:c998984e5346dd4a43622c5c093eec540282a6892f9d31ebeb0fa8cb278ebe89"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification: false
@@ -13,9 +13,9 @@ re_verification: false
 # Phase 04: Authorization Hardening Verification Report
 
 **Phase Goal:** Every endpoint enforces the documented permission matrix server-side through one deny-by-default permission map, with row-level ownership checks where the matrix requires them.
-**Verified:** 2026-09-24T19:30:00Z
+**Verified:** 2026-09-24T19:06:04Z
 **Status:** passed
-**Re-verification:** No — initial verification
+**Re-verification:** Yes — fingerprint re-stamp only (see § Re-verification); no content change, no re-scoring
 
 ## Goal Achievement
 
@@ -107,7 +107,11 @@ None — all truths are server-side authorization behaviors pinned by HTTP-level
 
 No gaps. The two review findings that touched the phase goal (CR-01 CONSELHEIRO list-scope hole, WR-03 whitespace justification bypass) were fixed in commits `1368955`/`b21d8aa` **before** this verification, and both fixes are confirmed present in the code with regression tests (CONSELHEIRO list case; whitespace/non-string justification 400 cases — the suite grew 85 → 88). The remaining review items (WR-01 post-to-invisible-draft, WR-02 submit/closeManual/requestVista 403-vs-404 oracle, WR-04 dead `mine` forcing, IN-01..IN-05) are explicitly deferred per the verification brief and concern adjacent surfaces outside the Phase 4 success criteria — they do not contradict any must-have truth.
 
+## Re-verification
+
+Re-stamp 2026-09-24T19:06:04Z: the prior `covered_digest` (`v1:sha256:c558aac3…`) was a transcription error — it did not match the mechanical recomputation over the declared `covered_files`. All 23 covered files are git-clean (no drift vs the verified commits; only out-of-scope orchestrator/dev-flow files differ), the full backend suite re-ran green (6 files, 88/88), and both review fixes (CONSELHEIRO `scopeWhere` branch, trimmed-justification cancel check) are confirmed still present. `covered_digest` was recomputed mechanically via `gsd-tools query verification fingerprint` and pasted verbatim (`v1:sha256:c998984e…`); nothing else in this report changed — no re-scoring, no new gaps.
+
 ---
 
-_Verified: 2026-09-24T19:30:00Z_
+_Verified: 2026-09-24T19:06:04Z (re-stamped; original verification 2026-09-24T19:30:00Z)_
 _Verifier: the agent (gsd-verifier)_
