@@ -271,12 +271,12 @@ Add: `COOKIE_SECURE` line + comments that any value containing `change-me` or st
 
 ## Open Questions
 
-1. **Exact doc slot for the contract (README section vs new `docs/` file)?**
+1. **Exact doc slot for the contract (README section vs new `docs/` file)? (RESOLVED — 03-03 locks `docs/16-contrato-deploy.md`)**
    - What we know: D-12 leaves it to the planner; `docs/` has numbered entries (`03`, `06`, `07`, `08`, `11` per AGENTS.md).
    - What's unclear: Whether README already has a deploy section to extend.
    - Recommendation: Planner picks at plan time; executor lists the file listing first task step.
 
-2. **Does CI need the dummy `JWT_*` env given `NODE_ENV` is unset?**
+2. **Does CI need the dummy `JWT_*` env given `NODE_ENV` is unset? (RESOLVED — 03-01 task 3 adds dummies as belt-and-braces)**
    - What we know: Gate is strict-`production`, CI sets no `NODE_ENV` [VERIFIED: ci.yml].
    - What's unclear: Whether any CI step sets `NODE_ENV=production` implicitly.
    - Recommendation: Add dummies anyway (plan 03-01 already includes this) — cost is one line, eliminates the class.
