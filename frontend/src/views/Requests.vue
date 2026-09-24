@@ -33,6 +33,27 @@ import { formatBRL } from '../utils/masks';
 const list = ref([]); const loading = ref(false); const err = ref('');
 const form = ref({ type: 'EQUIPAMENTO', title: '', justification: '', spec: '' });
 const valueCents = ref(0);
+// Best-effort draft restore (D-09…D-11): after a forced-logout bounce the
+// Requests form reopens with its pre-bounce snapshot. The slot is cleared
+// unconditionally on mount so orphan snapshots never linger; malformed content
+// opens an empty form and never blocks navigation.
+function restoreDraft() {
+  try {
+    const raw = sessionStorage.getItem('sgrf:pending-draft');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d && typeof d.title === 'string') {
+      form.value.type = typeof d.type === 'string' ? d.type : form.value.type;
+      form.value.title = d.title ?? '';
+      form.value.justification = typeof d.justification === 'string' ? d.justification : '';
+      form.value.spec = typeof d.spec === 'string' ? d.spec : '';
+      valueCents.value = Number.isFinite(d.valueCents) ? d.valueCents : 0;
+    }
+  } catch { /* corrupt slot → open empty (D-11) */ }
+  finally {
+    try { sessionStorage.removeItem('sgrf:pending-draft'); } catch { /* best-effort */ }
+  }
+}
 async function load() { const { data } = await api.get('/requests'); list.value = data.requests; }
 async function create() {
   loading.value = true; err.value = '';
@@ -47,5 +68,5 @@ async function create() {
   } catch (e) { err.value = e.response?.data?.error || 'Falha'; } finally { loading.value = false; }
 }
 async function submit(id) { await api.post(`/requests/${id}/submit`); await load(); }
-onMounted(load);
+onMounted(() => { restoreDraft(); load(); });
 </script>
