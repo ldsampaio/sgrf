@@ -1,7 +1,7 @@
 ---
 phase: 03-deploy-environment-contract
-completed_at: 2026-09-24T13:45:00Z
-status: partially_complete (2/3 plans done)
+completed_at: 2026-09-24T14:25:00Z
+status: complete (3/3 plans done; human verification of manual steps pending)
 ---
 
 # Phase 03 Summary: Deploy & Environment Contract
@@ -65,15 +65,13 @@ Phase 03 focused on resolving the deploy configuration and environment contract 
 
 ## Next Steps
 
-Phase 03 is **partially complete** at this writing:
+Phase 03 is **complete** at this writing:
 - ✅ Plan 03-01: Complete
-- ✅ Plan 03-02: Complete  
-- 🟡 Plan 03-03: Environment contract documentation (still to be done)
+- ✅ Plan 03-02: Complete
+- ✅ Plan 03-03: Complete (docs + env notes; manual steps 2–3 deferred, recorded as pending gaps in 03-03-SUMMARY.md)
 
-Remaining in Phase 03:
-- Create `.env.example` documentation for COOKIE_SECURE
-- Verify `FRONTEND_URL` and CORS configuration matches public URL
-- Add operational notes for local development vs production
+Remaining verification (operator, next deploy):
+- Run checklist steps 2 (public-URL Secure login + logout) and 3 (`./start-dev.sh` + localhost login) from docs/16-contrato-deploy.md on the real hosts and report pass/fail.
 
 ## Artifacts Created
 
