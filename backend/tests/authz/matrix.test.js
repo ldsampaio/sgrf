@@ -348,8 +348,10 @@ describe('GET /api/requests — invisibilidade de rascunho × visibilidade abert
   let owner;
   let aluno;
   let admin;
+  let conselheiro;
   let ownDraft;
   let otherDraft;
+  let consDraft;
   let open;
 
   function matches(where, r, user) {
@@ -367,12 +369,14 @@ describe('GET /api/requests — invisibilidade de rascunho × visibilidade abert
     owner = makeUser('PROFESSOR');
     aluno = makeUser('ALUNO');
     admin = makeUser('ADMINISTRADOR');
+    conselheiro = makeUser('CONSELHEIRO');
     const other = makeUser('PROFESSOR');
     ownDraft = makeRequest({ status: 'RASCUNHO', requesterId: owner.id });
     otherDraft = makeRequest({ status: 'RASCUNHO', requesterId: other.id });
+    consDraft = makeRequest({ status: 'RASCUNHO', requesterId: conselheiro.id });
     open = makeRequest({ status: 'EM_VOTACAO', requesterId: other.id });
-    const store = [ownDraft, otherDraft, open];
-    const usersById = Object.fromEntries([owner, aluno, admin, other].map((u) => [u.id, u]));
+    const store = [ownDraft, otherDraft, consDraft, open];
+    const usersById = Object.fromEntries([owner, aluno, admin, conselheiro, other].map((u) => [u.id, u]));
     prisma.user.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
     prisma.resourceRequest.findMany.mockImplementation(async ({ where = {} }) =>
       store.filter((r) => matches(where, r, null)),
@@ -395,6 +399,17 @@ describe('GET /api/requests — invisibilidade de rascunho × visibilidade abert
     expect(ids).toContain(open.id);
     expect(ids).not.toContain(ownDraft.id);
     expect(ids).not.toContain(otherDraft.id);
+    expect(ids).not.toContain(consDraft.id);
+  });
+
+  it('CONSELHEIRO vê próprio rascunho + não-rascunhos, não rascunhos alheios (D-04, CR-01)', async () => {
+    const res = await request(app).get('/api/requests').set('Cookie', cookieFor(conselheiro));
+    expect(res.status).toBe(200);
+    const ids = res.body.requests.map((r) => r.id);
+    expect(ids).toContain(consDraft.id);
+    expect(ids).toContain(open.id);
+    expect(ids).not.toContain(ownDraft.id);
+    expect(ids).not.toContain(otherDraft.id);
   });
 
   it('ADMIN vê tudo, inclusive rascunhos alheios', async () => {
@@ -403,6 +418,7 @@ describe('GET /api/requests — invisibilidade de rascunho × visibilidade abert
     const ids = res.body.requests.map((r) => r.id);
     expect(ids).toContain(ownDraft.id);
     expect(ids).toContain(otherDraft.id);
+    expect(ids).toContain(consDraft.id);
     expect(ids).toContain(open.id);
   });
 });

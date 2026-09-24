@@ -6,7 +6,7 @@ const { annualTotalCents, getSettings, getBalance, calcAmount } = require('../se
 
 async function list(req, res, next) {
   try {
-    // D-03/D-04: PROFESSOR/ALUNO veem próprios + tudo não-rascunho (scopeWhere).
+    // D-03/D-04: PROFESSOR/ALUNO/CONSELHEIRO veem próprios + tudo não-rascunho (scopeWhere).
     const where = scopeWhere(req.user, req.query);
     const requests = await prisma.resourceRequest.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100 });
     res.json({ requests });

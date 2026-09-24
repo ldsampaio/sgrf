@@ -4,7 +4,7 @@
 //   ADMINISTRADOR/CHEFE_DEPARTAMENTO; todo não-rascunho visível a qualquer
 //   papel autenticado (D-03: PROFESSOR/ALUNO veem tudo exceto rascunhos).
 // - scopeWhere(user, query): generaliza o scopeFilter de reports.routes.js —
-//   PROFESSOR/ALUNO passam a own-requests OR non-draft.
+//   PROFESSOR/ALUNO/CONSELHEIRO passam a own-requests OR non-draft.
 //
 // D-05: campos financeiros seguem o escopo de visão; nenhuma camada de
 // redação de valores em nenhum lugar. D-08: fora de escopo lê 404 (não 403).
@@ -21,8 +21,8 @@ function canViewRequest(user, r) {
 
 function scopeWhere(user, q = {}) {
   const where = {};
-  // PROFESSOR/ALUNO: próprios rascunhos + tudo que não é rascunho (D-03/D-04).
-  if (['PROFESSOR', 'ALUNO'].includes(user.role)) {
+  // PROFESSOR/ALUNO/CONSELHEIRO: próprios rascunhos + tudo que não é rascunho (D-03/D-04).
+  if (['PROFESSOR', 'ALUNO', 'CONSELHEIRO'].includes(user.role)) {
     where.OR = [{ requesterId: user.id }, { status: { not: 'RASCUNHO' } }];
   } else if (q.mine === '1') {
     where.requesterId = user.id;
