@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-23)
 ## Current Position
 
 Phase: 05 (Session Refresh) — EXECUTING
-Plan: 3 of 3
-Status: Ready to execute
-Last activity: 2026-09-24 — Phase 05 execution started
+Plan: 2 of 3 (05-02 manual protocol — Part A rig DONE, awaiting human Part A observations + Part B)
+Status: CHECKPOINT — human-verify gate (network-tab + browser observations require a real operator)
+Last activity: 2026-09-24 — 05-02 Part A automated rig complete, checkpoint returned
 
 Progress: [█████░░░░░] 50%
 
