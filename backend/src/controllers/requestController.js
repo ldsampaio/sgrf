@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const { canViewRequest } = require('../middlewares/visibility');
 const { audit } = require('../services/auditService');
 const { enqueue } = require('../services/emailService');
 const { annualTotalCents, getSettings, getBalance, calcAmount } = require('../services/requestService');
@@ -104,7 +105,7 @@ async function submit(req, res, next) {
 async function getOne(req, res, next) {
   try {
     const r = await prisma.resourceRequest.findUnique({ where: { id: req.params.id }, include: { files: true, transactions: true } });
-    if (!r) return res.status(404).json({ error: 'Não encontrado' });
+    if (!r || !canViewRequest(req.user, r)) return res.status(404).json({ error: 'Não encontrado' });
     res.json({ request: r });
   } catch (e) { next(e); }
 }
