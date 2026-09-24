@@ -1,17 +1,13 @@
 const prisma = require('../config/db');
-const { canViewRequest } = require('../middlewares/visibility');
+const { canViewRequest, scopeWhere } = require('../middlewares/visibility');
 const { audit } = require('../services/auditService');
 const { enqueue } = require('../services/emailService');
 const { annualTotalCents, getSettings, getBalance, calcAmount } = require('../services/requestService');
 
 async function list(req, res, next) {
   try {
-    const where = {};
-    // aluno só vê próprias; demais veem próprias + em votação (06-permissoes)
-    if (req.user.role === 'ALUNO') where.requesterId = req.user.id;
-    else if (req.query.mine === '1') where.requesterId = req.user.id;
-    if (req.query.status) where.status = req.query.status;
-    if (req.query.type) where.type = req.query.type;
+    // D-03/D-04: PROFESSOR/ALUNO veem próprios + tudo não-rascunho (scopeWhere).
+    const where = scopeWhere(req.user, req.query);
     const requests = await prisma.resourceRequest.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100 });
     res.json({ requests });
   } catch (e) { next(e); }
@@ -113,10 +109,35 @@ async function getOne(req, res, next) {
 async function cancel(req, res, next) {
   try {
     const r = await prisma.resourceRequest.findUnique({ where: { id: req.params.id } });
-    if (!r) return res.status(404).json({ error: 'Não encontrado' });
-    await prisma.resourceRequest.update({ where: { id: r.id }, data: { status: 'CANCELADO' } });
-    await audit({ actorId: req.user.id, action: 'request_cancelled', entityType: 'request', entityId: r.id, req });
-    res.json({ ok: true });
+    // D-08: fora de escopo esconde existência (404, não 403).
+    if (!r || !canViewRequest(req.user, r)) return res.status(404).json({ error: 'Não encontrado' });
+    // RN-010 (docs/14-decisoes-em-aberto.md:16): CONCLUIDO/CANCELADO imutáveis.
+    if (['CONCLUIDO', 'CANCELADO'].includes(r.status)) return res.status(400).json({ error: 'Pedido imutável' });
+    // D-06: justificativa obrigatória (auditada).
+    const justification = req.body?.justification;
+    if (!justification) return res.status(400).json({ error: 'Justificativa obrigatória' });
+    const isOwner = String(r.requesterId) === String(req.user.id);
+    const role = req.user.role;
+    const isLeader = ['ADMINISTRADOR', 'CHEFE_DEPARTAMENTO'].includes(role);
+    // RN-010: status aprovado/provisionado (ramo com reversão compensatória).
+    const approved = ['APROVADO', 'APROVADO_AUTOMATICAMENTE', 'APROVADO_PARCIALMENTE'].includes(r.status);
+    if (approved) {
+      if (!isLeader) return res.status(403).json({ error: 'Sem permissão' });
+      // Phase 6 (VOT-04/06-04): compensating REVERSE here — estorno auditado
+      // dos efeitos de PROVISION (FinancialTransaction REVERSE). Phase 4:
+      // somente a troca de status auditada, sem writes financeiras.
+    } else if (role === 'ADMINISTRADOR') {
+      // ADMIN: qualquer não-terminal (inclui INDEFERIDO como limpeza).
+    } else if (role === 'CHEFE_DEPARTAMENTO') {
+      // CHEFE: antes de CONCLUIDO (CONCLUIDO/CANCELADO já barrados acima).
+    } else {
+      // RN-010: dono somente RASCUNHO/EM_VOTACAO.
+      if (!isOwner) return res.status(403).json({ error: 'Sem permissão' });
+      if (!['RASCUNHO', 'EM_VOTACAO'].includes(r.status)) return res.status(403).json({ error: 'Sem permissão' });
+    }
+    const updated = await prisma.resourceRequest.update({ where: { id: r.id }, data: { status: 'CANCELADO' } });
+    await audit({ actorId: req.user.id, action: 'request_cancelled', entityType: 'request', entityId: r.id, beforeData: { status: r.status }, afterData: { status: 'CANCELADO', justification }, req });
+    res.json({ ok: true, request: updated });
   } catch (e) { next(e); }
 }
 
