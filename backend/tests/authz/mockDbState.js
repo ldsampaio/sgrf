@@ -10,11 +10,15 @@
 import { vi } from 'vitest';
 
 export const mockDb = {
-  user: { findUnique: vi.fn(), findMany: vi.fn() },
+  user: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   resourceRequest: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), create: vi.fn() },
-  vote: { findMany: vi.fn() },
-  deliberationMessage: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
-  financialTransaction: { findMany: vi.fn() },
+  vote: { findMany: vi.fn(), create: vi.fn() },
+  viewRequest: { findMany: vi.fn() },
+  deliberationMessage: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), create: vi.fn() },
+  financialTransaction: { findMany: vi.fn(), create: vi.fn() },
+  fundBalance: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
+  departmentSettings: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+  emailQueue: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   auditEvent: { create: vi.fn() },
   $transaction: vi.fn(async (cb) => cb({})),
 };

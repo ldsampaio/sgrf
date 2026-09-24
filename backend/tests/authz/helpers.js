@@ -47,3 +47,33 @@ export function signToken(user) {
 export function cookieFor(user) {
   return `access_token=${signToken(user)}`;
 }
+
+export function makeVote(requestId, voterId, overrides = {}) {
+  seq += 1;
+  return {
+    id: `vote-${seq}`,
+    requestId,
+    voterId,
+    voteType: 'APROVAR',
+    comment: 'De acordo',
+    approvedAmountCents: 150000,
+    tieBreak: false,
+    createdAt: new Date(),
+    ...overrides,
+  };
+}
+
+export function makeMessage(requestId, authorId, overrides = {}) {
+  seq += 1;
+  return {
+    id: `msg-${seq}`,
+    requestId,
+    authorId,
+    parentMessageId: null,
+    content: `Mensagem teste ${seq}`,
+    history: '[]',
+    deletedAt: null,
+    createdAt: new Date(),
+    ...overrides,
+  };
+}
