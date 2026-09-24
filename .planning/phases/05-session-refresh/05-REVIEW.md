@@ -1,143 +1,144 @@
 ---
 phase: 05-session-refresh
-reviewed: 2026-09-24T20:00:00Z
+reviewed: 2026-09-24T20:47:45Z
 depth: standard
-files_reviewed: 3
+files_reviewed: 5
 files_reviewed_list:
   - frontend/src/services/api.js
   - frontend/src/views/Login.vue
   - frontend/src/views/Requests.vue
+  - frontend/src/stores/auth.js
+  - frontend/src/router/index.js
 findings:
   critical: 0
-  warning: 3
-  info: 3
-  total: 6
-status: issues-found
+  warning: 1
+  info: 4
+  total: 5
+status: issues_found
 ---
 
-# Phase 05: Code Review Report
+# Phase 05: Code Review Report (re-review — fix verification)
 
-**Reviewed:** 2026-09-24T20:00:00Z
+**Reviewed:** 2026-09-24T20:47:45Z
 **Depth:** standard
-**Files Reviewed:** 3
-**Status:** issues-found
+**Files Reviewed:** 5
+**Status:** issues_found
 
 ## Summary
 
-Reviewed the 05-01 tracer diff (commits `a8b2b1b`, `b26cb4a`, `3bb4bed`) plus the
-05-01/05-03 SUMMARYs and PLANs. The single-flight mechanism, bounce-once flag
-ordering, 401-strict gate with 403 passthrough (Phase 8 SES-02 safe), open-redirect
-validator, and draft try/catch + unconditional-clear lifecycle are all sound, and
-the sync-flush `suppressPersist` flag is reset-safe (`finally` guarantees reset on
-every path, including the early `return` when the slot is empty).
+Re-reviewed the phase scope on top of the 2026-09-24T20:00:00Z review: verified
+each of WR-01/WR-02/WR-03 actually landed (commits `7adc567`, `dda9127`), plus
+the new post-review fix `56526f2` (doBounce early-return on `/login` + hardened
+safeOrigin). All three prior findings are **fixed in code**, and the `56526f2`
+bounce-loop analysis holds — the full-reload self-bounce cycle is closed
+(`me()` swallows its own 401 internally at `stores/auth.js:8-9`, the login view
+makes no authed calls, and `doBounce()` now no-ops on `/login` without poisoning
+`isRedirecting`).
 
-One real logic bug found: **failed logins (`POST /auth/login` → 401
-'Credenciais inválidas', confirmed in `backend/src/controllers/authController.js:16,30`)
-flow through the shared `api` instance (`frontend/src/stores/auth.js:12`) and enter
-the refresh/bounce path**, because the only interceptor bypass is `/auth/refresh`.
-For a logged-out user with no live refresh cookie this ends in a full-page bounce
-of the login page onto itself with a misleading "session expired" notice and wiped
-input. Two further low-severity warnings (same-page bounce nesting, unvalidated
-draft `type` restore) and three info notes below. No security holes: no token/cookie
-logging, no open redirect (validator + same-origin `router.push`), 403/429/5xx/network
-passthrough intact.
+One new WARNING below: the voluntary-logout path (`POST /auth/logout` →
+`AppShell.vue:45`) still enters the refresh/bounce machinery when the session is
+already dead, producing a spurious refresh plus a misleading "session expired"
+notice on what was a deliberate logout. No security holes introduced or found:
+401-strict gate intact, 403/429/5xx/network passthrough intact, no open redirect
+(validator + `startsWith('/login')` fallback to `/` can only narrow the target),
+no token/cookie logging, no router/store import in `api.js` (no cycle).
+
+## Fix verification (prior review)
+
+- **WR-01 FIXED** — `frontend/src/services/api.js:40`: bypass widened to
+  `/\/auth\/(login|refresh|register)/`, applied per the suggested snippet.
+  Failed-login 401s reject straight to the `Login.vue:58` credential alert.
+- **WR-02 FIXED + hardened** — `frontend/src/services/api.js:24,27`:
+  `doBounce()` early-returns on `pathname === '/login'` (commit `56526f2`,
+  supersedes the `safeOrigin`-only version from `7adc567`) and the residual
+  `safeOrigin` fallback now uses `startsWith('/login') → '/'`.
+- **WR-03 FIXED** — `frontend/src/views/Requests.vue:71-72`: `TYPES` allowlist
+  restore applied per the suggested snippet; shape checks, unconditional
+  clear-on-mount, try/catch lifecycle, and `suppressPersist` untouched.
 
 ## Warnings
 
-### WR-01: Failed-login 401 enters the refresh/bounce path
+### WR-04: Voluntary logout with a dead session enters the refresh/bounce path
 
-**File:** `frontend/src/services/api.js:29-31`
-**Issue:** The interceptor bypasses only `/auth/refresh`, but `auth.login` uses the
-same shared instance (`frontend/src/stores/auth.js:12`) and the backend answers bad
-credentials with 401 (`backend/src/controllers/authController.js:16,30`). So every
-wrong-password submit fires a spurious `POST /auth/refresh`, and when the refresh
-cookie is dead/absent (the normal logged-out state) `doBounce()` full-reloads the
-login page onto `/login?reason=session-expired&redirect=%2Flogin` — wiping the typed
-email/password and showing a "session expired" notice for what was a credential error.
-The credential error alert (`Login.vue:58`) never gets its chance in this path.
-**Fix:**
+**File:** `frontend/src/stores/auth.js:15` via `frontend/src/components/AppShell.vue:45`
+**Issue:** The interceptor bypass (`api.js:40`) covers `login|refresh|register`
+but not `/auth/logout`. If the 7-day cookie is already dead when the user clicks
+"sair", `POST /auth/logout` 401s → fires a spurious `POST /auth/refresh` →
+refresh fails → `doBounce()` full-reloads to
+`/login?reason=session-expired&redirect=...`, showing a "session expired" notice
+for what was a deliberate logout, and `this.user = null` never executes (masked
+only because the reload clears Pinia state). Additionally `AppShell logout()`
+has no try/catch, so any rejection that does *not* navigate (e.g. a future
+non-reload bounce, or the early-return path if logout is ever reachable from
+`/login`) surfaces as an unhandled promise rejection.
+**Fix (APPLIED post-review):** `stores/auth.js` logout is now best-effort
+(`try/catch` + `finally { this.user = null; }`) and `/auth/logout` added to the
+`api.js:40` bypass regex — a 401 there means "no session", which is the desired
+end state of logout anyway.
 ```js
-// Bypass auth endpoints that legitimately 401 outside a session (login, not just refresh)
-if (typeof config.url === 'string' && /\/auth\/(login|refresh|register)/.test(config.url)) throw error;
-```
-Alternatively mark the login call `{ _skipRefresh: true }` and gate on it, keeping the
-bypass list out of URL substring matching.
-
-### WR-02: Bounce has no same-page guard, nesting `redirect` on the login page
-
-**File:** `frontend/src/services/api.js:16-21`
-**Issue:** `doBounce()` unconditionally appends `pathname + search` as `redirect`. Any
-401 raised while already on `/login` (WR-01 is one trigger; any future login-page
-request is another) produces `/login?reason=session-expired&redirect=/login%3F...`,
-and `isInternalPath` legitimately accepts that nested value — so post-login
-`router.push` lands back on a login URL carrying stale params instead of `/`.
-**Fix:**
-```js
-function doBounce() {
-  if (isRedirecting) return;
-  isRedirecting = true;
-  const origin = window.location.pathname + window.location.search;
-  const safeOrigin = window.location.pathname === '/login' ? '/' : origin;
-  window.location.assign('/login?reason=session-expired&redirect=' + encodeURIComponent(safeOrigin));
-}
-```
-
-### WR-03: Draft restore accepts an arbitrary `type` string into the enum select
-
-**File:** `frontend/src/views/Requests.vue:71`
-**Issue:** `title`/`justification`/`spec`/`valueCents` are shape-checked, but `type` is
-restored from any string. A tampered slot (or a value written by a future form version)
-e.g. `{"type":"FOO","title":"x"}` leaves the `<select>` with no matching option
-(blank control) and the next submit posts an invalid `type` to the backend.
-**Fix:**
-```js
-const TYPES = ['EQUIPAMENTO', 'PUBLICACAO', 'VIAGEM', 'AUXILIO_ESTUDANTIL'];
-if (d && typeof d.title === 'string') {
-  form.value.type = TYPES.includes(d.type) ? d.type : form.value.type;
-  ...
+// stores/auth.js — logout must be best-effort: clear state and land on /login
+// regardless of what the dead session answers.
+async logout() {
+  try { await api.post('/auth/logout'); } catch { /* best-effort */ }
+  finally { this.user = null; }
 }
 ```
 
 ## Info
 
-### IN-01: Refresh bypass uses over-broad substring match
+### IN-01 (residual): Bypass regex is still an unanchored substring match
 
-**File:** `frontend/src/services/api.js:31`
-**Issue:** `config.url.includes('/auth/refresh')` also matches unrelated URLs that merely
-contain that substring (e.g. a query param), silently skipping refresh for them. Harmless
-today, brittle as a convention.
-**Fix:** Match on path suffix instead, e.g. `new URL(config.url, window.location.origin).pathname === '/api/auth/refresh'`
-(or combine with the `_skipRefresh` flag suggested in WR-01).
+**File:** `frontend/src/services/api.js:40`
+**Issue:** `/\/auth\/(login|refresh|register|logout)/.test(config.url)` also matches a
+URL that merely *contains* that substring (e.g. a query param value), silently
+skipping refresh for it. Strictly tighter than the old
+`includes('/auth/refresh')`, harmless today — noted so a future `_skipRefresh`
+flag migration (suggested in the original WR-01) still has a reason.
+**Fix:** Match on path suffix, e.g.
+`new URL(config.url, window.location.origin).pathname === '/api/auth/refresh'`
+per endpoint, or adopt the `_skipRefresh` request flag.
 
-### IN-02: Pre-existing unhandled rejections in `load()` / `submit()` (not introduced here)
+### IN-02 (residual, pre-existing): Unhandled rejections in `load()` / `submit()`
 
-**File:** `frontend/src/views/Requests.vue:80,96`
-**Issue:** `load()` and `submit(id)` have no try/catch (pre-existing lines, untouched by
-this phase). Now that the interceptor rethrows original 401s plus replay errors into
-these callers, a session-death during `submit()` surfaces as an unhandled promise
-rejection. Flagging for awareness only — out of this phase's scope.
-**Fix:** Wrap `submit()` (and `load()` when called from event handlers) in try/catch
+**File:** `frontend/src/views/Requests.vue:81,97`
+**Issue:** Unchanged by this phase. A session-death during `submit()` rejects
+into a caller with no try/catch (unhandled rejection; the bounce still lands the
+user on `/login`). Flagging for awareness only — out of this phase's scope.
+**Fix:** Wrap `submit()` (and event-handler-called `load()`) in try/catch
 surfacing to `err`.
 
-### IN-03: `isRedirecting` never resets within a tab lifetime (by design, noted)
+### IN-03 (carried, by design): `isRedirecting` never resets within a tab lifetime
 
-**File:** `frontend/src/services/api.js:14-18`
-**Issue:** The flag is only cleared by the full-reload bounce. If `assign()` were ever
-stubbed, blocked, or run in an environment without navigation, all subsequent session
-deaths in that tab would skip the bounce (views still get the thrown error, so no silent
-data loss). Acceptable as designed — recorded so a future non-reload navigation change
-remembers to reset it.
+**File:** `frontend/src/services/api.js:14,25`
+**Issue:** Only cleared by the full-reload bounce. `56526f2` correctly does NOT
+set it on the `/login` early-return path, so the flag cannot be poisoned by a
+suppressed bounce. Acceptable as designed — recorded so a future non-reload
+navigation change remembers to reset it.
+**Fix:** None (design note).
+
+### IN-04: `safeOrigin` hardening is partially redundant and over-broad
+
+**File:** `frontend/src/services/api.js:26-27`
+**Issue:** After the `56526f2` early return (line 24), the exact-`/login` case
+never reaches line 27, so `startsWith('/login')` only matters for hypothetical
+`/login/...` subpaths — of which the router defines none (`router/index.js:14`
+is the sole `/login` route; `pathname` never contains the query string).
+Harmless defense-in-depth; also maps any future `/loginXYZ` path to `/`.
+**Fix:** None required; if touched, prefer the exact
+`pathname === '/login' ? '/' : origin` form to match the (single) real route.
 
 ---
 
-_Checked and clean (no finding):_ `?redirect` validation rejects `//` and `scheme:` and
-`router.push` cannot leave the origin (history mode confirmed in
-`frontend/src/router/index.js`) — no open redirect; zero `console.*`/token logging in
-all three files (T-05-04 holds); 403/429/5xx/network passthrough intact (T-05-06 holds,
-Phase 8 SES-02 path untouched); draft slot read-and-cleared unconditionally on mount
-with corrupt-shape fallback to empty form (T-05-05 holds); no router/store import in
-`api.js` (no cycle).
+_Checked and clean (no finding):_ 401-strict gate (`response?.status !== 401`,
+`api.js:37`) with 403/429/5xx/network passthrough intact (Phase 8 SES-02 path
+untouched); `_retry` set only after the bypass so login 401s are never marked;
+`??=` single-flight with `finally` reset intact; replayed request rejects
+straight through via `_retry`; `?redirect` validator rejects `//` and `scheme:`
+and `router.push` cannot leave the origin (history mode,
+`router/index.js:11-12`); zero `console.*`/token logging in all five files;
+draft slot read-and-cleared unconditionally on mount with corrupt-shape fallback
+to empty form; no router/store import in `api.js` (no cycle).
 
-_Reviewed: 2026-09-24T20:00:00Z_
+_Reviewed: 2026-09-24T20:47:45Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_

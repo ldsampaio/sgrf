@@ -37,7 +37,7 @@ api.interceptors.response.use(
     if (response?.status !== 401 || !config || config._retry) throw error;
     // The refresh call itself never re-enters the refresh path.
     // Bypass auth endpoints that legitimately 401 outside a session (login, not just refresh)
-    if (typeof config.url === 'string' && /\/auth\/(login|refresh|register)/.test(config.url)) throw error;
+    if (typeof config.url === 'string' && /\/auth\/(login|refresh|register|logout)/.test(config.url)) throw error;
     config._retry = true;
     try {
       refreshPromise ??= api.post('/auth/refresh').finally(() => {
