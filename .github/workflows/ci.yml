@@ -9,6 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://user:pass@localhost:5432/sgrd
+      # Dummy secrets to prevent production gate from tripping CI
+      JWT_ACCESS_SECRET: ci-dummy-access-secret-random-1234567890123456789012
+      JWT_REFRESH_SECRET: ci-dummy-refresh-secret-random-1234567890123456789012
+      INITIAL_ADMIN_EMAIL: admin@utfpr.edu.br
+      INITIAL_ADMIN_TEMPORARY_PASSWORD: ci-secure-password-random-12345678901234567890
     defaults:
       run:
         working-directory: backend
