@@ -27,13 +27,13 @@ Requests are decided correctly and funds cannot leak — the right people approv
 - ✓ Minimal CI: backend `npx vitest run` + frontend `npm run build` on every push — Phase 1
 - ✓ Secrets fail fast in production: `env.js` refuses insecure `dev-*-secret-change-me` fallbacks when `NODE_ENV=production` — Phase 3 (SEC-02)
 - ✓ Secure-cookie/HTTPS story resolved: `secure` follows `COOKIE_SECURE` env var, Cloudflare Tunnel is the TLS termination — Phase 3 (SEC-04)
+- ✓ Session refresh works: single-flight 401 interceptor on the shared axios instance refreshes once and retries; bounce to login only on refresh death with locked notice + validated return-to-origin + draft restore; 9/9 manual-protocol checks PASS — Phase 5 (SES-01)
 
 ### Active
 
 <!-- Current scope — the bug-fix + hardening milestone. -->
 
 - [ ] Authorization holes closed: `cancel`, message `remove`, `getOne`/`list` scoping, `listVotes`, settings `transactions`, `force-password-reset` guard — every state-changing/reading endpoint enforces documented permissions from `docs/06-permissoes.md`
-- [ ] Session refresh works: frontend 401 interceptor calls `/auth/refresh` once and retries; users are not bounced to login after 15 minutes
 - [ ] `mustChangePassword` enforced server-side (403 until changed) and in the router
 - [ ] Tie-break dead-end fixed: `AGUARDANDO_DESEMPATE` resolves when the chefe already voted
 - [ ] Annual-limit bypass fixed: `CONCLUIDO` counts toward `annualTotalCents` (per `docs/03-regras-de-negocio.md`)
@@ -82,11 +82,15 @@ Requests are decided correctly and funds cannot leak — the right people approv
 | Excludes new features and broad tech-debt refactors | Keeps the milestone a verifiable hardening pass; refactors only where a fix requires them | — Pending |
 | Cloudflare Tunnel is the TLS termination (no Caddy); `COOKIE_SECURE` env var drives the cookie `Secure` flag | Internal Tunnel hops are plain HTTP but `Secure` is a browser-side attribute, so no proxy TLS needed; operators override via compose for non-HTTPS testing | — Phase 3 |
 | Trust proxy + rate-limit land together atomically in Phase 8 (SEC-03) | Trust proxy must never split from rate-limit expansion, else client IPs are wrong when limits enforce | — Pending |
+| Single-flight refresh lives on the shared axios instance only; the service module never imports router/store (bounce via `window.location.assign`) | Avoids an api ⇄ router ⇄ store ⇄ api import cycle; full reload also clears Pinia state on session death | — Phase 5 |
+| Auth endpoints that legitimately 401 outside a session (`login`/`refresh`/`register`/`logout`) bypass the refresh path; `doBounce()` no-ops when already on `/login` | Failed login shows the credential error in place; logout with a dead session can't show a misleading "session expired" notice; bouncing from `/login` re-triggered itself forever because the reload resets the module flag | — Phase 5 |
+| Requests draft persist is form-side (own snapshot slot) with enum allowlist restore | Interceptor only bounces, no cross-module hook; tampered slot can't inject an invalid type | — Phase 5 |
 
 ## Context Notes (Evolution History)
 
 - 2026-09-23: Project initialized during brownfield onboarding after `/gsd-map-codebase` produced the complete codebase map.
 - 2026-09-24: Phase 3 complete — production boots only with real secrets (SEC-02 gate), cookie/HTTPS works off localhost via `COOKIE_SECURE` + Tunnel (SEC-04), contract documented in `docs/16-contrato-deploy.md`.
+- 2026-09-24: Phase 5 complete — silent single-flight session refresh (SES-01) verified 8/8, 9/9 manual-protocol checks PASS; bounce-loop and logout-path defects found during protocol fixed in-phase.
 
 ## Evolution
 
@@ -106,4 +110,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-24 after Phase 03*
+*Last updated: 2026-09-24 after Phase 05*

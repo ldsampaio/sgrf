@@ -21,10 +21,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-23)
+See: .planning/PROJECT.md (updated 2026-09-24)
 
 **Core value:** Requests are decided correctly and funds cannot leak — the right people approve the right amounts, every state change is authorized and auditable, and the ledger always balances.
-**Current focus:** Phase 05 — Session Refresh
+**Current focus:** Phase 06 — Voting & Money State Machine
 
 ## Current Position
 
@@ -82,7 +82,8 @@ Recent decisions affecting current work:
 - [Phase 1]: Protection PUT via JSON body: gh form fields serialize enforce_admins as string and 422; use gh api --input with real booleans/nulls
 - [Phase 1]: Under required checks, land via PR: direct pushes to protected main are declined before CI can run on the SHA (gate working as designed); future phases must use PR flow
 - [Phase 05]: 05-01: proactive form-side draft persist (Requests writes own snapshot; interceptor only bounces, no cross-module hook)
-- [Phase 05]: [Phase 05]: 05-03 regression pass clean — no defects against 05-01; pre-existing backend/package-lock.json version bump is ambient state, not phase drift
+- [Phase 05]: 05-03 regression pass clean — no defects against 05-01; pre-existing backend/package-lock.json version bump is ambient state, not phase drift
+- [Phase 05]: WR-01/WR-02/WR-03 closed (auth-endpoint bypass, bounce guards, TYPES allowlist); bounce-loop fixed via doBounce no-op on /login (reload resets module flag); logout best-effort + bypassed (WR-04); 05-02 manual protocol 9/9 PASS, verification 8/8
 
 ### Pending Todos
 
@@ -104,6 +105,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-24T19:52:08.605Z
-Stopped at: Phase 05 complete, ready to plan Phase 6
+Last session: 2026-09-24T21:00:00.000Z
+Stopped at: Phase 05 complete, ready to plan Phase 06
 Resume file: None
