@@ -11,12 +11,12 @@
     {
       "number": "2",
       "name": "Rules Decisions (docs/14 close-out)",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "3",
       "name": "Deploy & Environment Contract",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "4",
@@ -46,8 +46,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 02 of 8 · executing"
+    "label": "Advance to the next step (plan phase 04)",
+    "reason": "Phase 04 of 8 — needs a plan"
   },
-  "updated_at": "2026-09-23T20:58:37.177Z"
+  "updated_at": "2026-09-24T18:38:35.942Z"
 }

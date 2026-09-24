@@ -13,7 +13,7 @@ This milestone takes the feature-complete but buggy SGRF MVP (v0.1.1) to product
 
 - [x] **Phase 1: CI Regression Gate** - Two-job pipeline (backend vitest + frontend build) on every push — the gate for everything that follows (completed 2026-09-23)
 - [x] **Phase 2: Rules Decisions (docs/14 close-out)** - Decide and record partial-approval and cancellation rules before any code implements them (completed 2026-09-23)
-- [ ] **Phase 3: Deploy & Environment Contract** - Production boots only with real secrets; cookie/HTTPS story works off localhost
+- [x] **Phase 3: Deploy & Environment Contract** - Production boots only with real secrets; cookie/HTTPS story works off localhost (completed 2026-09-24)
 - [ ] **Phase 4: Authorization Hardening** - Deny-by-default permission map + ownership fixes on every documented endpoint
 - [ ] **Phase 5: Session Refresh** - Silent single-flight token refresh; users stay logged in past 15 minutes
 - [ ] **Phase 6: Voting & Money State Machine** - Tie-breaks resolve, annual cap holds, decided rules implemented deliberately
@@ -123,6 +123,7 @@ Plans:
 **Plans**: 3/3 planned & plan-checker verified (PASS, 0 blockers)
 
 Plans:
+
 - [x] 03-01-PLAN.md — `env.js` production fail-fast on insecure *values* (not just presence), gated strictly on `NODE_ENV=production`; add CI dummy `JWT_*` env  
 - [x] 03-02-PLAN.md — `COOKIE_SECURE` env var + Tunnel topology wiring (`tokens.js`, `clearCookie` attribute match, compose); public-`https`-only verification
 - [x] 03-03-PLAN.md — Document the environment contract (`docs/16-contrato-deploy.md` checklist + `.env.example` production notes) and human-verify public-URL login + dev flow intact
@@ -251,7 +252,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. CI Regression Gate | 3/3 | Complete    | 2026-09-23 |
 | 2. Rules Decisions (docs/14 close-out) | 3/3 | Complete | 2026-09-23 |
-| 3. Deploy & Environment Contract | 3/3 | Planned ✓ | - |
+| 3. Deploy & Environment Contract | 4/3 | Complete    | 2026-09-24 |
 | 4. Authorization Hardening | 0/3 | Not started | - |
 | 5. Session Refresh | 0/3 | Not started | - |
 | 6. Voting & Money State Machine | 0/5 | Not started | - |

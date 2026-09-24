@@ -10,9 +10,9 @@ Requirements for this milestone (bug fixes + security hardening + CI). Each maps
 ### Security
 
 - [ ] **SEC-01**: Every endpoint enforces the documented permission matrix server-side — `cancel`, message `remove`, `getOne`/`list` scoping, `listVotes`, settings `transactions`, `force-password-reset` guard, reports `voting` — deny-by-default via one shared permission map (transcribed from `docs/06-permissoes.md`), with row-level ownership checks in controllers
-- [ ] **SEC-02**: Production boot fails fast when `JWT_*` / `INITIAL_ADMIN_*` secrets are missing or insecure — no `dev-*-secret-change-me` fallbacks under `NODE_ENV=production`; local dev fallbacks unchanged
+- [x] **SEC-02**: Production boot fails fast when `JWT_*` / `INITIAL_ADMIN_*` secrets are missing or insecure — no `dev-*-secret-change-me` fallbacks under `NODE_ENV=production`; local dev fallbacks unchanged
 - [ ] **SEC-03**: All auth mutation routes are rate-limited (login, refresh, forgot-password, change-password), login returns a uniform 401 (no 401/403/423 account enumeration), and `trust proxy` is explicitly configured for the deployment topology (hop count / trusted subnets — never bare `true`)
-- [ ] **SEC-04**: Cookie/HTTPS story resolved — `secure` flag follows a `COOKIE_SECURE` env var (or TLS termination is documented with `FRONTEND_URL=https://…`); login works on non-localhost hosts
+- [x] **SEC-04**: Cookie/HTTPS story resolved — `secure` flag follows a `COOKIE_SECURE` env var (or TLS termination is documented with `FRONTEND_URL=https://…`); login works on non-localhost hosts
 
 ### Session
 
@@ -82,9 +82,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | SEC-01 | Phase 4 | Pending |
-| SEC-02 | Phase 3 | Pending |
+| SEC-02 | Phase 3 | Complete |
 | SEC-03 | Phase 8 | Pending |
-| SEC-04 | Phase 3 | Pending |
+| SEC-04 | Phase 3 | Complete |
 | SES-01 | Phase 5 | Pending |
 | SES-02 | Phase 8 | Pending |
 | VOT-01 | Phase 6 | Pending |
