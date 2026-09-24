@@ -24,6 +24,9 @@ Requests are decided correctly and funds cannot leak — the right people approv
 - ✓ Batch user import with Zod validation — existing
 - ✓ Docker single-image deploy (Express serves API + built SPA) + Postgres via compose — existing
 - ✓ Unit test baseline: 17 Vitest tests (`calcAmount`, `tally`, batch validation) — existing
+- ✓ Minimal CI: backend `npx vitest run` + frontend `npm run build` on every push — Phase 1
+- ✓ Secrets fail fast in production: `env.js` refuses insecure `dev-*-secret-change-me` fallbacks when `NODE_ENV=production` — Phase 3 (SEC-02)
+- ✓ Secure-cookie/HTTPS story resolved: `secure` follows `COOKIE_SECURE` env var, Cloudflare Tunnel is the TLS termination — Phase 3 (SEC-04)
 
 ### Active
 
@@ -41,9 +44,6 @@ Requests are decided correctly and funds cannot leak — the right people approv
 - [ ] `smtpConfigured` reports reality (`env.smtpEnabled && host`), not hardcoded `true`
 - [ ] Report exports (CSV/JSON/PDF) all audited before streaming; CSV injection neutralized
 - [ ] Auth hardening: rate-limit all auth mutation routes, uniform 401 on login failure, `trust proxy` configured for deployment topology
-- [ ] Secrets fail fast in production: `env.js` refuses insecure `dev-*-secret-change-me` fallbacks when `NODE_ENV=production`
-- [ ] Secure-cookie/HTTPS story resolved (compose publishes plain HTTP while cookies demand `secure` in prod)
-- [ ] Minimal CI: backend `npx vitest run` + frontend `npm run build` on every push — the regression gate these bugs were missing
 
 ### Out of Scope
 
@@ -80,10 +80,13 @@ Requests are decided correctly and funds cannot leak — the right people approv
 | Scope = all Known Bugs + Security bucket, both dead jobs, and CI | Production-ready MVP requires closing every known hole, not just a subset | — Pending |
 | Open business decisions (`docs/14`) get decided now, then fixed | Rule-dependent bugs (partial approval, cancellation) can't be fixed without a rule | — Pending |
 | Excludes new features and broad tech-debt refactors | Keeps the milestone a verifiable hardening pass; refactors only where a fix requires them | — Pending |
+| Cloudflare Tunnel is the TLS termination (no Caddy); `COOKIE_SECURE` env var drives the cookie `Secure` flag | Internal Tunnel hops are plain HTTP but `Secure` is a browser-side attribute, so no proxy TLS needed; operators override via compose for non-HTTPS testing | — Phase 3 |
+| Trust proxy + rate-limit land together atomically in Phase 8 (SEC-03) | Trust proxy must never split from rate-limit expansion, else client IPs are wrong when limits enforce | — Pending |
 
 ## Context Notes (Evolution History)
 
 - 2026-09-23: Project initialized during brownfield onboarding after `/gsd-map-codebase` produced the complete codebase map.
+- 2026-09-24: Phase 3 complete — production boots only with real secrets (SEC-02 gate), cookie/HTTPS works off localhost via `COOKIE_SECURE` + Tunnel (SEC-04), contract documented in `docs/16-contrato-deploy.md`.
 
 ## Evolution
 
@@ -103,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-23 after initialization*
+*Last updated: 2026-09-24 after Phase 03*
