@@ -15,9 +15,16 @@ let isRedirecting = false;
 
 function doBounce() {
   if (isRedirecting) return;
+  // Already on the login page (including the ?reason=... landing itself):
+  // never bounce. window.location.assign() is a full reload that resets this
+  // module flag, so bouncing from /login re-triggers itself forever: the
+  // router beforeEach calls auth.me() on every navigation, me() 401s, refresh
+  // fails, doBounce() fires again. The router already keeps unauthenticated
+  // users on /login — there is nowhere to bounce to.
+  if (window.location.pathname === '/login') return;
   isRedirecting = true;
   const origin = window.location.pathname + window.location.search;
-  const safeOrigin = window.location.pathname === '/login' ? '/' : origin;
+  const safeOrigin = origin.startsWith('/login') ? '/' : origin;
   window.location.assign('/login?reason=session-expired&redirect=' + encodeURIComponent(safeOrigin));
 }
 
