@@ -17,7 +17,8 @@ function doBounce() {
   if (isRedirecting) return;
   isRedirecting = true;
   const origin = window.location.pathname + window.location.search;
-  window.location.assign('/login?reason=session-expired&redirect=' + encodeURIComponent(origin));
+  const safeOrigin = window.location.pathname === '/login' ? '/' : origin;
+  window.location.assign('/login?reason=session-expired&redirect=' + encodeURIComponent(safeOrigin));
 }
 
 api.interceptors.response.use(
@@ -28,7 +29,8 @@ api.interceptors.response.use(
     // 429, 5xx, network errors and timeouts reject through untouched.
     if (response?.status !== 401 || !config || config._retry) throw error;
     // The refresh call itself never re-enters the refresh path.
-    if (typeof config.url === 'string' && config.url.includes('/auth/refresh')) throw error;
+    // Bypass auth endpoints that legitimately 401 outside a session (login, not just refresh)
+    if (typeof config.url === 'string' && /\/auth\/(login|refresh|register)/.test(config.url)) throw error;
     config._retry = true;
     try {
       refreshPromise ??= api.post('/auth/refresh').finally(() => {
