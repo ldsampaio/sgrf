@@ -14,7 +14,7 @@ This milestone takes the feature-complete but buggy SGRF MVP (v0.1.1) to product
 - [x] **Phase 1: CI Regression Gate** - Two-job pipeline (backend vitest + frontend build) on every push — the gate for everything that follows (completed 2026-09-23)
 - [x] **Phase 2: Rules Decisions (docs/14 close-out)** - Decide and record partial-approval and cancellation rules before any code implements them (completed 2026-09-23)
 - [x] **Phase 3: Deploy & Environment Contract** - Production boots only with real secrets; cookie/HTTPS story works off localhost (completed 2026-09-24)
-- [ ] **Phase 4: Authorization Hardening** - Deny-by-default permission map + ownership fixes on every documented endpoint
+- [x] **Phase 4: Authorization Hardening** - Deny-by-default permission map + ownership fixes on every documented endpoint (completed 2026-09-24)
 - [ ] **Phase 5: Session Refresh** - Silent single-flight token refresh; users stay logged in past 15 minutes
 - [ ] **Phase 6: Voting & Money State Machine** - Tie-breaks resolve, annual cap holds, decided rules implemented deliberately
 - [ ] **Phase 7: Background Jobs** - Email queue drains with admin give-up alert; voting auto-close runs on a scheduler
@@ -147,9 +147,9 @@ Plans:
 
 Plans:
 
-- [ ] 04-01-PLAN.md — `middlewares/permissions.js` (new) — static `PERMISSIONS` map transcribed from `docs/06` + `requirePermission(action)` wired across requests/messages/settings/reports routes; 403 on undeclared action
-- [ ] 04-02-PLAN.md — Ownership/scoping fixes in controllers — cancel, message remove, shared visibility helper for `getOne`/`list` (reused by `reports.scopeFilter`), `listVotes`, settings `transactions`, `force-password-reset` guard
-- [ ] 04-03-PLAN.md — supertest allow+deny matrix (mock-Prisma story, no CI change) + router-stack coverage test proving undeclared fails closed
+- [x] 04-01-PLAN.md — `middlewares/permissions.js` (new) — static `PERMISSIONS` map transcribed from `docs/06` + `requirePermission(action)` wired across requests/messages/settings/reports routes; 403 on undeclared action
+- [x] 04-02-PLAN.md — Ownership/scoping fixes in controllers — cancel, message remove, shared visibility helper for `getOne`/`list` (reused by `reports.scopeFilter`), `listVotes`, settings `transactions`, `force-password-reset` guard
+- [x] 04-03-PLAN.md — supertest allow+deny matrix (mock-Prisma story, no CI change) + router-stack coverage test proving undeclared fails closed
 
 ### Phase 5: Session Refresh
 
@@ -253,7 +253,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. CI Regression Gate | 3/3 | Complete    | 2026-09-23 |
 | 2. Rules Decisions (docs/14 close-out) | 3/3 | Complete | 2026-09-23 |
 | 3. Deploy & Environment Contract | 4/3 | Complete    | 2026-09-24 |
-| 4. Authorization Hardening | 0/3 | Not started | - |
+| 4. Authorization Hardening | 3/3 | Complete    | 2026-09-24 |
 | 5. Session Refresh | 0/3 | Not started | - |
 | 6. Voting & Money State Machine | 0/5 | Not started | - |
 | 7. Background Jobs | 0/4 | Not started | - |
