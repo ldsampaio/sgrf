@@ -56,4 +56,41 @@ describe('cobertura de permissão por rota (deny-by-default)', () => {
     }
     expect(missing).toEqual({});
   });
+
+  it('cada roteador declara ao menos uma rota (guarda contra passe vazio)', () => {
+    for (const [name, router] of Object.entries(ROUTERS)) {
+      const count = (router.stack || []).filter((l) => l.route).length;
+      expect(count, name).toBeGreaterThan(0);
+    }
+  });
+
+  it('controle negativo: rota sem tag é detectada (undeclared fails closed)', () => {
+    const sneaky = {
+      stack: [
+        {
+          route: {
+            path: '/sneaky',
+            methods: { get: true },
+            stack: [{ handle: (req, res, next) => next() }],
+          },
+        },
+      ],
+    };
+    expect(untaggedRoutes(sneaky)).toEqual(['GET /sneaky']);
+  });
+
+  it('controle positivo: frame tagueado passa na asserção', () => {
+    const tagged = {
+      stack: [
+        {
+          route: {
+            path: '/ok',
+            methods: { post: true },
+            stack: [{ handle: Object.assign((req, res, next) => next(), { _permissionAction: 'reports:dashboard' }) }],
+          },
+        },
+      ],
+    };
+    expect(untaggedRoutes(tagged)).toEqual([]);
+  });
 });
