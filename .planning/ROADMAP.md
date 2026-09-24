@@ -15,7 +15,7 @@ This milestone takes the feature-complete but buggy SGRF MVP (v0.1.1) to product
 - [x] **Phase 2: Rules Decisions (docs/14 close-out)** - Decide and record partial-approval and cancellation rules before any code implements them (completed 2026-09-23)
 - [x] **Phase 3: Deploy & Environment Contract** - Production boots only with real secrets; cookie/HTTPS story works off localhost (completed 2026-09-24)
 - [x] **Phase 4: Authorization Hardening** - Deny-by-default permission map + ownership fixes on every documented endpoint (completed 2026-09-24)
-- [ ] **Phase 5: Session Refresh** - Silent single-flight token refresh; users stay logged in past 15 minutes
+- [x] **Phase 5: Session Refresh** - Silent single-flight token refresh; users stay logged in past 15 minutes (completed 2026-09-24)
 - [ ] **Phase 6: Voting & Money State Machine** - Tie-breaks resolve, annual cap holds, decided rules implemented deliberately
 - [ ] **Phase 7: Background Jobs** - Email queue drains with admin give-up alert; voting auto-close runs on a scheduler
 - [ ] **Phase 8: Reports/Audit & Auth Polish** - Export auditing, CSV-injection neutralization, auth rate limits, forced-password enforcement
@@ -257,7 +257,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Rules Decisions (docs/14 close-out) | 3/3 | Complete | 2026-09-23 |
 | 3. Deploy & Environment Contract | 4/3 | Complete    | 2026-09-24 |
 | 4. Authorization Hardening | 3/3 | Complete    | 2026-09-24 |
-| 5. Session Refresh | 4/4 | In Progress|  |
+| 5. Session Refresh | 4/4 | Complete    | 2026-09-24 |
 | 6. Voting & Money State Machine | 0/5 | Not started | - |
 | 7. Background Jobs | 0/4 | Not started | - |
 | 8. Reports/Audit & Auth Polish | 0/4 | Not started | - |
