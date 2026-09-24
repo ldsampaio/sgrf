@@ -4,11 +4,11 @@ milestone: v0.1.1
 current_phase: 03
 current_phase_name: Deploy & Environment Contract
 status: ready
-stopped_at: Phase 03 context gathered
-last_updated: "2026-09-23T21:26:30.976Z"
+stopped_at: Phase 03 plans verified (plan-checker PASS, 0 blockers)
+last_updated: "2026-09-23T22:00:00.000Z"
 last_activity: 2026-09-23
 last_activity_desc: Phase 2 complete (3/3 plans, PRs
-state_head: 3c6f25f1a0535c71916f16d959340c2dbb8ac45c
+state_head: ea41fbb490357124128bd8d3c8a54bc16016f4eb
 progress:
   total_phases: 8
   completed_phases: 2
@@ -27,12 +27,12 @@ See: .planning/PROJECT.md (updated 2026-09-23)
 
 ## Current Position
 
-Phase: 03 (Deploy & Environment Contract) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-09-23 — Phase 2 complete, transitioned to Phase 3
+Phase: 03 (Deploy & Environment Contract) — PLANNING COMPLETE, READY TO EXECUTE
+Plan: 3/3 planned and plan-checker verified (PASS, 0 blockers)
+Status: Planning complete — plan-checker review: PASS
+Last activity: 2026-09-23 — Phase 3 planning completed (research ✅, 3 PLAN.md created, plan-checker verified)
 
-Progress: [██░░░░░░░░] 25%
+Progress: [████░░██████] 44%
 
 ## Performance Metrics
 
@@ -84,7 +84,7 @@ None yet.
 
 - [Phase 6] TOCTOU/concurrency fix (plan 06-05) not explicitly listed in REQUIREMENTS.md — research argues Core Value "funds cannot leak" requires it; orchestrator must confirm scope before planning
 - [Phase 4] supertest DB story (mock Prisma vs test Postgres) undecided — changes CI workflow shape; spike at plan time
-- [Phase 3] HTTPS topology (Caddy front vs documented TLS termination) is a product/ops call — decide at plan time
+- [Phase 3] HTTPS topology decided: Cloudflare Tunnel is the official TLS termination (no Caddy); cookie/HTTPS story resolved via COOKIE_SECURE env var; trust proxy + rate-limit stays atomic in Phase 8 (D-11) — planned and verified
 
 ## Deferred Items
 
@@ -96,6 +96,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-23T21:26:30.962Z
-Stopped at: Phase 03 context gathered
-Resume file: .planning/phases/03-deploy-environment-contract/03-CONTEXT.md
+Last session: 2026-09-23T22:00:00.000Z
+Stopped at: Phase 03 plans verified (plan-checker PASS, ready to execute)
+Resume file: .planning/phases/03-deploy-environment-contract/03-01-PLAN.md

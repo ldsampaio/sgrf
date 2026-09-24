@@ -120,13 +120,14 @@ Plans:
   2. An admin can log in from a non-localhost host (e.g. `http://<LAN-IP>` or the documented HTTPS topology) — the `secure` flag follows a `COOKIE_SECURE` env var instead of being forced on in production
   3. The deployment contract (required secrets, `FRONTEND_URL`, cookie/HTTPS expectations) is documented so a fresh deploy can be validated step-by-step
 
-**Plans**: 3 plans
+**Plans**: 3/3 planned & plan-checker verified (PASS, 0 blockers)
 
 Plans:
+- [x] 03-01-PLAN.md — `env.js` production fail-fast on insecure *values* (not just presence), gated strictly on `NODE_ENV=production`; add CI dummy `JWT_*` env  
+- [x] 03-02-PLAN.md — `COOKIE_SECURE` env var + Tunnel topology wiring (`tokens.js`, `clearCookie` attribute match, compose); public-`https`-only verification
+- [x] 03-03-PLAN.md — Document the environment contract (`docs/16-contrato-deploy.md` checklist + `.env.example` production notes) and human-verify public-URL login + dev flow intact
 
-- [ ] 03-01-PLAN.md — `env.js` production fail-fast on insecure *values* (not just presence), gated strictly on `NODE_ENV=production`; add CI dummy `JWT_*` env
-- [ ] 03-02-PLAN.md — `COOKIE_SECURE` env var + Tunnel topology wiring (`tokens.js`, `clearCookie` attribute match, compose); public-`https`-only verification
-- [ ] 03-03-PLAN.md — Document the environment contract (`docs/16-contrato-deploy.md` checklist + `.env.example` production notes) and human-verify public-URL login + dev flow intact
+**Execution trace:** Phase 3 plans written 2026-09-23. Plan-checker verification: PASS (3/3 plans, 0 blockers). Pending: execute `/gsd-execute-phase 03` to implement.
 
 ### Phase 4: Authorization Hardening
 
@@ -250,7 +251,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. CI Regression Gate | 3/3 | Complete    | 2026-09-23 |
 | 2. Rules Decisions (docs/14 close-out) | 3/3 | Complete | 2026-09-23 |
-| 3. Deploy & Environment Contract | 0/3 | Not started | - |
+| 3. Deploy & Environment Contract | 3/3 | Planned ✓ | - |
 | 4. Authorization Hardening | 0/3 | Not started | - |
 | 5. Session Refresh | 0/3 | Not started | - |
 | 6. Voting & Money State Machine | 0/5 | Not started | - |
