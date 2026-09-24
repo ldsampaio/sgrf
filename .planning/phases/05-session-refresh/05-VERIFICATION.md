@@ -18,7 +18,7 @@ covered_files:
   - frontend/src/views/Requests.vue
   - frontend/src/stores/auth.js
   - frontend/src/router/index.js
-covered_digest: "unavailable — gsd-tools runtime not present in this environment; file list above is authoritative"
+covered_digest: "v1:sha256:b86210d4a517085178f0c1a6f755dad2ea01176fe3d3029d9442440a54314169"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
