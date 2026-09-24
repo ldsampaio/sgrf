@@ -4,16 +4,16 @@ const prisma = require('../config/db');
 const { audit } = require('../services/auditService');
 const { authJwt } = require('../middlewares/auth');
 const { requirePermission } = require('../middlewares/permissions');
+const { scopeWhere, canViewRequest } = require('../middlewares/visibility');
 
 const router = express.Router();
 router.use(authJwt);
 
+// Unificado com o helper compartilhado (D-03/D-04): PROFESSOR/ALUNO veem
+// próprios + tudo não-rascunho, igual à visibilidade de list. Mantém aqui
+// só o recorte temporal próprio de relatórios.
 function scopeFilter(user, q) {
-  const where = {};
-  if (user.role === 'ALUNO' || user.role === 'PROFESSOR') where.requesterId = user.id;
-  else if (q.mine === '1') where.requesterId = user.id;
-  if (q.status) where.status = q.status;
-  if (q.type) where.type = q.type;
+  const where = scopeWhere(user, q);
   if (q.from || q.to) {
     where.createdAt = {};
     if (q.from) where.createdAt.gte = new Date(q.from);
@@ -71,7 +71,21 @@ router.get('/voting', requirePermission('reports:voting'), async (req, res, next
   try {
     const votes = await prisma.vote.findMany({ orderBy: { createdAt: 'desc' }, take: 500 });
     const vistas = await prisma.viewRequest.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
-    res.json({ votes, vistas });
+    // D-02: relatório de votação segue o escopo de visão dos pedidos —
+    // rascunhos excluídos salvo dono/líderes (via canViewRequest).
+    const ids = [...new Set(
+      [...votes.map((v) => v.requestId), ...vistas.map((v) => v.requestId)].filter(Boolean),
+    )].map(String);
+    let visible = new Set(ids);
+    if (ids.length) {
+      const reqs = await prisma.resourceRequest.findMany({ where: { id: { in: ids } } });
+      visible = new Set();
+      for (const r of reqs) {
+        if (canViewRequest(req.user, r)) visible.add(String(r.id));
+      }
+    }
+    const inScope = (v) => visible.has(String(v.requestId));
+    res.json({ votes: votes.filter(inScope), vistas: vistas.filter(inScope) });
   } catch (e) { next(e); }
 });
 

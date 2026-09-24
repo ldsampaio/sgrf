@@ -2,6 +2,7 @@ const prisma = require('../config/db');
 const { audit } = require('../services/auditService');
 const { enqueue } = require('../services/emailService');
 const { canVote, validateVoteInput, closeVoting, isSuspended } = require('../services/votingService');
+const { canViewRequest } = require('../middlewares/visibility');
 
 function suspendedGuard(r) {
   if (r && r.status === 'SUSPENSO_REUNIAO_ORDINARIA') {
@@ -24,6 +25,10 @@ async function enrichVotes(votes) {
 
 async function listVotes(req, res, next) {
   try {
+    // D-01/D-02: votos são transparentes — quem vê o pedido vê cada voto
+    // (identidade + valor) em detalhe total; fora de escopo lê 404 (D-08).
+    const r = await prisma.resourceRequest.findUnique({ where: { id: req.params.id } });
+    if (!r || !canViewRequest(req.user, r)) return res.status(404).json({ error: 'Não encontrado' });
     const votes = await prisma.vote.findMany({ where: { requestId: req.params.id }, orderBy: { createdAt: 'asc' } });
     res.json({ votes: await enrichVotes(votes) });
   } catch (e) { next(e); }
