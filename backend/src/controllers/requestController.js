@@ -113,8 +113,8 @@ async function cancel(req, res, next) {
     if (!r || !canViewRequest(req.user, r)) return res.status(404).json({ error: 'Não encontrado' });
     // RN-010 (docs/14-decisoes-em-aberto.md:16): CONCLUIDO/CANCELADO imutáveis.
     if (['CONCLUIDO', 'CANCELADO'].includes(r.status)) return res.status(400).json({ error: 'Pedido imutável' });
-    // D-06: justificativa obrigatória (auditada).
-    const justification = req.body?.justification;
+    // D-06: justificativa obrigatória (auditada). Normaliza: só string não-vazia após trim passa.
+    const justification = typeof req.body?.justification === 'string' ? req.body.justification.trim() : '';
     if (!justification) return res.status(400).json({ error: 'Justificativa obrigatória' });
     const isOwner = String(r.requesterId) === String(req.user.id);
     const role = req.user.role;

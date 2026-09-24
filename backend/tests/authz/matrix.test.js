@@ -226,6 +226,16 @@ describe('POST /api/requests/:id/cancel — matriz RN-010', () => {
     expect(res.status).toBe(400);
   });
 
+  it('justificativa só-espaços responde 400 (WR-03, D-06)', async () => {
+    const res = await cancel(votingReq.id, owner, { justification: '   ' });
+    expect(res.status).toBe(400);
+  });
+
+  it('justificativa não-string responde 400 (WR-03, D-06)', async () => {
+    const res = await cancel(votingReq.id, owner, { justification: { text: 'x' } });
+    expect(res.status).toBe(400);
+  });
+
   it('CONCLUIDO é imutável (400)', async () => {
     const res = await cancel(doneReq.id, owner);
     expect(res.status).toBe(400);
