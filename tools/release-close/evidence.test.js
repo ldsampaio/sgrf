@@ -24,7 +24,8 @@
 
 import { it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const TOOL_DIR = new URL('./', import.meta.url);
@@ -78,6 +79,54 @@ function funcaoQueContem(texto, indice) {
   const encontrados = [...antes.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/gm)];
   if (encontrados.length === 0) return '<fora de função>';
   return encontrados[encontrados.length - 1][1];
+}
+
+// Corpo de uma função declarada, contado por chave. Usado para provar que uma
+// guarda está DENTRO de uma função e não ao lado dela — o tipo de afirmação que
+// uma regex solta sobre o arquivo inteiro não consegue fazer.
+function fatiarFuncao(texto, nome) {
+  const inicio = texto.search(new RegExp(`^(?:export\\s+)?(?:async\\s+)?function\\s+${nome}\\s*\\(`, 'm'));
+  if (inicio < 0) return '';
+  const chave = texto.indexOf('{', inicio);
+  let profundidade = 0;
+  for (let i = chave; i < texto.length; i += 1) {
+    if (texto[i] === '{') profundidade += 1;
+    else if (texto[i] === '}') {
+      profundidade -= 1;
+      if (profundidade === 0) return texto.slice(inicio, i + 1);
+    }
+  }
+  return texto.slice(inicio);
+}
+
+function listarFontesNaoTeste(diretorio) {
+  const encontradas = [];
+  for (const entrada of readdirSync(diretorio)) {
+    const completa = join(diretorio, entrada);
+    if (statSync(completa).isDirectory()) encontradas.push(...listarFontesNaoTeste(completa));
+    else if (entrada.endsWith('.js') && !entrada.endsWith('.test.js')) encontradas.push(completa);
+  }
+  return encontradas;
+}
+
+// Uma varredura de valor tem de olhar CÓDIGO, não prosa: o comentário que
+// documenta a remoção do literal verde de CI o nomeia por extenso, e varrer o
+// texto bruto acusaria a própria documentação. Retirar os comentários torna a
+// guarda mais forte (o valor não pode existir em lugar nenhum do código) em
+// vez de mais fraca.
+function semComentarios(texto) {
+  return texto.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+// Módulo da CLI com os exports obrigatórios verificados por ASSERÇÃO. Sem esta
+// guarda, uma prova que só chama `mod.decide(...)` falha com "not a function",
+// que é um erro de sonda e não uma falha que descreva o comportamento faltante.
+async function moduloCom(nomes) {
+  const mod = await modulo();
+  for (const nome of nomes) {
+    assert.equal(typeof mod[nome], 'function', `${nome} não é exportado pelo módulo da CLI`);
+  }
+  return mod;
 }
 
 // ===========================================================================
@@ -269,3 +318,413 @@ it('a fonte não termina o processo, não escreve nos fluxos do processo e só r
     'release-close.js lê process.argv mais de duas vezes: importador e entrada não podem compartilhar a leitura',
   );
 });
+
+// ===========================================================================
+// grupo 2 — tarefa 2: construtor de evidência de produção, cinco leituras,
+//           CI congelada e contagem medida de mutações
+// ===========================================================================
+
+// O módulo da CLI é importado por dentro de cada prova, nunca no topo do
+// arquivo. Depois da tarefa 1 isso é seguro e é o modo como um consumidor a
+// jusante usaria o módulo; além disso mantém a propriedade de que uma
+// regressão na segurança da importação não derruba o runner inteiro e vira
+// descoberta zero — que é RED inválido, não RED.
+async function modulo() {
+  return import('./release-close.js');
+}
+
+// A ordem fixa das cinco leituras declaradas: ref, objeto da tag, cabeça do
+// branch, release e milestones. A asserção da suíte de elegibilidade depende
+// das três primeiras continuarem nesta ordem e por primeiro.
+const ORDEM_DAS_LEITURAS = [
+  'getTagRef',
+  'getTagObject',
+  'getBranchHead',
+  'getReleaseByTag',
+  'listMilestones',
+];
+
+// Snapshot no formato do cliente para um estado: as três leituras de tag e de
+// main são o baseline imutável e só as cargas de release e milestone variam
+// por estado. Nenhum SHA, identificador de execução ou texto é digitado à mão —
+// tudo vem dos fixtures congelados (D-08).
+function snapshotDoEstado(nome) {
+  const base = fixture('reference');
+  const estado = fixture(nome);
+  const releases = Array.isArray(estado.releases) ? estado.releases : [];
+  return {
+    version: estado.version,
+    expectedSha: estado.expectedSha,
+    tagRef: base.tagRef,
+    tagObject: base.tagObject,
+    branchHead: base.branchHead,
+    release:
+      releases.length > 0
+        ? { ok: true, status: 200, data: releases }
+        : { ok: false, status: 404, data: null },
+    milestones: {
+      ok: true,
+      status: 200,
+      data: Array.isArray(estado.milestones) ? estado.milestones : [],
+    },
+    ci: estado.ci ?? base.ci,
+    runs: estado.runs ?? base.runs,
+  };
+}
+
+function referencia() {
+  return snapshotDoEstado('missing');
+}
+
+function referenciaCom(alteracoes) {
+  return { ...referencia(), ...alteracoes };
+}
+
+function envelope(registros) {
+  return registros.length === 0
+    ? { ok: false, status: 404, data: null }
+    : { ok: true, status: 200, data: registros };
+}
+
+function ids(detalhes) {
+  return detalhes.map((registro) => registro.id);
+}
+
+function numeros(detalhes) {
+  return detalhes.map((registro) => registro.number);
+}
+
+async function decidirSobre(snapshot, mod) {
+  const client = (await import('./fake-client.js')).makeFakeClient(snapshot);
+  const decisao = await mod.decide({
+    client,
+    version: snapshot.version,
+    expectedSha: snapshot.expectedSha,
+    ci: snapshot.ci,
+  });
+  return { client, decisao };
+}
+
+function planoDo(mod, snapshot, decisao) {
+  return mod.buildClosePlan({
+    version: snapshot.version,
+    expectedSha: snapshot.expectedSha,
+    snapshot,
+    eligibility: decisao.eligibility,
+    classificacao: decisao.classification,
+    mutations: decisao.mutations,
+  });
+}
+
+// --- construtor de evidência de produção ------------------------------------
+
+it('o construtor de evidência de produção é exportado e monta as cinco chaves com a fonte nomeada de cada valor', async () => {
+  const mod = await moduloCom(['buildCloseEvidence']);
+  const base = referencia();
+  const evidencia = mod.buildCloseEvidence({
+    version: base.version,
+    expectedSha: base.expectedSha,
+    ci: base.ci,
+    release: base.release,
+    milestones: base.milestones,
+  });
+  assert.deepEqual(Object.keys(evidencia).sort(), [
+    'ci',
+    'closeMarkers',
+    'milestones',
+    'releases',
+    'target',
+  ]);
+  assert.deepEqual(evidencia.target, { version: base.version, expectedSha: base.expectedSha });
+  assert.deepEqual(evidencia.ci, base.ci, 'o bloco ci não atravessou byte a byte');
+  assert.deepEqual(evidencia.releases, [], 'a release ausente virou registro');
+  assert.deepEqual(evidencia.milestones, []);
+  assert.deepEqual(evidencia.closeMarkers, []);
+});
+
+it('o construtor de evidência retém os dois registros de release e os dois números de milestone', async () => {
+  const mod = await moduloCom(['buildCloseEvidence']);
+  const base = referencia();
+  const releases = fixture('duplicate').releases;
+  const [primeira, segunda] = fixture('complete').milestones;
+  const evidencia = mod.buildCloseEvidence({
+    version: base.version,
+    expectedSha: base.expectedSha,
+    ci: base.ci,
+    release: envelope(releases),
+    milestones: envelope([primeira, segunda]),
+  });
+  assert.deepEqual(
+    evidencia.releases.map((registro) => registro.id),
+    [9001, 9002],
+    'registros de release colapsados num só',
+  );
+  assert.deepEqual(
+    evidencia.milestones.map((registro) => registro.number),
+    [primeira.number, segunda.number],
+    'a lista de milestones foi colapsada no primeiro registro',
+  );
+});
+
+it('o construtor de evidência nunca inventa um bloco ci ausente', async () => {
+  const mod = await moduloCom(['buildCloseEvidence', 'decide']);
+  const base = referencia();
+  const evidencia = mod.buildCloseEvidence({
+    version: base.version,
+    expectedSha: base.expectedSha,
+    ci: undefined,
+    release: base.release,
+    milestones: base.milestones,
+  });
+  assert.equal(
+    evidencia.ci,
+    undefined,
+    'o construtor de evidência inventou um bloco ci padrão: um estado verde não é valor que a ferramenta construa',
+  );
+  // E o caminho de decisão leva a recusa até o fim: a violação de contrato do
+  // classificador aparece como entrada inválida, nunca como execução verde.
+  const snapshot = referenciaCom({ ci: undefined });
+  await assert.rejects(
+    () => decidirSobre(snapshot, mod),
+    (erro) =>
+      erro instanceof TypeError && /bloco ci ausente/.test(erro.message),
+    'a ausência de ci não surfaceou como a recusa de entrada inválida existente',
+  );
+});
+
+// --- cinco leituras na ordem fixa -------------------------------------------
+
+it('a decisão de produção executa as cinco leituras declaradas na ordem fixa, com sequência de um a cinco', async () => {
+  const mod = await moduloCom(['decide']);
+  const base = referencia();
+  const { client, decisao } = await decidirSobre(base, mod);
+  assert.deepEqual(
+    client.calls.map((chamada) => chamada.method),
+    ORDEM_DAS_LEITURAS,
+    'a decisão de produção não percorreu as cinco leituras declaradas na ordem fixa',
+  );
+  assert.deepEqual(
+    client.calls.map((chamada) => chamada.seq),
+    [1, 2, 3, 4, 5],
+  );
+  assert.equal(client.mutations, 0, 'a leitura observa mutação onde não há escrita');
+  assert.equal(decisao.eligibility.code, 'ELIGIBLE');
+  assert.equal(decisao.classification.code, 'MISSING');
+  assert.equal(decisao.classification.writeAction, null);
+  assert.equal(decisao.eligibility.writeAction, null);
+});
+
+it('o caminho de produção classifica a duplicata com os dois identificadores retidos', async () => {
+  const mod = await moduloCom(['decide']);
+  const { decisao } = await decidirSobre(snapshotDoEstado('duplicate'), mod);
+  assert.equal(decisao.classification.code, 'DUPLICATE');
+  assert.deepEqual(ids(decisao.classification.releases), [9001, 9002]);
+  assert.equal(decisao.classification.writeAction, null);
+});
+
+it('o caminho de produção classifica o conflito com os dois identificadores retidos', async () => {
+  const mod = await moduloCom(['decide']);
+  const { decisao } = await decidirSobre(snapshotDoEstado('conflicting'), mod);
+  assert.equal(decisao.classification.code, 'CONFLICTING');
+  assert.deepEqual(ids(decisao.classification.releases), [9001, 9003]);
+  assert.equal(decisao.classification.writeAction, null);
+});
+
+it('o escopo de alvo nomeia só os registros do alvo e retém os alheios', async () => {
+  const mod = await moduloCom(['decide']);
+  const base = referencia();
+  const alvo = fixture('partial').releases[0];
+  const alheio = fixture('unrelated').releases[0];
+  const { decisao } = await decidirSobre(
+    referenciaCom({ release: envelope([alvo, alheio]) }),
+    mod,
+  );
+  assert.equal(decisao.classification.code, 'PARTIAL');
+  assert.deepEqual(ids(decisao.classification.releases), [alvo.id]);
+  assert.deepEqual(ids(decisao.classification.unrelatedReleases), [alheio.id]);
+  assert.match(decisao.classification.reason, /versão pedida/);
+  assert.doesNotMatch(decisao.classification.reason, new RegExp(alheio.tagName.replace(/\./g, '\\.')));
+});
+
+it('o escopo de alvo retém os dois números de milestone que nomeiam a versão pedida', async () => {
+  const mod = await moduloCom(['decide']);
+  const base = referencia();
+  const [primeira, segunda] = fixture('complete').milestones;
+  const { decisao } = await decidirSobre(
+    referenciaCom({ milestones: envelope([primeira, segunda]) }),
+    mod,
+  );
+  assert.deepEqual(
+    numeros(decisao.classification.milestones),
+    [primeira.number, segunda.number],
+    'uma das milestones do alvo foi descartada',
+  );
+  assert.deepEqual(decisao.classification.unrelatedMilestones, []);
+});
+
+// --- CI congelada, nunca sintetizada ----------------------------------------
+
+it('a CI congelada atravessa o classificador sem ser reconstruída e sem bloquear o baseline', async () => {
+  const mod = await moduloCom(['decide']);
+  const base = referencia();
+  const { decisao } = await decidirSobre(base, mod);
+  assert.deepEqual(decisao.ci, base.ci, 'o bloco ci não é o bloco congelado do snapshot');
+  assert.deepEqual(decisao.evidence.ci, fixture('reference').ci);
+  assert.notEqual(decisao.classification.code, 'FAILED');
+  assert.equal(decisao.classification.ciCode, null);
+});
+
+it('uma conclusão cancelada na evidência congelada bloqueia com a família nomeada e libera zero', async () => {
+  const mod = await moduloCom(['decide', 'buildClosePlan']);
+  const base = referencia();
+  const ci = structuredClone(base.ci);
+  ci.records[0].conclusion = 'cancelled';
+  const snapshot = referenciaCom({ ci });
+  const { decisao } = await decidirSobre(snapshot, mod);
+  assert.equal(decisao.classification.code, 'FAILED');
+  assert.equal(decisao.classification.ciCode, 'CI-CANCELLED');
+  const plano = planoDo(mod, snapshot, decisao);
+  assert.equal(plano.applyLiberado, false, 'uma CI cancelada liberou o apply');
+  assert.match(plano.bloqueio, /CI-CANCELLED/);
+});
+
+it('o no-op concluído aparece como o par exato MISSING e COMPLETE_NOOP e ainda assim libera apply', async () => {
+  const mod = await moduloCom(['decide', 'buildClosePlan']);
+  const snapshot = snapshotDoEstado('complete');
+  const { decisao } = await decidirSobre(snapshot, mod);
+  assert.equal(decisao.classification.code, 'MISSING');
+  assert.equal(decisao.classification.outcome, 'COMPLETE_NOOP');
+  const plano = planoDo(mod, snapshot, decisao);
+  assert.equal(plano.classificacao.code, 'MISSING');
+  assert.equal(plano.classificacao.outcome, 'COMPLETE_NOOP');
+  // MISSING não é um dos códigos bloqueantes: `applyLiberado` significa tag
+  // elegível sem estado bloqueante, e o alvo JÁ está fechado. Esse nome não é
+  // re-derivado em nenhum outro lugar da fase.
+  assert.equal(plano.applyLiberado, true);
+  assert.equal(plano.bloqueio, null);
+});
+
+// --- contagem medida de mutações --------------------------------------------
+
+it('a contagem relatada é a contagem medida do cliente e nunca um literal', async () => {
+  const mod = await moduloCom(['decide', 'buildClosePlan']);
+  const base = referencia();
+  const { client, decisao } = await decidirSobre(base, mod);
+  assert.equal(decisao.mutations, client.mutations, 'a decisão relativisticamente zero em vez de medir');
+  const plano = planoDo(mod, base, decisao);
+  assert.equal(plano.mutations, client.mutations, 'o plano carrega um literal em vez da medição');
+  assert.match(mod.renderPlanText(plano), /^mutations: 0$/m);
+
+  const json = JSON.parse(rodarCli(['plan', '--json']).stdout);
+  assert.equal(typeof json.mutations, 'number', 'o plano json não carrega a contagem medida');
+  assert.equal(json.mutations, 0);
+  assert.deepEqual(json.target, { version: base.version, expectedSha: base.expectedSha });
+  assert.deepEqual(json.evidencia.ci, fixture('reference').ci);
+  assert.ok(Array.isArray(json.classificacao.releases), 'a lista de identificadores retidos não chegou ao JSON');
+  assert.ok(Array.isArray(json.classificacao.milestones));
+  assert.ok(Array.isArray(json.classificacao.unrelatedReleases));
+  assert.ok(Array.isArray(json.classificacao.unrelatedMilestones));
+
+  const fonte = fonteDoModulo();
+  const implementacao = fonte.slice(fonte.indexOf('function usageError'));
+  assert.doesNotMatch(
+    implementacao,
+    /mutations:\s*0\b/,
+    'a implementação ainda escreve um literal de contagem de mutações',
+  );
+  assert.doesNotMatch(implementacao, /mutations\s*=\s*0\b/, 'a implementação ainda fixa a contagem em zero');
+});
+
+it('uma contagem medida diferente de zero recusa a execução com o motivo do invariante compartilhado', async () => {
+  const mod = await moduloCom(['decide']);
+  const { makeArmedFakeClient } = await import('./fake-client.js');
+  const base = referencia();
+  const client = makeArmedFakeClient(base);
+  // A armadilha REGISTRA e nunca age: o que se prova é a recusa da medição, não
+  // uma escrita remota.
+  client.trap('criarReleaseRemota', ['v0.1.1']);
+  assert.equal(client.mutations, 1, 'a armadilha armada não produziu contagem medida');
+
+  // Família do efeito escapado: contagem válida e diferente de zero.
+  await assert.rejects(
+    () =>
+      mod.decide({
+        client,
+        version: base.version,
+        expectedSha: base.expectedSha,
+        ci: base.ci,
+      }),
+    (erro) =>
+      erro instanceof Error &&
+      /contador de mutações medido = 1/.test(erro.message) &&
+      /Nenhuma decisão prossegue/.test(erro.message) &&
+      /criarReleaseRemota/.test(erro.message),
+    'a contagem medida diferente de zero não recusou com o motivo do invariante compartilhado',
+  );
+
+  // Família da medição corrompida: nunca reportada como escape, porque as duas
+  // pedem ações opostas do operador.
+  const semMedicao = Object.freeze({
+    getTagRef: () => {},
+    getTagObject: () => {},
+    getBranchHead: () => {},
+    getReleaseByTag: () => {},
+    listMilestones: () => {},
+  });
+  await assert.rejects(
+    () =>
+      mod.decide({
+        client: semMedicao,
+        version: base.version,
+        expectedSha: base.expectedSha,
+        ci: base.ci,
+      }),
+    (erro) =>
+      erro instanceof Error &&
+      /Medição de mutações ausente/.test(erro.message) &&
+      !/Efeito remoto escapou/.test(erro.message),
+    'a medição ausente não recusou como medição corrompida, ou foi reportada como escape',
+  );
+});
+
+it('o invariante compartilhado roda na decisão, antes de qualquer renderização', async () => {
+  const mod = await modulo();
+  const fonte = fonteDoModulo();
+  const corpoDaDecisao = fatiarFuncao(fonte, 'decide');
+  assert.match(
+    corpoDaDecisao,
+    /assertNoMutation\(/,
+    'o invariante compartilhado não é chamado dentro da decisão de produção',
+  );
+  assert.doesNotMatch(
+    corpoDaDecisao,
+    /renderJson\(|renderPlanText\(|renderVerify/,
+    'a decisão de produção renderiza: o invariante precisa vir antes de qualquer render',
+  );
+  for (const verbo of ['runVerify', 'runPlan', 'runApply']) {
+    const corpo = fatiarFuncao(fonte, verbo);
+    const posDecisao = corpo.indexOf('await decide(');
+    const posPrimeiroRender = ['renderJson(', 'renderPlanText(', 'renderVerifyText(', 'renderVerifyJson(']
+      .map((chamada) => corpo.indexOf(chamada))
+      .filter((posicao) => posicao >= 0)
+      .sort((a, b) => a - b)[0];
+    assert.ok(posDecisao >= 0, `${verbo} não roda a decisão de produção`);
+    assert.ok(
+      posDecidao < posPrimeiroRender,
+      `${verbo} renderiza antes de a decisão de produção medir a contagem de mutações`,
+    );
+  }
+});
+
+it('nenhuma fonte não-teste do tool island sintetiza um estado verde de CI', () => {
+  const fontes = listarFontesNaoTeste(TOOL_DIR.pathname);
+  for (const arquivo of fontes) {
+    const texto = semComentarios(readFileSync(arquivo, 'utf8'));
+    assert.doesNotMatch(
+      texto,
+      /state:\s*['"]success['"]|conclusion:\s*['"]success['"]|checks:\s*\{/,
+      `${arquivo} sintetiza um estado verde de CI a partir de identificadores de execução`,
+    );
+  }
+});
+
