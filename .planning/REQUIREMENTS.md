@@ -25,7 +25,7 @@ Requirements for this milestone (bug fixes + security hardening + CI). Each maps
 
 - [x] **VOT-01**: Ties always resolve — `AGUARDANDO_DESEMPATE` reaches a terminal status even when the chefe already voted during the normal phase (decide mechanism: chefe `changeMyVote` allowed in tiebreak status, or chefe's regular vote excluded from tie-break eligibility); every `status ===` guard grepped before changing
 - [ ] **VOT-02**: `CONCLUIDO` counts toward `annualTotalCents` — the annual auto-approval cap cannot be bypassed by cycling requests through `mark-spent`; RN confirmed against `docs/03-regras-de-negocio.md` with a unit test
-- [ ] **VOT-03**: Partial-approval aggregation rule decided (median / majority amount / chefe-decides — recorded in `docs/03` + `docs/14`), implemented in `closeVoting` replacing "first partial vote wins", encoded in tests
+- [x] **VOT-03**: Partial-approval aggregation rule decided (median / majority amount / chefe-decides — recorded in `docs/03` + `docs/14`), implemented in `closeVoting` replacing "first partial vote wins", encoded in tests
 - [ ] **VOT-04**: Cancellation-after-approval rule decided — `ADMINISTRADOR`/`CHEFE_DEPARTAMENTO` only, mandatory justification, audited compensating reversal (reverse `FinancialTransaction` when funds were provisioned); ordinary cancellation gets the ownership guard from SEC-01
 
 ### Jobs & Email
@@ -89,7 +89,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SES-02 | Phase 8 | Pending |
 | VOT-01 | Phase 6 | Complete |
 | VOT-02 | Phase 6 | Pending |
-| VOT-03 | Phase 6 | Pending |
+| VOT-03 | Phase 6 | Complete |
 | VOT-04 | Phase 6 | Pending |
 | JOB-01 | Phase 7 | Pending |
 | JOB-02 | Phase 7 | Pending |

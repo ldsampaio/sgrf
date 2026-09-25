@@ -190,13 +190,13 @@ Plans:
   4. Cancelling an approved request requires ADMINISTRADOR/CHEFE_DEPARTAMENTO + justification and writes an audited compensating reversal; ordinary cancellation enforces ownership from the Phase 4 permission map
   5. The state-machine test count grows — fixes are covered by characterization-then-flip tests, not verified by eyeballing
 
-**Plans**: 2/5 plans executed
+**Plans**: 3/5 plans executed
 
 Plans:
 
 - [x] 06-01-PLAN.md
 - [x] 06-02-PLAN.md
-- [ ] 06-03-PLAN.md
+- [x] 06-03-PLAN.md
 - [ ] 06-04-PLAN.md
 - [ ] 06-05-PLAN.md
 
@@ -264,6 +264,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Deploy & Environment Contract | 4/3 | Complete    | 2026-09-24 |
 | 4. Authorization Hardening | 3/3 | Complete    | 2026-09-24 |
 | 5. Session Refresh | 4/4 | Complete    | 2026-09-24 |
-| 6. Voting & Money State Machine | 2/5 | In Progress|  |
+| 6. Voting & Money State Machine | 3/5 | In Progress|  |
 | 7. Background Jobs | 0/4 | Not started | - |
 | 8. Reports/Audit & Auth Polish | 0/4 | Not started | - |

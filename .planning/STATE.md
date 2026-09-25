@@ -4,16 +4,16 @@ milestone: v0.1.1
 current_phase: 6
 current_phase_name: Voting & Money State Machine
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-09-25T00:45:00.000Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-09-25T01:00:45.908Z"
 last_activity: 2026-09-24
 last_activity_desc: Completed 06-02 VOT-02 annual cap accounting
-state_head: 038e4a9b2c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f
+state_head: ba51b3f0ace1d807d764c845a8f3a98ca5ef5309
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 21
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-24)
 ## Current Position
 
 Phase: 6 (Voting & Money State Machine) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: 06-02 complete, ready for 06-03
 Last activity: 2026-09-24 — Completed 06-02 VOT-02 annual cap accounting
 
@@ -68,6 +68,7 @@ Progress: [██████░░░░] 70%
 | Phase 05 P03 | 2min | 2 tasks | 0 files |
 | Phase 6 P1 | 15 | 3 tasks | 2 files |
 | Phase 6 P2 | 7 | 2 tasks | 2 files |
+| Phase 06 P03 | 25 | 4 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,7 @@ Recent decisions affecting current work:
 - [Phase 6]: Existing canVote logic for AGUARDANDO_DESEMPATE was already correct per D-01/D-02
 - [Phase 6]: Grep audit documented in code: no other status guards need adjustment for VOT-01
 - [Phase 6]: CONCLUIDO added to annualTotalCents status.in array (VOT-02) — prevents cap bypass via mark-spent cycling; characterization-then-flip tests verify fix
+- [Phase 6]: AGUARDANDO_ARBITRAGEM is a logical state using APROVADO_PARCIALMENTE + decisionReason='AGUARDANDO_ARBITRAGEM' + collegiateMinutes metadata (per Assumption A1)
 
 ### Pending Todos
 
@@ -112,6 +114,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-25T00:38:49.756Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-09-25T01:00:45.889Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None
