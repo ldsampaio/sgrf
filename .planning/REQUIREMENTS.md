@@ -69,31 +69,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REL-01 | Unassigned | Pending |
-| REL-02 | Unassigned | Pending |
-| REL-03 | Unassigned | Pending |
-| REL-04 | Unassigned | Pending |
-| SAFE-01 | Unassigned | Pending |
-| SAFE-02 | Unassigned | Pending |
-| SAFE-03 | Unassigned | Pending |
-| SAFE-04 | Unassigned | Pending |
-| SAFE-05 | Unassigned | Pending |
-| REC-01 | Unassigned | Pending |
-| REC-02 | Unassigned | Pending |
-| REC-03 | Unassigned | Pending |
-| REC-04 | Unassigned | Pending |
-| REC-05 | Unassigned | Pending |
-| OPS-01 | Unassigned | Pending |
-| OPS-02 | Unassigned | Pending |
-| OPS-03 | Unassigned | Pending |
-| OPS-04 | Unassigned | Pending |
+| REL-01 | Phase 10 | Pending |
+| REL-02 | Phase 13 | Pending |
+| REL-03 | Phase 13 | Pending |
+| REL-04 | Phase 13 | Pending |
+| SAFE-01 | Phase 10 | Pending |
+| SAFE-02 | Phase 9 | Pending |
+| SAFE-03 | Phase 10 | Pending |
+| SAFE-04 | Phase 9 | Pending |
+| SAFE-05 | Phase 12 | Pending |
+| REC-01 | Phase 11 | Pending |
+| REC-02 | Phase 11 | Pending |
+| REC-03 | Phase 11 | Pending |
+| REC-04 | Phase 11 | Pending |
+| REC-05 | Phase 11 | Pending |
+| OPS-01 | Phase 9 | Pending |
+| OPS-02 | Phase 9 | Pending |
+| OPS-03 | Phase 12 | Pending |
+| OPS-04 | Phase 12 | Pending |
 
 **Coverage:**
 - v1 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18
+- Unmapped: 0 ✓
+- Duplicate mappings: 0 ✓
 
 ---
 
 *Requirements defined: 2026-09-25*
-*Last updated: 2026-09-25 after initial v0.1.2 definition*
+*Last updated: 2026-09-25 after v0.1.2 roadmap creation*
