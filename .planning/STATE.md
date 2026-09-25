@@ -4,16 +4,16 @@ milestone: v0.1.1
 current_phase: 6
 current_phase_name: Voting & Money State Machine
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-09-25T00:38:49.775Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-09-25T00:45:00.000Z"
 last_activity: 2026-09-24
-last_activity_desc: Phase 6 execution started
-state_head: 3e59c9ac21957740086e09bc2e3eafe1bd6fa835
+last_activity_desc: Completed 06-02 VOT-02 annual cap accounting
+state_head: 038e4a9b2c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 21
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-09-24)
 ## Current Position
 
 Phase: 6 (Voting & Money State Machine) — EXECUTING
-Plan: 2 of 5
-Status: Ready to execute
-Last activity: 2026-09-24 — Phase 6 execution started
+Plan: 3 of 5
+Status: 06-02 complete, ready for 06-03
+Last activity: 2026-09-24 — Completed 06-02 VOT-02 annual cap accounting
 
-Progress: [██████░░░░] 63%
+Progress: [██████░░░░] 70%
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [██████░░░░] 63%
 | Phase 05 P01 | 3min | 3 tasks | 3 files |
 | Phase 05 P03 | 2min | 2 tasks | 0 files |
 | Phase 6 P1 | 15 | 3 tasks | 2 files |
+| Phase 6 P2 | 7 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,7 @@ Recent decisions affecting current work:
 - [Phase 6]: changeMyVote auto-closes voting after tie-break vote change
 - [Phase 6]: Existing canVote logic for AGUARDANDO_DESEMPATE was already correct per D-01/D-02
 - [Phase 6]: Grep audit documented in code: no other status guards need adjustment for VOT-01
+- [Phase 6]: CONCLUIDO added to annualTotalCents status.in array (VOT-02) — prevents cap bypass via mark-spent cycling; characterization-then-flip tests verify fix
 
 ### Pending Todos
 
