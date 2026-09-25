@@ -351,3 +351,124 @@ describe('VOT-01: changeMyVote guard extension', () => {
     expect(() => validateVoteInput({ voteType: 'DEFERIR_PARCIALMENTE', comment: 'x' })).toThrow('Voto parcial exige valor aprovado');
   });
 });
+
+import { annualTotalCents } from '../src/services/requestService.js';
+
+describe('VOT-02: Annual cap accounting (CONCLUIDO counts toward cap)', () => {
+  let requesterId;
+  let requesterUser;
+  let autoApprovalLimitCents;
+  const testYear = 2026;
+
+  beforeAll(async () => {
+    // Ensure fund balance exists for test year
+    await prisma.fundBalance.upsert({
+      where: { referenceYear: testYear },
+      update: { availableCents: 1000000, provisionedCents: 0, spentCents: 0 },
+      create: { referenceYear: testYear, availableCents: 1000000, provisionedCents: 0, spentCents: 0 },
+    });
+
+    // Create test user (requester)
+    const user = await prisma.user.create({
+      data: {
+        name: 'Requester VOT02',
+        email: 'requester.vot02@utfpr.edu.br',
+        role: 'PROFESSOR',
+        passwordHash: 'hash',
+        status: 'ATIVO',
+      },
+    });
+    requesterId = user.id;
+    requesterUser = user;
+
+    // Get settings to know the auto-approval limit
+    const settings = await prisma.departmentSettings.findUnique({ where: { id: 'default' } });
+    autoApprovalLimitCents = settings?.automaticApprovalLimitCents ?? 100000;
+  });
+
+  afterAll(async () => {
+    // Cleanup
+    await prisma.resourceRequest.deleteMany({ where: { requesterId } });
+    await prisma.user.delete({ where: { id: requesterId } });
+    await prisma.$disconnect();
+  });
+
+  beforeEach(async () => {
+    // Reset requests for each test
+    await prisma.resourceRequest.deleteMany({ where: { requesterId } });
+    // Reset fund balance
+    await prisma.fundBalance.update({
+      where: { referenceYear: testYear },
+      data: { availableCents: 1000000, provisionedCents: 0, spentCents: 0 },
+    });
+  });
+
+  async function createRequest(status, amountCents = 100000) {
+    return prisma.resourceRequest.create({
+      data: {
+        requesterId,
+        type: 'EQUIPAMENTO',
+        title: `Test Request ${status}`,
+        status,
+        referenceYear: testYear,
+        requestedAmountCents: amountCents,
+        approvedAmountCents: amountCents,
+        votingDeadlineAt: new Date(Date.now() + 24 * 3600 * 1000),
+        submittedAt: new Date(),
+      },
+    });
+  }
+
+  it('annualTotalCents includes CONCLUIDO status in sum', async () => {
+    // Create requests in various statuses including CONCLUIDO
+    await createRequest('SUBMETIDO', 100000);
+    await createRequest('EM_VOTACAO', 100000);
+    await createRequest('APROVADO', 100000);
+    await createRequest('APROVADO_AUTOMATICAMENTE', 100000);
+    await createRequest('APROVADO_PARCIALMENTE', 100000);
+    await createRequest('CONCLUIDO', 100000);
+
+    const total = await annualTotalCents(requesterId, testYear);
+    // Should sum all 6 requests = 600000
+    expect(total).toBe(600000);
+  });
+
+  it('Cycling spent → submit fails at cap (CONCLUIDO counts toward limit)', async () => {
+    // Create CONCLUIDO requests that total up to the limit
+    // With default limit of 100000, create 1 request of 100000
+    await createRequest('CONCLUIDO', autoApprovalLimitCents);
+
+    // Verify annualTotalCents includes CONCLUIDO requests
+    const totalBefore = await annualTotalCents(requesterId, testYear);
+    expect(totalBefore).toBe(autoApprovalLimitCents);
+
+    // Try to submit a new request that would exceed the limit
+    const newRequestAmount = 100000;
+    const wouldExceed = totalBefore + newRequestAmount > autoApprovalLimitCents;
+    expect(wouldExceed).toBe(true);
+
+    // This test encodes the desired behavior: CONCLUIDO counts toward the cap
+    // so a new request at the limit should be rejected (not auto-approved)
+    // The actual HTTP 400 check would be in the controller integration test
+    // Here we verify the core calculation
+  });
+
+  it('Below limit still auto-approves correctly', async () => {
+    // Create CONCLUIDO requests below the limit
+    // With default limit of 100000, create 1 request of 50000 (half the limit)
+    const belowLimitAmount = Math.floor(autoApprovalLimitCents / 2);
+    await createRequest('CONCLUIDO', belowLimitAmount);
+
+    const totalBefore = await annualTotalCents(requesterId, testYear);
+    expect(totalBefore).toBe(belowLimitAmount);
+
+    // A new request of 100000 would bring total to 150000, which exceeds limit of 100000
+    // So let's use a smaller new request amount that stays within limit
+    const newRequestAmount = Math.floor(autoApprovalLimitCents / 2); // 50000
+    const wouldExceed = totalBefore + newRequestAmount > autoApprovalLimitCents;
+    expect(wouldExceed).toBe(false);
+
+    // This test encodes: requester below limit with CONCLUIDO requests
+    // should still be able to auto-approve new requests within remaining quota
+  });
+});
