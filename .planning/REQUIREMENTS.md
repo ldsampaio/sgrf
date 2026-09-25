@@ -17,9 +17,9 @@ Requirements for milestone v0.1.2. Each requirement maps to exactly one roadmap 
 ### Release Safety
 
 - [ ] **SAFE-01**: Tool rejects an invalid version, repository, tag, full SHA, credential, or insufficient endpoint permission before any remote mutation
-- [x] **SAFE-02**: Tool requires an existing annotated tag whose peeled commit equals both remote `main` and the supplied full target SHA, and contains no ref-write path for tags
+- [ ] **SAFE-02**: Tool requires an existing annotated tag whose peeled commit equals both remote `main` and the supplied full target SHA, and contains no ref-write path for tags
 - [ ] **SAFE-03**: Tool requires the canonical `backend` and `frontend` checks from the existing CI workflow to have succeeded on the exact target SHA for both the protected-`main` push run and version-tag push run
-- [x] **SAFE-04**: `verify` and `plan` perform no mutations, while `apply` requires reviewed Release/Milestone content, a displayed plan, and explicit operator confirmation
+- [ ] **SAFE-04**: `verify` and `plan` perform no mutations, while `apply` requires reviewed Release/Milestone content, a displayed plan, and explicit operator confirmation
 - [ ] **SAFE-05**: Tool waits within a bounded window for late CI and revalidates refs and CI immediately before mutations; pending, contradictory, wrong-SHA, failed, or newly divergent evidence aborts the operation
 
 ### Idempotency & Recovery
@@ -32,7 +32,7 @@ Requirements for milestone v0.1.2. Each requirement maps to exactly one roadmap 
 
 ### Tool & Evidence
 
-- [x] **OPS-01**: Operator can run the checked-in Node 22 ESM release-close tool with `verify`, `plan`, and `apply` modes, using existing `gh` authentication and adding no npm package or hosted service
+- [ ] **OPS-01**: Operator can run the checked-in Node 22 ESM release-close tool with `verify`, `plan`, and `apply` modes, using existing `gh` authentication and adding no npm package or hosted service
 - [ ] **OPS-02**: Tool’s pure reconciliation logic is covered by deterministic `node:test` fixtures and mocked API scenarios for missing, partial, duplicate, conflicting, failed, and concurrent states
 - [ ] **OPS-03**: Tool emits structured, secret-free evidence containing action results, timestamps, SHAs, run/job/check IDs, Release ID/URL, Milestone number/URL, and any partial-state next action
 - [ ] **OPS-04**: Operator runbook documents authentication, permissions, preflight, reviewed plan, apply confirmation, safe rerun, partial-state recovery, conflict resolution, rollback boundaries, and the live v0.1.1 procedure
@@ -74,16 +74,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REL-03 | Phase 13 | Pending |
 | REL-04 | Phase 13 | Pending |
 | SAFE-01 | Phase 10 | Pending |
-| SAFE-02 | Phase 9 | Complete |
+| SAFE-02 | Phase 9 | Gaps Found |
 | SAFE-03 | Phase 10 | Pending |
-| SAFE-04 | Phase 9 | Complete |
+| SAFE-04 | Phase 9 | Gaps Found |
 | SAFE-05 | Phase 12 | Pending |
 | REC-01 | Phase 11 | Pending |
 | REC-02 | Phase 11 | Pending |
 | REC-03 | Phase 11 | Pending |
 | REC-04 | Phase 11 | Pending |
 | REC-05 | Phase 11 | Pending |
-| OPS-01 | Phase 9 | Complete |
+| OPS-01 | Phase 9 | Gaps Found |
 | OPS-02 | Phase 9 | Pending |
 | OPS-03 | Phase 12 | Pending |
 | OPS-04 | Phase 12 | Pending |
