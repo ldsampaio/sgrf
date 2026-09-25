@@ -3,6 +3,12 @@
 //
 // Roda com: node --test tools/release-close/ (zero dependências, sem rede,
 // sem banco). Nomes em PT-BR seguindo a convenção de backend/tests/.
+//
+// Convenção de probes novos (herdada de 09-04, Pitfall do recuo de TAP): todo
+// probe deste contrato é um `it()` de NÍVEL SUPERIOR, fora de qualquer
+// `describe`. O node recua subtestes aninhadas com oito espaços e o portão
+// `check tdd-red-evidence` só reconhece uma linha `not ok` na coluna 0 — um
+// probe aninhado produziria um RED invisível, e portanto inválido.
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -92,10 +98,252 @@ describe('classificação de snapshot em seis estados (OPS-02)', () => {
     assert.deepEqual(segunda, primeira);
   });
 
-  it('nenhum objeto de decisão carrega ação de escrita nos sete fixtures', () => {
-    for (const name of [...Object.keys(EXPECTED), 'reference']) {
+  it('nenhum objeto de decisão carrega ação de escrita nos seis fixtures de evidência plana', () => {
+    // O fixture `reference` não é entrada do classificador: ele é um snapshot
+    // no formato de cliente (envelopes `release` e `milestones`), e o formato
+    // nunca é aceito. A prova de que ele é rejeitado é o probe de nível
+    // superior logo abaixo deste bloco.
+    for (const name of Object.keys(EXPECTED)) {
       const decisao = classifySnapshot(fixture(name));
       assert.equal(decisao.writeAction, null, `fixture ${name} com writeAction não-nulo`);
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// Contrato de cinco chaves e allowlist de CI (probes de nível superior).
+// ---------------------------------------------------------------------------
+
+// Nomes de job canônicos: contrato de .github/workflows/ci.yml, não dado
+// congelado — por isso são literal aqui.
+const JOBS_CANONICOS = ['backend', 'frontend'];
+
+const clonar = (valor) => JSON.parse(JSON.stringify(valor));
+
+// Bloco CI canônico derivado do fixture congelado (D-08): o SHA alvo vem do
+// expectedSha que missing.json já carrega e as execuções vêm do runs que ele
+// já carrega. Nenhum SHA nem identificador de execução é retyped no teste.
+function blocoCanonic(base = fixture('missing')) {
+  const alvo = base.expectedSha;
+  return {
+    event: 'push',
+    targetSha: alvo,
+    requiredRunIds: [...base.runs],
+    records: base.runs.flatMap((runId) =>
+      JOBS_CANONICOS.map((job) => ({
+        runId,
+        job,
+        headSha: alvo,
+        status: 'completed',
+        conclusion: 'success',
+      })),
+    ),
+  };
+}
+
+// Evidência plana mínima no contrato de cinco chaves, com o bloco `ci` que o
+// caso precisa. `reference` nunca entra por aqui: é formato de cliente.
+function evidenciaComCi(ci) {
+  const base = fixture('missing');
+  return {
+    target: { version: base.version, expectedSha: base.expectedSha },
+    ci,
+    releases: [],
+    milestones: [],
+    closeMarkers: [],
+  };
+}
+
+function comRegistro(canonico, indice, mudanca) {
+  const clonado = clonar(canonico);
+  Object.assign(clonado.records[indice], mudanca);
+  return clonado;
+}
+
+function semCampo(canonico, indice, campo) {
+  const clonado = clonar(canonico);
+  delete clonado.records[indice][campo];
+  return clonado;
+}
+
+// Uma linha por família bloqueante, com o código EN exato que a decisão deve
+// carregar. A ordem de Families cobre as onze famílias declaradas.
+const FAMILIAS_CI = [
+  {
+    nome: 'evidência vazia',
+    ciCode: 'CI-MISSING',
+    montar: (c) => ({ ...c, records: [] }),
+  },
+  {
+    nome: 'job canônico ausente em uma das execuções obrigatórias',
+    ciCode: 'CI-MISSING',
+    montar: (c) => ({
+      ...c,
+      records: c.records.filter(
+        (r) => !(r.runId === c.requiredRunIds[0] && r.job === 'frontend'),
+      ),
+    }),
+  },
+  {
+    nome: 'status não concluído',
+    ciCode: 'CI-PENDING',
+    montar: (c) => comRegistro(c, 0, { status: 'in_progress' }),
+  },
+  {
+    nome: 'conclusão cancelada',
+    ciCode: 'CI-CANCELLED',
+    montar: (c) => comRegistro(c, 0, { conclusion: 'cancelled' }),
+  },
+  {
+    nome: 'conclusão timed_out',
+    ciCode: 'CI-TIMED-OUT',
+    montar: (c) => comRegistro(c, 0, { conclusion: 'timed_out' }),
+  },
+  {
+    nome: 'conclusão action_required',
+    ciCode: 'CI-ACTION-REQUIRED',
+    montar: (c) => comRegistro(c, 0, { conclusion: 'action_required' }),
+  },
+  {
+    nome: 'conclusão neutral',
+    ciCode: 'CI-NEUTRAL',
+    montar: (c) => comRegistro(c, 0, { conclusion: 'neutral' }),
+  },
+  {
+    nome: 'conclusão skipped',
+    ciCode: 'CI-NEUTRAL',
+    montar: (c) => comRegistro(c, 0, { conclusion: 'skipped' }),
+  },
+  {
+    nome: 'conclusão fora da allowlist',
+    ciCode: 'CI-UNKNOWN',
+    montar: (c) => comRegistro(c, 0, { conclusion: 'failure' }),
+  },
+  {
+    nome: 'nome de job desconhecido',
+    ciCode: 'CI-UNKNOWN',
+    montar: (c) => ({
+      ...c,
+      records: [
+        ...c.records,
+        {
+          runId: c.requiredRunIds[1],
+          job: 'lint',
+          headSha: c.targetSha,
+          status: 'completed',
+          conclusion: 'success',
+        },
+      ],
+    }),
+  },
+  {
+    nome: 'headSha abreviado',
+    ciCode: 'CI-WRONG-SHA',
+    montar: (c) => comRegistro(c, 0, { headSha: c.targetSha.slice(0, 7) }),
+  },
+  {
+    nome: 'headSha divergente do alvo',
+    ciCode: 'CI-WRONG-SHA',
+    montar: (c) => comRegistro(c, 0, { headSha: 'a'.repeat(40) }),
+  },
+  {
+    nome: 'ci.targetSha diferente do SHA do alvo',
+    ciCode: 'CI-WRONG-SHA',
+    montar: (c) => ({ ...c, targetSha: 'b'.repeat(40) }),
+  },
+  {
+    nome: 'execução fora das duas identidades obrigatórias',
+    ciCode: 'CI-WRONG-RUN',
+    montar: (c) => ({
+      ...c,
+      records: [
+        ...c.records,
+        {
+          runId: 99999999,
+          job: 'backend',
+          headSha: c.targetSha,
+          status: 'completed',
+          conclusion: 'success',
+        },
+      ],
+    }),
+  },
+  {
+    nome: 'mesma execução e mesmo job com conclusões diferentes',
+    ciCode: 'CI-CONTRADICTORY',
+    montar: (c) => ({
+      ...c,
+      records: [...c.records, { ...c.records[0], conclusion: 'failure' }],
+    }),
+  },
+  {
+    nome: 'registro sem campo obrigatório',
+    ciCode: 'CI-MALFORMED',
+    montar: (c) => semCampo(c, 0, 'conclusion'),
+  },
+  {
+    nome: 'registro que não é registro plano',
+    ciCode: 'CI-MALFORMED',
+    montar: (c) => {
+      const clonado = clonar(c);
+      clonado.records[0] = 'nao-e-registro';
+      return clonado;
+    },
+  },
+  {
+    nome: 'runId não numérico',
+    ciCode: 'CI-MALFORMED',
+    montar: (c) => comRegistro(c, 0, { runId: String(c.records[0].runId) }),
+  },
+];
+
+it('matriz de famílias de CI: toda evidência fora da allowlist bloqueia com o código exato', () => {
+  const falhas = [];
+  for (const familia of FAMILIAS_CI) {
+    const decisao = classifySnapshot(evidenciaComCi(familia.montar(blocoCanonic())));
+    const esperado = [
+      ['code', 'FAILED'],
+      ['ciCode', familia.ciCode],
+      ['eligible', false],
+      ['writeAction', null],
+    ];
+    for (const [chave, valor] of esperado) {
+      if (decisao[chave] !== valor) {
+        falhas.push(
+          `${familia.nome}: ${chave} = ${JSON.stringify(decisao[chave])} (esperado ${JSON.stringify(valor)})`,
+        );
+      }
+    }
+    if (typeof decisao.reason !== 'string' || decisao.reason.length === 0) {
+      falhas.push(`${familia.nome}: motivo PT-BR vazio`);
+    }
+  }
+  assert.deepEqual(falhas, [], `famílias de CI fora do contrato:\n${falhas.join('\n')}`);
+});
+
+it('bloco CI canônico verde não bloqueia a classificação', () => {
+  const decisao = classifySnapshot(evidenciaComCi(blocoCanonic()));
+  assert.equal(decisao.code, 'MISSING');
+  assert.equal(decisao.ciCode, null, 'evidência verde não pertence a nenhuma família bloqueante');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+  assert.ok(decisao.reason.length > 0);
+});
+
+it('snapshot sem bloco target é violação de contrato (TypeError)', () => {
+  const evidencia = evidenciaComCi(blocoCanonic());
+  delete evidencia.target;
+  assert.throws(() => classifySnapshot(evidencia), TypeError);
+});
+
+it('snapshot sem bloco ci é violação de contrato (TypeError)', () => {
+  const evidencia = evidenciaComCi(blocoCanonic());
+  delete evidencia.ci;
+  assert.throws(() => classifySnapshot(evidencia), TypeError);
+});
+
+it('snapshot em formato de cliente é rejeitado pelo classificador (TypeError)', () => {
+  // `milestones` é envelope, não lista: o formato do cliente nunca é entrada
+  // do classificador, e a rejeição é uma violação de contrato, não um palpite.
+  assert.throws(() => classifySnapshot(fixture('reference')), TypeError);
 });
