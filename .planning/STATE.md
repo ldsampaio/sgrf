@@ -1,19 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: v0.1.1
-status: Awaiting next milestone
-stopped_at: Completed Phase 8 — all 4 plans executed
-last_updated: "2026-09-25T04:36:25.448Z"
+milestone: v0.1.2
+milestone_name: GitHub Release Reliability
+status: planning
+last_updated: "2026-09-25T12:19:38.007Z"
 last_activity: 2026-09-25
-last_activity_desc: Milestone v0.1.1 completed and archived
-state_head: c739c1da32aef5a1295579535e6348295b372887
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 29
-  completed_plans: 29
-current_phase: 08
-current_phase_name: Reports/Audit & Auth Polish
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -27,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-09-24)
 
 ## Current Position
 
-Phase: Milestone v0.1.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-09-25 — Milestone v0.1.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-09-25 — Milestone v0.1.2 started
 
 ## Performance Metrics
 
