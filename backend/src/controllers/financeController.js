@@ -23,14 +23,14 @@ async function markSpent(req, res, next) {
     const existing = await prisma.financialTransaction.findFirst({ where: { requestId: r.id, type: 'SPENT' } });
     if (existing) return res.json({ ok: true, idempotent: true });
     await prisma.$transaction(async (tx) => {
-      const bal = await tx.fundBalance.findUnique({ where: { referenceYear: r.referenceYear } });
-      if (!bal || bal.provisionedCents < r.approvedAmountCents) {
-        throw Object.assign(new Error('Provisionado insuficiente'), { status: 400 });
-      }
-      await tx.fundBalance.update({
-        where: { referenceYear: r.referenceYear },
+      // GA-VOT-05: conditional updateMany - check provisionedCents >= approvedAmountCents
+      const result = await tx.fundBalance.updateMany({
+        where: { referenceYear: r.referenceYear, provisionedCents: { gte: r.approvedAmountCents } },
         data: { provisionedCents: { decrement: r.approvedAmountCents }, spentCents: { increment: r.approvedAmountCents }, version: { increment: 1 } },
       });
+      if (result.count === 0) {
+        throw Object.assign(new Error('Provisionado insuficiente'), { status: 400 });
+      }
       await tx.financialTransaction.create({
         data: { requestId: r.id, type: 'SPENT', amountCents: r.approvedAmountCents, fromState: 'PROVISIONADO', toState: 'GASTO', performedBy: req.user.id, metadata: JSON.stringify(req.body || {}) },
       });
@@ -54,10 +54,14 @@ async function reverseProvision(req, res, next) {
     if (suspended(r)) return res.status(423).json({ error: 'Suspensa — somente leitura' });
     if (!r.approvedAmountCents) return res.status(400).json({ error: 'Nada a devolver' });
     await prisma.$transaction(async (tx) => {
-      await tx.fundBalance.update({
-        where: { referenceYear: r.referenceYear },
+      // GA-VOT-05: conditional updateMany - check provisionedCents >= approvedAmountCents
+      const result = await tx.fundBalance.updateMany({
+        where: { referenceYear: r.referenceYear, provisionedCents: { gte: r.approvedAmountCents } },
         data: { provisionedCents: { decrement: r.approvedAmountCents }, availableCents: { increment: r.approvedAmountCents }, version: { increment: 1 } },
       });
+      if (result.count === 0) {
+        throw Object.assign(new Error('Provisionado insuficiente'), { status: 400 });
+      }
       await tx.financialTransaction.create({
         data: { requestId: r.id, type: 'REVERSE', amountCents: r.approvedAmountCents, fromState: 'PROVISIONADO', toState: 'DISPONIVEL', performedBy: req.user.id, metadata: JSON.stringify({ justification: req.body?.justification || '' }) },
       });

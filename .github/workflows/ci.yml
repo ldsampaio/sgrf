@@ -7,8 +7,27 @@ jobs:
   backend:
     name: backend
     runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: sgrd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://user:pass@localhost:5432/sgrd
+      # Dummy secrets to prevent production gate from tripping CI
+      JWT_ACCESS_SECRET: ci-dummy-access-secret-random-1234567890123456789012
+      JWT_REFRESH_SECRET: ci-dummy-refresh-secret-random-1234567890123456789012
+      INITIAL_ADMIN_EMAIL: admin@utfpr.edu.br
+      INITIAL_ADMIN_TEMPORARY_PASSWORD: ci-secure-password-random-12345678901234567890
     defaults:
       run:
         working-directory: backend
@@ -21,6 +40,7 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
+      - run: npx prisma migrate deploy
       - run: npx vitest run
   frontend:
     name: frontend

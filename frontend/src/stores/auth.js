@@ -12,6 +12,6 @@ export const useAuth = defineStore('auth', {
       const { data } = await api.post('/auth/login', { email, password });
       this.user = data.user;
     },
-    async logout() { await api.post('/auth/logout'); this.user = null; },
+    async logout() { try { await api.post('/auth/logout'); } catch { /* best-effort: dead session is the desired end state */ } finally { this.user = null; } },
   },
 });

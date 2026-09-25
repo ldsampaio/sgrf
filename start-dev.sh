@@ -24,7 +24,23 @@ need node; need npm; need docker
 [ -f "$BACKEND/.env" ] || { echo "Criando backend/.env a partir de .env.example"; cp "$BACKEND/.env.example" "$BACKEND/.env"; }
 
 echo "== postgres local (compose, só o db) =="
-(cd "$ROOT" && docker compose up -d db)
+# O `docker compose` interpola TODOS os serviços mesmo ao subir só o `db`;
+# os `${VAR:?}` do serviço `app` (só deploy) recebem placeholders aqui.
+# O `app` não é criado, então esses valores nunca são usados.
+(cd "$ROOT" && \
+  JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET:-dev-only-interpolation}" \
+  JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET:-dev-only-interpolation}" \
+  INITIAL_ADMIN_EMAIL="${INITIAL_ADMIN_EMAIL:-dev-only@utfpr.edu.br}" \
+  INITIAL_ADMIN_TEMPORARY_PASSWORD="${INITIAL_ADMIN_TEMPORARY_PASSWORD:-dev-only-interpolation}" \
+  docker compose up -d db)
+
+echo "== aguardando postgres =="
+for i in $(seq 1 30); do
+  if (cd "$ROOT" && docker compose exec -T db pg_isready -U sgrd >/dev/null 2>&1); then
+    break
+  fi
+  sleep 1
+done
 
 echo "== backend: install + migrate =="
 npm --prefix "$BACKEND" install --no-audit --no-fund

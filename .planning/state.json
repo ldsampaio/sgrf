@@ -1,0 +1,53 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v0.1.1",
+  "phases": [
+    {
+      "number": "1",
+      "name": "CI Regression Gate",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Rules Decisions (docs/14 close-out)",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Deploy & Environment Contract",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "Authorization Hardening",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "Session Refresh",
+      "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Voting & Money State Machine",
+      "status": "complete"
+    },
+    {
+      "number": "7",
+      "name": "Background Jobs",
+      "status": "complete"
+    },
+    {
+      "number": "8",
+      "name": "Reports/Audit & Auth Polish",
+      "status": "complete"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
+  },
+  "updated_at": "2026-09-25T04:36:25.454Z"
+}

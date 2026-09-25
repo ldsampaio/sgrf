@@ -56,7 +56,7 @@ function validateVoteInput({ voteType, comment, approvedAmountCents }) {
   }
 }
 
-// Fecha votação: idempotente. Retorna request atualizado.
+// Fecha votação: idempotente. Retorna request atualizado ou arbitration indicator.
 async function closeVoting(requestId, performedBy = 'system') {
   const r = await prisma.resourceRequest.findUnique({ where: { id: requestId } });
   if (!r) throw Object.assign(new Error('Não encontrado'), { status: 404 });
@@ -70,6 +70,36 @@ async function closeVoting(requestId, performedBy = 'system') {
   const votes = await prisma.vote.findMany({ where: { requestId } });
   // exclui solicitante-conselheiro por segurança
   const validVotes = votes.filter((v) => String(v.voterId) !== String(r.requesterId));
+  
+  // VOT-03: Check for any DEFERIR_PARCIALMENTE vote - triggers arbitration
+  const hasPartialVote = validVotes.some((v) => v.voteType === 'DEFERIR_PARCIALMENTE');
+  if (hasPartialVote) {
+    // AGUARDANDO_ARBITRAGEM is a logical state using APROVADO_PARCIALMENTE + metadata
+    const arbitrationResult = {
+      needsArbitration: true,
+      status: 'APROVADO_PARCIALMENTE',
+      arbitration: true,
+      requestId: r.id,
+    };
+    
+    await prisma.$transaction(async (tx) => {
+      await tx.resourceRequest.update({
+        where: { id: r.id },
+        data: {
+          status: 'APROVADO_PARCIALMENTE',
+          approvedAmountCents: 0, // no provision until arbitration
+          decidedAt: null,
+          decidedBy: performedBy,
+          decisionReason: 'AGUARDANDO_ARBITRAGEM',
+          collegiateMinutes: 'Aguardando arbitragem do chefe — voto parcial detectado',
+        },
+      });
+      await tx.vote.updateMany({ where: { requestId }, data: { finalizedAt: new Date() } });
+    });
+    
+    return arbitrationResult;
+  }
+  
   const t = tally(validVotes);
 
   let status = r.status;
@@ -80,7 +110,8 @@ async function closeVoting(requestId, performedBy = 'system') {
     status = 'APROVADO'; approvedCents = r.requestedAmountCents;
   } else if (t.outcome === 'PARCIAL') {
     status = 'APROVADO_PARCIALMENTE';
-    // valor = menor valor parcial votado? usa o do voto parcial majoritário (primeiro)
+    // This should not be reached since partial votes are handled above
+    // but keeping for safety - should not happen
     const p = validVotes.find((v) => v.voteType === 'DEFERIR_PARCIALMENTE');
     approvedCents = p ? p.approvedAmountCents : 0;
   } else if (t.outcome === 'INDEFERIDO' || t.outcome === 'SEM_VOTOS') {
@@ -93,14 +124,14 @@ async function closeVoting(requestId, performedBy = 'system') {
       data: { status, approvedAmountCents: approvedCents, decidedAt: status.startsWith('APROVADO') || status === 'INDEFERIDO' ? new Date() : null, decidedBy: performedBy },
     });
     if (status === 'APROVADO' || status === 'APROVADO_PARCIALMENTE') {
-      const bal = await tx.fundBalance.findUnique({ where: { referenceYear: r.referenceYear } });
-      if (!bal || bal.availableCents < approvedCents) {
-        throw Object.assign(new Error('Saldo insuficiente'), { status: 400 });
-      }
-      await tx.fundBalance.update({
-        where: { referenceYear: r.referenceYear },
+      // GA-VOT-05: conditional updateMany - check availableCents >= approvedCents
+      const result = await tx.fundBalance.updateMany({
+        where: { referenceYear: r.referenceYear, availableCents: { gte: approvedCents } },
         data: { availableCents: { decrement: approvedCents }, provisionedCents: { increment: approvedCents }, version: { increment: 1 } },
       });
+      if (result.count === 0) {
+        throw Object.assign(new Error('Saldo insuficiente'), { status: 400 });
+      }
       await tx.financialTransaction.create({
         data: { requestId: r.id, type: 'PROVISION', amountCents: approvedCents, fromState: 'DISPONIVEL', toState: 'PROVISIONADO', performedBy, metadata: JSON.stringify({ tally: t }) },
       });

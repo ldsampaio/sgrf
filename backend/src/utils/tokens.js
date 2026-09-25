@@ -19,7 +19,7 @@ function verifyRefresh(token) {
 
 const cookieOpts = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: env.cookieSecure,
   sameSite: 'lax',
   path: '/',
 };

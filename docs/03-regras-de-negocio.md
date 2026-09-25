@@ -148,3 +148,60 @@ SUSPENSO_REUNIAO_ORDINARIA
 Nenhum novo status é criado. Após a reunião, somente `ADMINISTRADOR` ou `CHEFE_DEPARTAMENTO` lançam manualmente o resultado da deliberação do conselho (via `collegiateDecision`, a partir do estado suspenso).
 
 (Decidido em 2026-09-23, D-11.)
+
+## RN-014 — Proteção contra concorrência no saldo (GA-VOT-05)
+
+Para evitar condições de corrida (TOCTOU) nas mutações de saldo departamental, todas as 6 operações de escrita no `FundBalance` utilizam atualizações condicionais atômicas no nível do banco de dados:
+
+### Padrão implementado (Provisionamento)
+```javascript
+const result = await tx.fundBalance.updateMany({
+  where: { referenceYear: r.referenceYear, availableCents: { gte: amount } },
+  data: { 
+    availableCents: { decrement: amount },
+    provisionedCents: { increment: amount },
+    version: { increment: 1 }
+  }
+});
+if (result.count === 0) throw Object.assign(new Error('Saldo insuficiente'), { status: 400 });
+```
+
+### Padrão implementado (Gasto/Reversão)
+```javascript
+const result = await tx.fundBalance.updateMany({
+  where: { referenceYear: r.referenceYear, provisionedCents: { gte: amount } },
+  data: { 
+    provisionedCents: { decrement: amount },
+    availableCents: { increment: amount },  // ou spentCents para gasto
+    version: { increment: 1 }
+  }
+});
+if (result.count === 0) throw Object.assign(new Error('Provisionado insuficiente'), { status: 400 });
+```
+
+### Padrão implementado (Ajuste administrativo - optimistic locking)
+```javascript
+const current = await tx.fundBalance.findUnique({ where: { referenceYear } });
+const result = await tx.fundBalance.updateMany({
+  where: { referenceYear, version: current.version },
+  data: { ...data, version: { increment: 1 } }
+});
+if (result.count === 0) throw Object.assign(new Error('Saldo modificado concorrentemente — tente novamente'), { status: 409 });
+```
+
+### 6 Sítios de escrita protegidos:
+1. **requestController.submit** — provisionamento automático (availableCents gte)
+2. **votingService.closeVoting** — provisionamento pós-votação (availableCents gte)
+3. **votingController.collegiateDecision** — provisionamento decisão colegiada (availableCents gte)
+4. **financeController.markSpent** — gasto de provisionado (provisionedCents gte)
+5. **financeController.reverseProvision / requestController.cancel** — reversão (provisionedCents gte)
+6. **settingsController.patchBalance** — ajuste administrativo (version check)
+
+### Garantias:
+- **Nenhuma leitura de saldo fora de transação** — o `updateMany` condicional É a verificação
+- **FundBalance.availableCents nunca negativo** — garantido atômica e 
+- **FinancialTransaction.sum == FundBalance deltas** — cada atualização bem-sucedida cria transação correspondente na mesma transação
+
+Testes de concorrência em `backend/tests/voting.test.js` (GA-VOT-05) simulam N requisições paralelas e verificam que apenas `floor(saldo/valor)` têm sucesso.
+
+(Decidido em 2026-09-25, implementação Fase 6 GA-VOT-05.)

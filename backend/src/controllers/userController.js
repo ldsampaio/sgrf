@@ -69,13 +69,18 @@ async function resendInvite(req, res, next) {
   try {
     const target = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!target) return res.status(404).json({ error: 'Não encontrado' });
+    // D-11: chefe não alcança admin (matriz "Gerenciar usuários: Parcial") —
+    // gate alvo-dependente no handler, além do requireRole/requirePermission da rota.
+    if (!canManageUsers(req.user, target)) return res.status(403).json({ error: 'Chefe não pode alterar administrador (RF-005)' });
     const temp = randomTempPassword();
     await prisma.user.update({
       where: { id: target.id },
       data: { passwordHash: await hashPassword(temp), mustChangePassword: true, temporaryPasswordExpiresAt: new Date(Date.now() + 24 * 3600 * 1000) },
     });
     await enqueue(target.email, '[SGRD] Reenvio de convite', `Nova senha temporária: ${temp}\nVálida por 24h.`);
-    await audit({ actorId: req.user.id, action: 'invite_resent', entityType: 'user', entityId: target.id, req });
+    // Auditoria distinta: reset forçado vs reenvio de convite.
+    const viaForceReset = String(req.path || '').includes('force-password-reset');
+    await audit({ actorId: req.user.id, action: viaForceReset ? 'password_reset_forced' : 'invite_resent', entityType: 'user', entityId: target.id, req });
     res.json({ ok: true });
   } catch (e) { next(e); }
 }

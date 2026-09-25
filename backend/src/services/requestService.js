@@ -6,7 +6,7 @@ async function annualTotalCents(requesterId, referenceYear, excludeId) {
     where: {
       requesterId,
       referenceYear,
-      status: { in: ['SUBMETIDO', 'EM_VOTACAO', 'APROVADO', 'APROVADO_AUTOMATICAMENTE', 'APROVADO_PARCIALMENTE'] },
+      status: { in: ['SUBMETIDO', 'EM_VOTACAO', 'APROVADO', 'APROVADO_AUTOMATICAMENTE', 'APROVADO_PARCIALMENTE', 'CONCLUIDO'] },
       ...(excludeId ? { id: { not: excludeId } } : {}),
     },
     select: { requestedAmountCents: true },
