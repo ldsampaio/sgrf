@@ -74,21 +74,57 @@ async function castVote(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// VOT-01 grep audit (2026-09-24): status guards related to voting states
+// ==== status === guards ====
+// votingController.js:8   suspendedGuard - SUSPENSO_REUNIAO_ORDINARIA (read-only)
+// votingController.js:51  castVote isTie - AGUARDANDO_DESEMPATE (allows chefe tie-break vote)
+// votingController.js:83  changeMyVote isTieBreak - AGUARDANDO_DESEMPATE (VOT-01 fix)
+// deliberationController.js:6 suspendedGuard - SUSPENSO_REUNIAO_ORDINARIA
+// financeController.js:6    suspendedGuard - SUSPENSO_REUNIAO_ORDINARIA
+// votingService.js:7        isSuspended - SUSPENSO_REUNIAO_ORDINARIA
+// votingService.js:15       canVote deadline check - EM_VOTACAO only (correct)
+// votingService.js:22       canVote tie-break eligibility - AGUARDANDO_DESEMPATE + chefe only (VOT-01 correct)
+// votingService.js:64       closeVoting suspended check - SUSPENSO_REUNIAO_ORDINARIA
+// requestController.js:77   submit deadline - EM_VOTACAO only (correct)
+// ==== status !== guards ====
+// votingController.js:84    changeMyVote - allows EM_VOTACAO || AGUARDANDO_DESEMPATE (VOT-01 fix)
+// votingController.js:117   requestVista - EM_VOTACAO only (correct, no vista in tie-break)
+// votingController.js:160   suspend - EM_VOTACAO only (correct, no suspend in tie-break)
+// votingController.js:180   unsuspend - SUSPENSO_REUNIAO_ORDINARIA only (correct)
+// votingController.js:199   collegiateDecision - SUSPENSO_REUNIAO_ORDINARIA only (correct)
+// votingService.js:12       canVote - EM_VOTACAO || AGUARDANDO_DESEMPATE (VOT-01 correct)
+// votingService.js:67       closeVoting - EM_VOTACAO || AGUARDANDO_DESEMPATE (correct)
+// votingCloser.js:8         closeExpired - queries EM_VOTACAO only (correct, Phase 7 handles tie-break auto-close)
+//
+// No other guards need adjustment for VOT-01. Future plans (Phase 7) will handle votingCloser for AGUARDANDO_DESEMPATE.
+
 async function changeMyVote(req, res, next) {
   try {
     const r = await prisma.resourceRequest.findUnique({ where: { id: req.params.id } });
     if (!r) return res.status(404).json({ error: 'Não encontrado' });
     if (suspendedGuard(r)) return res.status(423).json({ error: 'Suspensa — somente leitura' });
-    if (r.status !== 'EM_VOTACAO') return res.status(400).json({ error: 'Alteração só durante votação aberta' });
-    if (r.votingDeadlineAt && new Date(r.votingDeadlineAt) < new Date()) {
+    // VOT-01: allow change during AGUARDANDO_DESEMPATE for chefe only
+    const isTieBreak = r.status === 'AGUARDANDO_DESEMPATE';
+    if (!isTieBreak && r.status !== 'EM_VOTACAO') {
+      return res.status(400).json({ error: 'Alteração só durante votação aberta ou desempate' });
+    }
+    if (isTieBreak && req.user.role !== 'CHEFE_DEPARTAMENTO') {
+      return res.status(403).json({ error: 'Apenas o chefe pode alterar voto no desempate' });
+    }
+    if (r.votingDeadlineAt && new Date(r.votingDeadlineAt) < new Date() && !isTieBreak) {
       return res.status(400).json({ error: 'Prazo encerrado' });
     }
     try { validateVoteInput(req.body); } catch (e) { return res.status(400).json({ error: e.message }); }
     const v = await prisma.vote.update({
       where: { requestId_voterId: { requestId: r.id, voterId: req.user.id } },
-      data: { voteType: req.body.voteType, comment: req.body.comment || '', approvedAmountCents: Math.round(Number(req.body.approvedAmountCents || 0)) },
+      data: { voteType: req.body.voteType, comment: req.body.comment || '', approvedAmountCents: Math.round(Number(req.body.approvedAmountCents || 0)), tieBreak: isTieBreak },
     });
-    await audit({ actorId: req.user.id, action: 'vote_changed', entityType: 'vote', entityId: v.id, afterData: v, req });
+    await audit({ actorId: req.user.id, action: isTieBreak ? 'tiebreak_vote_change' : 'vote_changed', entityType: 'vote', entityId: v.id, afterData: v, req });
+    // VOT-01: if tie-break, close voting immediately after chefe changes vote
+    if (isTieBreak) {
+      const closed = await closeVoting(r.id, req.user.id);
+      return res.json({ vote: (await enrichVotes([v]))[0], request: closed });
+    }
     res.json({ vote: (await enrichVotes([v]))[0] });
   } catch (e) {
     if (String(e.message).includes('Record to update not found')) return res.status(404).json({ error: 'Voto não encontrado' });
