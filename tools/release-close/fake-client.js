@@ -1,6 +1,7 @@
-// Cliente fake programável: serve snapshots em memória e registra chamadas.
+// Cliente fake programável: serve snapshots em memória e MEDE o efeito
+// colateral na fronteira de escrita.
 //
-// Uso: const fake = makeFakeClient(snapshot, failurePlan?) -> client com os
+// Uso: const fake = makeFakeClient(snapshot, failurePlan?) -> cliente com os
 // cinco métodos de leitura da interface client.js, cada um resolvendo a
 // partir do snapshot.
 //
@@ -18,9 +19,19 @@
 // Registro de chamadas: cada leitura anexa { seq, method, args } a `calls`
 // (inclusive as roteirizadas), permitindo asserções de ordenação
 // (ref -> tag-object -> branch head -> release -> milestones).
-// Prova de zero-escrita: `writes` permanece vazio — nenhum caminho de
-// alteração remota existe neste módulo, e a suíte falha se qualquer
-// chamada fora da leitura for registrada.
+//
+// Prova de zero-escrita (plano 09-06, T-09-06-02): a contagem é uma MEDIÇÃO.
+// O talão e a lista de efeitos vivem num fecho que este módulo nunca expõe;
+// `mutations` devolve o talão e `writes` devolve uma cópia congelada do
+// registro, de modo que nenhum chamador reescreve a evidência depois do fato.
+// A armadilha `trap` é a única função por onde um efeito colateral deve pasar —
+// ela REGISTRA e nunca age: a arapuca não executa nenhuma escrita remota, ela
+// mede o que um escape faria e recusa contá-lo como limpo.
+//
+// Compatibilidade: `writes` continua sendo o nome público e continua sendo um
+// array observável, com `length` igual à contagem medida. Quatro pontos de
+// leitura em eligibility.test.js e safe04.test.js — arquivos que este plano não
+// possui — dependem exatamente dessa forma e continuam literalmente verdadeiros.
 
 import { READ_METHODS, assertClientShape } from './client.js';
 
@@ -67,14 +78,31 @@ function normalizePlan(failurePlan) {
   return queues;
 }
 
-export function makeFakeClient(snapshot, failurePlan) {
+function buildFakeClient(snapshot, failurePlan, { trapVisivel }) {
   if (!snapshot || typeof snapshot !== 'object') {
     throw new TypeError('Snapshot inválido: esperado um objeto com os dados do cenário.');
   }
   const queues = normalizePlan(failurePlan);
   const calls = [];
-  const writes = [];
+  // Talão e registro vivem neste fecho e nunca saem dele: o cliente expõe apenas
+  // acessores de leitura, e nenhum deles devolve a lista viva.
+  const efeitos = [];
+  let taloes = 0;
   let seq = 0;
+
+  // A única função por onde um efeito colateral deve passar. Conta, nomeia e
+  // registra — não executa nada, não fala com a rede, não toca o disco.
+  const registrarEfeito = (capability, args = []) => {
+    taloes += 1;
+    efeitos.push(
+      Object.freeze({
+        seq: taloes,
+        capability,
+        args: Object.freeze([...args]),
+      }),
+    );
+    return taloes;
+  };
 
   const record = (method, args) => {
     seq += 1;
@@ -102,9 +130,16 @@ export function makeFakeClient(snapshot, failurePlan) {
 
   const client = {
     calls,
-    writes,
     get mutations() {
-      return writes.length;
+      return taloes;
+    },
+    // Acessor de compatibilidade somente leitura: devolve uma cópia congelada
+    // do registro, cujo `length` é a contagem medida. Com nenhum efeito
+    // observado é um array vazio congelado, e a forma observável é idêntica à do
+    // antigo array público — inclusive para leitura por índice, iteração e
+    // comparação profunda contra `[]`.
+    get writes() {
+      return Object.freeze([...efeitos]);
     },
     async getTagRef(version) {
       return serve('getTagRef', [version], () => snapshot.tagRef);
@@ -123,8 +158,35 @@ export function makeFakeClient(snapshot, failurePlan) {
     },
   };
 
+  if (trapVisivel) {
+    // Costura de teste, deliberadamente fora da superfície pública: não
+    // enumerável, portanto não é uma capacidade da superfície para o verificador
+    // de forma, e congelada junto com o resto do cliente. Ela REGISTRA, nunca
+    // age — nenhum método desta arapuca executa efeito remoto.
+    Object.defineProperty(client, 'trap', {
+      value: registrarEfeito,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+  }
+
+  // A forma é afirmada ANTES do congelamento: congelar primeiro faria a própria
+  // verificação de forma lançar ao tocar a propriedade.
   assertClientShape(client);
-  return client;
+  return Object.freeze(client);
+}
+
+export function makeFakeClient(snapshot, failurePlan) {
+  return buildFakeClient(snapshot, failurePlan, { trapVisivel: false });
+}
+
+// Fábrica de costura de teste: devolve um cliente cuja armadilha está armada e
+// cuja contagem medida pode ser observada. Production nunca chama isto; existe
+// para que o grupo canary registre um efeito colateral real e prove que um
+// escape não sai limpo.
+export function makeArmedFakeClient(snapshot, failurePlan) {
+  return buildFakeClient(snapshot, failurePlan, { trapVisivel: true });
 }
 
 export const SCRIPTED_FAILURE_OUTCOMES = SCRIPTED_OUTCOMES;
