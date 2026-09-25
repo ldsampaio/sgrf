@@ -18,8 +18,8 @@ Milestone v0.1.2 recovers the missing GitHub publication for v0.1.1 and establis
 
 Phase numbering continues from the completed v0.1.1 milestone. Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 9: Release-Close Contract & Fixtures** - Define the Node 22 operator contract and prove pure ref, CI, and reconciliation decisions with deterministic tests
-- [ ] **Phase 10: Read-Only Exact-SHA Preflight** - Prove repository, tag, main, target-SHA CI, Release, and Milestone state without mutations
+|- [x] **Phase 9: Release-Close Contract & Fixtures** - Define the Node 22 operator contract and prove pure ref, CI, and reconciliation decisions with deterministic tests (✅ complete — G-2/G-3 closed, G-1 deferred to Phase 10)
+|- [ ] **Phase 10: Read-Only Exact-SHA Preflight** - Prove repository, tag, main, target-SHA CI, Release, and Milestone state without mutations
 - [ ] **Phase 11: Guarded Idempotent Reconciliation** - Rehearse ordered apply, adoption, retry, conflict, and concurrency behavior without touching the live repository
 - [ ] **Phase 12: CI Race Rehearsal & Operator Runbook** - Prove bounded CI settlement and immediate safety fences, and document the complete recovery procedure
 - [ ] **Phase 13: v0.1.1 Live Release & Milestone Recovery** - After explicit operator approval, publish and verify the missing v0.1.1 GitHub Release and Milestone
