@@ -61,6 +61,10 @@ async function castVote(req, res, next) {
       // se desempate, fecha imediatamente
       if (isTie) {
         const closed = await closeVoting(r.id, req.user.id);
+        // VOT-03: handle arbitration return
+        if (closed?.needsArbitration) {
+          return res.status(201).json({ vote: (await enrichVotes([v]))[0], arbitration: closed });
+        }
         return res.status(201).json({ vote: (await enrichVotes([v]))[0], request: closed });
       }
       res.status(201).json({ vote: (await enrichVotes([v]))[0] });
@@ -170,6 +174,11 @@ async function closeManual(req, res, next) {
       return res.status(403).json({ error: 'Só admin/chefe' });
     }
     const closed = await closeVoting(r.id, req.user.id);
+    // VOT-03: handle arbitration return
+    if (closed?.needsArbitration) {
+      await audit({ actorId: req.user.id, action: 'voting_closed_arbitration', entityType: 'request', entityId: r.id, afterData: closed, req });
+      return res.json({ arbitration: closed });
+    }
     await audit({ actorId: req.user.id, action: 'voting_closed', entityType: 'request', entityId: r.id, afterData: closed, req });
     res.json({ request: closed });
   } catch (e) { next(e); }
@@ -260,4 +269,73 @@ async function collegiateDecision(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { listVotes, castVote, changeMyVote, requestVista, closeManual, suspend, unsuspend, collegiateDecision };
+// VOT-03: Arbitragem de aprovação parcial — chefe define valor final com justificativa
+async function partialArbitration(req, res, next) {
+  try {
+    if (req.user.role !== 'CHEFE_DEPARTAMENTO') {
+      return res.status(403).json({ error: 'Apenas o chefe do departamento pode arbitrar' });
+    }
+    const r = await prisma.resourceRequest.findUnique({ where: { id: req.params.id } });
+    if (!r) return res.status(404).json({ error: 'Não encontrado' });
+    // Must be in arbitration state
+    if (r.status !== 'APROVADO_PARCIALMENTE' || r.decisionReason !== 'AGUARDANDO_ARBITRAGEM') {
+      return res.status(400).json({ error: 'Solicitação não está em estado de arbitragem' });
+    }
+    const { approvedAmountCents, justification } = req.body;
+    const amount = Math.round(Number(approvedAmountCents || 0));
+    if (!amount || amount <= 0 || amount > r.requestedAmountCents) {
+      return res.status(400).json({ error: 'Valor deve estar entre 1 e o valor solicitado' });
+    }
+    if (!justification || !String(justification).trim()) {
+      return res.status(400).json({ error: 'Justificativa obrigatória para arbitragem' });
+    }
+
+    const up = await prisma.$transaction(async (tx) => {
+      // Conditional FundBalance update (GA-VOT-05 pattern - to be hardened in Wave 4)
+      const bal = await tx.fundBalance.findUnique({ where: { referenceYear: r.referenceYear } });
+      if (!bal || bal.availableCents < amount) {
+        throw Object.assign(new Error('Saldo insuficiente'), { status: 400 });
+      }
+      await tx.fundBalance.update({
+        where: { referenceYear: r.referenceYear },
+        data: { availableCents: { decrement: amount }, provisionedCents: { increment: amount }, version: { increment: 1 } },
+      });
+      await tx.financialTransaction.create({
+        data: {
+          requestId: r.id,
+          type: 'PROVISION',
+          amountCents: amount,
+          fromState: 'DISPONIVEL',
+          toState: 'PROVISIONADO',
+          performedBy: req.user.id,
+          metadata: JSON.stringify({ decidedBy: 'CHEFE_DEPARTAMENTO', action: 'partial_arbitration', justification }),
+        },
+      });
+      const u = await tx.resourceRequest.update({
+        where: { id: r.id },
+        data: {
+          status: 'APROVADO_PARCIALMENTE',
+          approvedAmountCents: amount,
+          decidedAt: new Date(),
+          decidedBy: req.user.id,
+          decisionReason: null,
+          collegiateMinutes: justification,
+        },
+      });
+      return u;
+    });
+    await audit({
+      actorId: req.user.id,
+      action: 'partial_arbitration',
+      entityType: 'request',
+      entityId: r.id,
+      afterData: { status: 'APROVADO_PARCIALMENTE', approvedAmountCents: amount, justification },
+      req,
+    });
+    const requester = await prisma.user.findUnique({ where: { id: r.requesterId } });
+    await enqueue(requester.email, `[SGRD] Arbitragem parcial concluída`, `Pedido ${r.title}: valor aprovado ${(amount / 100).toFixed(2)}. Justificativa: ${justification}`);
+    res.json({ request: up });
+  } catch (e) { next(e); }
+}
+
+module.exports = { listVotes, castVote, changeMyVote, requestVista, closeManual, suspend, unsuspend, collegiateDecision, partialArbitration };

@@ -25,6 +25,9 @@ router.post('/:id/suspend', requirePermission('votes:suspend'), vc.suspend);
 router.post('/:id/unsuspend', requirePermission('votes:suspend'), vc.unsuspend);
 router.post('/:id/colegiada-decision', requirePermission('votes:suspend'), vc.collegiateDecision);
 
+// VOT-03: Arbitragem de aprovação parcial
+router.patch('/:id/partial-arbitration', requirePermission('votes:close'), vc.partialArbitration);
+
 // Discussão
 router.get('/:id/messages', requirePermission('messages:list'), dc.list);
 router.post('/:id/messages', requirePermission('messages:post'), dc.post);
