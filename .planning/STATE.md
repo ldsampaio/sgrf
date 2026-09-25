@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v0.1.1
 current_phase: 6
 current_phase_name: Voting & Money State Machine
-status: planning
-stopped_at: Phase 06 context gathered — VOT-01/VOT-02/VOT-03/VOT-04/GA-VOT-05 decisions captured
-last_updated: "2026-09-24T21:09:13.492Z"
+status: executing
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-09-25T00:38:49.775Z"
 last_activity: 2026-09-24
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
-state_head: 6d6ef66fe403ff3bbf2bac9341a3ed4fb95aeeae
+last_activity_desc: Phase 6 execution started
+state_head: 3e59c9ac21957740086e09bc2e3eafe1bd6fa835
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 16
-  completed_plans: 16
+  total_plans: 21
+  completed_plans: 17
 ---
 
 # Project State
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-24)
 
 **Core value:** Requests are decided correctly and funds cannot leak — the right people approve the right amounts, every state change is authorized and auditable, and the ledger always balances.
-**Current focus:** Phase 06 — Voting & Money State Machine
+**Current focus:** Phase 6 — Voting & Money State Machine
 
 ## Current Position
 
-Phase: 6 — Voting & Money State Machine
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-09-24 — Phase 05 complete, transitioned to Phase 6
+Phase: 6 (Voting & Money State Machine) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-09-24 — Phase 6 execution started
 
 Progress: [██████░░░░] 63%
 
@@ -66,6 +66,7 @@ Progress: [██████░░░░] 63%
 | Phase 01-ci-regression-gate P03 | 4min | 2 tasks | 1 files |
 | Phase 05 P01 | 3min | 3 tasks | 3 files |
 | Phase 05 P03 | 2min | 2 tasks | 0 files |
+| Phase 6 P1 | 15 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,11 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-01: proactive form-side draft persist (Requests writes own snapshot; interceptor only bounces, no cross-module hook)
 - [Phase 05]: 05-03 regression pass clean — no defects against 05-01; pre-existing backend/package-lock.json version bump is ambient state, not phase drift
 - [Phase 05]: WR-01/WR-02/WR-03 closed (auth-endpoint bypass, bounce guards, TYPES allowlist); bounce-loop fixed via doBounce no-op on /login (reload resets module flag); logout best-effort + bypassed (WR-04); 05-02 manual protocol 9/9 PASS, verification 8/8
+- [Phase 6]: Chefe can change vote during AGUARDANDO_DESEMPATE to break tie (VOT-01)
+- [Phase 6]: Only CHEFE_DEPARTAMENTO eligible in AGUARDANDO_DESEMPATE (prevents double-vote)
+- [Phase 6]: changeMyVote auto-closes voting after tie-break vote change
+- [Phase 6]: Existing canVote logic for AGUARDANDO_DESEMPATE was already correct per D-01/D-02
+- [Phase 6]: Grep audit documented in code: no other status guards need adjustment for VOT-01
 
 ### Pending Todos
 
@@ -104,6 +110,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-24T21:09:13.448Z
-Stopped at: Phase 06 context gathered — VOT-01/VOT-02/VOT-03/VOT-04/GA-VOT-05 decisions captured
-Resume file: .planning/phases/06-voting-money-state-machine/06-CONTEXT.md
+Last session: 2026-09-25T00:38:49.756Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None
