@@ -19,7 +19,7 @@ Requirements for milestone v0.1.2. Each requirement maps to exactly one roadmap 
 - [ ] **SAFE-01**: Tool rejects an invalid version, repository, tag, full SHA, credential, or insufficient endpoint permission before any remote mutation
 - [x] **SAFE-02**: Tool requires an existing annotated tag whose peeled commit equals both remote `main` and the supplied full target SHA, and contains no ref-write path for tags
 - [ ] **SAFE-03**: Tool requires the canonical `backend` and `frontend` checks from the existing CI workflow to have succeeded on the exact target SHA for both the protected-`main` push run and version-tag push run
-- [ ] **SAFE-04**: `verify` and `plan` perform no mutations, while `apply` requires reviewed Release/Milestone content, a displayed plan, and explicit operator confirmation
+- [x] **SAFE-04**: `verify` and `plan` perform no mutations, while `apply` requires reviewed Release/Milestone content, a displayed plan, and explicit operator confirmation
 - [ ] **SAFE-05**: Tool waits within a bounded window for late CI and revalidates refs and CI immediately before mutations; pending, contradictory, wrong-SHA, failed, or newly divergent evidence aborts the operation
 
 ### Idempotency & Recovery
@@ -76,7 +76,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SAFE-01 | Phase 10 | Pending |
 | SAFE-02 | Phase 9 | Complete |
 | SAFE-03 | Phase 10 | Pending |
-| SAFE-04 | Phase 9 | Pending |
+| SAFE-04 | Phase 9 | Complete |
 | SAFE-05 | Phase 12 | Pending |
 | REC-01 | Phase 11 | Pending |
 | REC-02 | Phase 11 | Pending |
