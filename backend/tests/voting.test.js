@@ -353,6 +353,7 @@ describe('VOT-01: changeMyVote guard extension', () => {
 });
 
 import { annualTotalCents } from '../src/services/requestService.js';
+import { cancel } from '../src/controllers/requestController.js';
 
 describe('VOT-03: Partial approval arbitration', () => {
   let requestId;
@@ -761,5 +762,445 @@ describe('VOT-02: Annual cap accounting (CONCLUIDO counts toward cap)', () => {
 
     // This test encodes: requester below limit with CONCLUIDO requests
     // should still be able to auto-approve new requests within remaining quota
+  });
+});
+
+describe('VOT-04: Cancellation after approval', () => {
+  let requestId;
+  let adminId;
+  let chefeId;
+  let conselheiroId;
+  let requesterId;
+  let adminUser;
+  let chefeUser;
+  let conselheiroUser;
+  let requesterUser;
+  const testYear = 2026;
+
+  beforeAll(async () => {
+    // Clean up any existing VOT-04 test data
+    const vot04Requests = await prisma.resourceRequest.findMany({
+      where: { title: { startsWith: 'VOT-04' } },
+      select: { id: true, requesterId: true },
+    });
+    const requestIds = vot04Requests.map(r => r.id);
+    const requesterIds = [...new Set(vot04Requests.map(r => r.requesterId))];
+
+    if (requestIds.length > 0) {
+      await prisma.financialTransaction.deleteMany({ where: { requestId: { in: requestIds } } });
+      await prisma.auditEvent.deleteMany({ where: { entityId: { in: requestIds } } });
+      await prisma.vote.deleteMany({ where: { requestId: { in: requestIds } } });
+      await prisma.resourceRequest.deleteMany({ where: { id: { in: requestIds } } });
+    }
+    if (requesterIds.length > 0) {
+      await prisma.user.deleteMany({ where: { id: { in: requesterIds } } });
+    }
+
+    // Ensure fund balance exists for test year
+    await prisma.fundBalance.upsert({
+      where: { referenceYear: testYear },
+      update: { availableCents: 1000000, provisionedCents: 0, spentCents: 0 },
+      create: { referenceYear: testYear, availableCents: 1000000, provisionedCents: 0, spentCents: 0 },
+    });
+
+    // Create test users (upsert to handle re-runs)
+    const users = await Promise.all([
+      prisma.user.upsert({
+        where: { email: 'admin.vot04@utfpr.edu.br' },
+        create: { name: 'Admin VOT04', email: 'admin.vot04@utfpr.edu.br', role: 'ADMINISTRADOR', passwordHash: 'hash', status: 'ATIVO' },
+        update: { name: 'Admin VOT04', role: 'ADMINISTRADOR', passwordHash: 'hash', status: 'ATIVO' },
+      }),
+      prisma.user.upsert({
+        where: { email: 'chefe.vot04@utfpr.edu.br' },
+        create: { name: 'Chefe VOT04', email: 'chefe.vot04@utfpr.edu.br', role: 'CHEFE_DEPARTAMENTO', passwordHash: 'hash', status: 'ATIVO' },
+        update: { name: 'Chefe VOT04', role: 'CHEFE_DEPARTAMENTO', passwordHash: 'hash', status: 'ATIVO' },
+      }),
+      prisma.user.upsert({
+        where: { email: 'cons.vot04@utfpr.edu.br' },
+        create: { name: 'Conselheiro VOT04', email: 'cons.vot04@utfpr.edu.br', role: 'CONSELHEIRO', passwordHash: 'hash', status: 'ATIVO' },
+        update: { name: 'Conselheiro VOT04', role: 'CONSELHEIRO', passwordHash: 'hash', status: 'ATIVO' },
+      }),
+      prisma.user.upsert({
+        where: { email: 'requester.vot04@utfpr.edu.br' },
+        create: { name: 'Requester VOT04', email: 'requester.vot04@utfpr.edu.br', role: 'PROFESSOR', passwordHash: 'hash', status: 'ATIVO' },
+        update: { name: 'Requester VOT04', role: 'PROFESSOR', passwordHash: 'hash', status: 'ATIVO' },
+      }),
+    ]);
+
+    adminId = users[0].id;
+    chefeId = users[1].id;
+    conselheiroId = users[2].id;
+    requesterId = users[3].id;
+
+    adminUser = users[0];
+    chefeUser = users[1];
+    conselheiroUser = users[2];
+    requesterUser = users[3];
+
+    // Create a request in APROVADO status with provisioned amount
+    const request = await prisma.resourceRequest.create({
+      data: {
+        requesterId,
+        type: 'EQUIPAMENTO',
+        title: 'VOT-04 Cancellation Test',
+        status: 'APROVADO',
+        referenceYear: testYear,
+        requestedAmountCents: 100000,
+        approvedAmountCents: 100000,
+        votingDeadlineAt: new Date(Date.now() + 24 * 3600 * 1000),
+        submittedAt: new Date(),
+        decidedAt: new Date(),
+        decidedBy: chefeId,
+      },
+    });
+    requestId = request.id;
+
+    // Provision the fund balance for this request
+    await prisma.fundBalance.update({
+      where: { referenceYear: testYear },
+      data: { availableCents: { decrement: 100000 }, provisionedCents: { increment: 100000 }, version: { increment: 1 } },
+    });
+    await prisma.financialTransaction.create({
+      data: {
+        requestId,
+        type: 'PROVISION',
+        amountCents: 100000,
+        fromState: 'DISPONIVEL',
+        toState: 'PROVISIONADO',
+        performedBy: 'system',
+        metadata: JSON.stringify({ rule: 'auto', limit: 100000 }),
+      },
+    });
+  });
+
+  afterAll(async () => {
+    // Cleanup
+    await prisma.vote.deleteMany({ where: { requestId } });
+    await prisma.financialTransaction.deleteMany({ where: { requestId } });
+    await prisma.auditEvent.deleteMany({ where: { entityId: requestId } });
+    await prisma.resourceRequest.delete({ where: { id: requestId } });
+    await prisma.fundBalance.update({
+      where: { referenceYear: testYear },
+      data: { availableCents: 1000000, provisionedCents: 0, spentCents: 0 },
+    });
+    // Note: Users are upserted and shared across test runs; skip user deletion to avoid FK conflicts
+    await prisma.$disconnect();
+  });
+
+  beforeEach(async () => {
+    // Reset request status to APROVED for each test
+    await prisma.resourceRequest.update({
+      where: { id: requestId },
+      data: { status: 'APROVADO', approvedAmountCents: 100000 },
+    });
+    // Reset fund balance
+    await prisma.fundBalance.update({
+      where: { referenceYear: testYear },
+      data: { availableCents: 900000, provisionedCents: 100000, spentCents: 0 },
+    });
+    // Clean up any REVERSE transactions from previous tests
+    await prisma.financialTransaction.deleteMany({ where: { requestId, type: 'REVERSE' } });
+    await prisma.auditEvent.deleteMany({ where: { entityId: requestId, action: 'request_cancelled' } });
+  });
+
+  function createMockReq(user, body = {}, params = {}) {
+    return {
+      user,
+      body,
+      params: { id: requestId, ...params },
+      ip: '127.0.0.1',
+      get: (header) => header === 'user-agent' ? 'vitest-agent' : undefined,
+    };
+  }
+
+  function createMockRes() {
+    const res = {
+      statusCode: 200,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(data) {
+        this.body = data;
+        return this;
+      },
+    };
+    return res;
+  }
+
+  async function callCancel(req, res) {
+    let nextCalled = false;
+    const next = (err) => { nextCalled = true; throw err; };
+    await cancel(req, res, next);
+    if (!nextCalled && res.statusCode === 200) {
+      return res.body;
+    }
+    throw new Error(`Expected 200, got ${res.statusCode}: ${JSON.stringify(res.body)}`);
+  }
+
+  it('Admin can cancel approved request with justification - succeeds, writes REVERSE transaction, restores FundBalance, audits justification', async () => {
+    const req = createMockReq(adminUser, { justification: 'Cancelamento por mudança de prioridade' });
+    const res = createMockRes();
+
+    const result = await callCancel(req, res);
+
+    expect(result.ok).toBe(true);
+    expect(result.request.status).toBe('CANCELADO');
+
+    // Verify REVERSE FinancialTransaction created with justification in metadata
+    const reverseTx = await prisma.financialTransaction.findFirst({
+      where: { requestId, type: 'REVERSE' },
+    });
+    expect(reverseTx).not.toBeNull();
+    expect(reverseTx.amountCents).toBe(100000);
+    const metadata = JSON.parse(reverseTx.metadata);
+    expect(metadata.justification).toBe('Cancelamento por mudança de prioridade');
+    expect(metadata.decidedBy).toBe('ADMINISTRADOR');
+    expect(metadata.action).toBe('cancellation_reversal');
+
+    // Verify FundBalance restored: availableCents incremented, provisionedCents decremented
+    const bal = await prisma.fundBalance.findUnique({ where: { referenceYear: testYear } });
+    expect(bal.availableCents).toBe(1000000);
+    expect(bal.provisionedCents).toBe(0);
+
+    // Verify AuditEvent request_cancelled includes justification in afterData
+    const audit = await prisma.auditEvent.findFirst({
+      where: { entityId: requestId, action: 'request_cancelled' },
+    });
+    expect(audit).not.toBeNull();
+    const auditAfterData = JSON.parse(audit.afterData);
+    expect(auditAfterData.justification).toBe('Cancelamento por mudança de prioridade');
+    expect(auditAfterData.status).toBe('CANCELADO');
+  });
+
+  it('Chefe can cancel approved request with justification - succeeds, same as admin', async () => {
+    const req = createMockReq(chefeUser, { justification: 'Cancelamento pelo chefe' });
+    const res = createMockRes();
+
+    const result = await callCancel(req, res);
+
+    expect(result.ok).toBe(true);
+    expect(result.request.status).toBe('CANCELADO');
+
+    const reverseTx = await prisma.financialTransaction.findFirst({
+      where: { requestId, type: 'REVERSE' },
+    });
+    expect(reverseTx).not.toBeNull();
+    const metadata = JSON.parse(reverseTx.metadata);
+    expect(metadata.justification).toBe('Cancelamento pelo chefe');
+    expect(metadata.decidedBy).toBe('CHEFE_DEPARTAMENTO');
+
+    const bal = await prisma.fundBalance.findUnique({ where: { referenceYear: testYear } });
+    expect(bal.availableCents).toBe(1000000);
+    expect(bal.provisionedCents).toBe(0);
+  });
+
+  it('Conselheiro cannot cancel approved request - returns 403', async () => {
+    const req = createMockReq(conselheiroUser, { justification: 'Tentativa conselheiro' });
+    const res = createMockRes();
+
+    let errorThrown = false;
+    try {
+      await callCancel(req, res);
+    } catch (e) {
+      errorThrown = true;
+      expect(res.statusCode).toBe(403);
+      expect(res.body.error).toBe('Sem permissão');
+    }
+    expect(errorThrown).toBe(true);
+
+    // Verify no REVERSE transaction created
+    const reverseTx = await prisma.financialTransaction.findFirst({
+      where: { requestId, type: 'REVERSE' },
+    });
+    expect(reverseTx).toBeNull();
+
+    // Verify FundBalance unchanged
+    const bal = await prisma.fundBalance.findUnique({ where: { referenceYear: testYear } });
+    expect(bal.availableCents).toBe(900000);
+    expect(bal.provisionedCents).toBe(100000);
+  });
+
+  it('Requester (owner) cannot cancel approved request - returns 403 (Phase 4 ownership + VOT-04 role requirement)', async () => {
+    const req = createMockReq(requesterUser, { justification: 'Tentativa dono' });
+    const res = createMockRes();
+
+    let errorThrown = false;
+    try {
+      await callCancel(req, res);
+    } catch (e) {
+      errorThrown = true;
+      expect(res.statusCode).toBe(403);
+      expect(res.body.error).toBe('Sem permissão');
+    }
+    expect(errorThrown).toBe(true);
+
+    const reverseTx = await prisma.financialTransaction.findFirst({
+      where: { requestId, type: 'REVERSE' },
+    });
+    expect(reverseTx).toBeNull();
+  });
+
+  it('Cancel approved request without justification - returns 400', async () => {
+    const req = createMockReq(adminUser, { justification: '' });
+    const res = createMockRes();
+
+    let errorThrown = false;
+    try {
+      await callCancel(req, res);
+    } catch (e) {
+      errorThrown = true;
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error).toBe('Justificativa obrigatória');
+    }
+    expect(errorThrown).toBe(true);
+  });
+
+  it('Cancel approved request with empty/whitespace justification - returns 400', async () => {
+    const req = createMockReq(adminUser, { justification: '   ' });
+    const res = createMockRes();
+
+    let errorThrown = false;
+    try {
+      await callCancel(req, res);
+    } catch (e) {
+      errorThrown = true;
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error).toBe('Justificativa obrigatória');
+    }
+    expect(errorThrown).toBe(true);
+  });
+
+  it('Cancel non-approved request (RASCUNHO) as owner - succeeds, no reversal needed', async () => {
+    // Create a new request in RASCUNHO status
+    const draftRequest = await prisma.resourceRequest.create({
+      data: {
+        requesterId,
+        type: 'EQUIPAMENTO',
+        title: 'Draft for cancel test',
+        status: 'RASCUNHO',
+        referenceYear: testYear,
+        requestedAmountCents: 50000,
+        approvedAmountCents: 0,
+        votingDeadlineAt: new Date(Date.now() + 24 * 3600 * 1000),
+        submittedAt: new Date(),
+      },
+    });
+
+    const req = createMockReq(requesterUser, { justification: 'Dono cancela rascunho' }, { id: draftRequest.id });
+    const res = createMockRes();
+
+    const result = await callCancel(req, res);
+
+    expect(result.ok).toBe(true);
+    expect(result.request.status).toBe('CANCELADO');
+
+    // Verify no REVERSE transaction created (no approvedAmountCents)
+    const reverseTx = await prisma.financialTransaction.findFirst({
+      where: { requestId: draftRequest.id, type: 'REVERSE' },
+    });
+    expect(reverseTx).toBeNull();
+
+    // Verify FundBalance unchanged
+    const bal = await prisma.fundBalance.findUnique({ where: { referenceYear: testYear } });
+    expect(bal.availableCents).toBe(900000);
+    expect(bal.provisionedCents).toBe(100000);
+
+    // Cleanup
+    await prisma.resourceRequest.delete({ where: { id: draftRequest.id } });
+  });
+
+  it('Cancel non-approved request (SUBMETIDO) as owner - succeeds, no reversal needed', async () => {
+    const submittedRequest = await prisma.resourceRequest.create({
+      data: {
+        requesterId,
+        type: 'EQUIPAMENTO',
+        title: 'Submitted for cancel test',
+        status: 'SUBMETIDO',
+        referenceYear: testYear,
+        requestedAmountCents: 50000,
+        approvedAmountCents: 0,
+        votingDeadlineAt: new Date(Date.now() + 24 * 3600 * 1000),
+        submittedAt: new Date(),
+      },
+    });
+
+    const req = createMockReq(requesterUser, { justification: 'Dono cancela submetido' }, { id: submittedRequest.id });
+    const res = createMockRes();
+
+    const result = await callCancel(req, res);
+
+    expect(result.ok).toBe(true);
+    expect(result.request.status).toBe('CANCELADO');
+
+    const reverseTx = await prisma.financialTransaction.findFirst({
+      where: { requestId: submittedRequest.id, type: 'REVERSE' },
+    });
+    expect(reverseTx).toBeNull();
+
+    await prisma.resourceRequest.delete({ where: { id: submittedRequest.id } });
+  });
+
+  it('REVERSE FinancialTransaction has metadata.justification; AuditEvent afterData.justification matches', async () => {
+    const justification = 'Justificativa detalhada para auditoria';
+    const req = createMockReq(adminUser, { justification });
+    const res = createMockRes();
+
+    await callCancel(req, res);
+
+    const reverseTx = await prisma.financialTransaction.findFirst({
+      where: { requestId, type: 'REVERSE' },
+    });
+    const audit = await prisma.auditEvent.findFirst({
+      where: { entityId: requestId, action: 'request_cancelled' },
+    });
+
+    const txMetadata = JSON.parse(reverseTx.metadata);
+    const auditAfterData = JSON.parse(audit.afterData);
+    expect(txMetadata.justification).toBe(justification);
+    expect(auditAfterData.justification).toBe(justification);
+    expect(txMetadata.justification).toBe(auditAfterData.justification);
+  });
+
+  it('Works for APROVADO_AUTOMATICAMENTE status', async () => {
+    await prisma.resourceRequest.update({
+      where: { id: requestId },
+      data: { status: 'APROVADO_AUTOMATICAMENTE' },
+    });
+
+    const req = createMockReq(adminUser, { justification: 'Cancel auto-approved' });
+    const res = createMockRes();
+
+    const result = await callCancel(req, res);
+    expect(result.ok).toBe(true);
+    expect(result.request.status).toBe('CANCELADO');
+
+    const bal = await prisma.fundBalance.findUnique({ where: { referenceYear: testYear } });
+    expect(bal.availableCents).toBe(1000000);
+    expect(bal.provisionedCents).toBe(0);
+  });
+
+  it('Works for APROVADO_PARCIALMENTE status', async () => {
+    await prisma.resourceRequest.update({
+      where: { id: requestId },
+      data: { status: 'APROVADO_PARCIALMENTE', approvedAmountCents: 50000 },
+    });
+    // Adjust fund balance for partial amount
+    await prisma.fundBalance.update({
+      where: { referenceYear: testYear },
+      data: { availableCents: 950000, provisionedCents: 50000, spentCents: 0 },
+    });
+
+    const req = createMockReq(chefeUser, { justification: 'Cancel partial' });
+    const res = createMockRes();
+
+    const result = await callCancel(req, res);
+    expect(result.ok).toBe(true);
+    expect(result.request.status).toBe('CANCELADO');
+
+    const bal = await prisma.fundBalance.findUnique({ where: { referenceYear: testYear } });
+    expect(bal.availableCents).toBe(1000000);
+    expect(bal.provisionedCents).toBe(0);
   });
 });
