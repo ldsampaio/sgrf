@@ -833,13 +833,18 @@ it('recusa sem conteúdo revisado, em branco, ou sem notas e sem registro de con
   for (const [rotulo, reviewed] of casos) {
     const eventos = [];
     const perguntou = [];
+    // O digest só é calculado para o que É um objeto revisado: serializar uma
+    // lista ou um ausente não é o que se está provando aqui, e o gate recusa
+    // antes de recalcular qualquer coisa nesses casos.
+    const podeSerializar =
+      reviewed !== null && typeof reviewed === 'object' && !Array.isArray(reviewed);
     const resultado = await confirmApply({
       yesFlag: true,
       isTTY: true,
       outputIsTTY: true,
       planText: PLANO_DE_EXEMPLO,
       reviewed,
-      reviewedDigest: reviewed === undefined ? undefined : mod.canonicalReviewedDigest(reviewed),
+      reviewedDigest: podeSerializar ? mod.canonicalReviewedDigest(reviewed) : undefined,
       ask: async () => {
         perguntou.push(true);
         return CONFIRMATION_WORD;
@@ -901,23 +906,23 @@ it('toda recusa antes do render nomeia a primeira fechadura que falhou e deixa o
   ];
   for (const [fechadura, entrada] of familia) {
     const eventos = [];
-    const resultado = await confirmApply({
+    const montar = {
       ...entrada,
       ask: async () => {
         eventos.push('pergunta');
         return CONFIRMATION_WORD;
       },
-      write:
-        entrada.write === undefined
-          ? () => {
-              eventos.push('plano');
-              return 1;
-            }
-          : (texto) => {
-              eventos.push(`plano:${texto}`);
-              return typeof texto === 'string' ? texto.length : 0;
-            },
-    });
+    };
+    // A família de sink é a ÚNICA cuja recusa não pode ser observada por um sink
+    // gravador: o sink é justamente o que falta. Nesses casos o sink gravador
+    // NÃO é instalado, e a única coisa observável é que nada foi perguntado.
+    if (entrada.write !== undefined) {
+      montar.write = (texto) => {
+        eventos.push(`plano:${texto}`);
+        return typeof texto === 'string' ? texto.length : 0;
+      };
+    }
+    const resultado = await confirmApply(montar);
     assert.equal(resultado.confirmed, false, `fechadura ${fechadura} confirmou`);
     assert.equal(resultado.lock, fechadura, `fechadura esperada ${fechadura}, recebida ${resultado.lock}`);
     assert.deepEqual(eventos, [], `fechadura ${fechadura} tocou o sink ou a pergunta`);
