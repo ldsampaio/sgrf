@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { PassThrough } from 'node:stream';
 import { checkTagEligibility } from './eligibility.js';
 import { classifySnapshot } from './classify.js';
 import { makeFakeClient } from './fake-client.js';
@@ -982,4 +983,233 @@ it('mostra o plano ordenado e o conteúdo revisado no terminal vivo, antes da pe
     'o render do conteúdo revisado não mostra o registro de conclusão do fixture',
   );
   assert.equal(eventos[2], 'pergunta', 'a pergunta não veio depois dos dois renders');
+});
+
+// ===========================================================================
+// conteúdo revisado no plano, saída lida do fluxo de saída, prompt que se
+// liquida sozinho, e as provas de ausência de deriva
+// ===========================================================================
+//
+// Convenção de nível superior mantida (ver o bloco anterior): toda prova nova
+// é um `it()` fora de `describe`, para que a falha do teste nomeado fique
+// visível para o verificador de evidência RED.
+
+let moduloDaCli = null;
+async function cli() {
+  if (moduloDaCli === null) {
+    const mod = await import('./release-close.js');
+    for (const nome of ['decide', 'buildClosePlan', 'renderPlanText', 'runReleaseClose']) {
+      assert.equal(typeof mod[nome], 'function', `${nome} não é exportado por release-close.js`);
+    }
+    moduloDaCli = mod;
+  }
+  return moduloDaCli;
+}
+
+// A fábrica de prompt é verificada à parte de propósito: uma guarda única
+// falharia no `makeAsk` e faria as provas de conteúdo revisado falharem por um
+// símbolo ausente, em vez de pela afirmação de comportamento que cada uma faz.
+async function fabricaDePrompt() {
+  const mod = await cli();
+  assert.equal(typeof mod.makeAsk, 'function', 'makeAsk não é exportado por release-close.js');
+  return mod.makeAsk;
+}
+
+// Plano construído pelo caminho de produção sobre um snapshot no formato do
+// cliente. Nenhuma normalização é reimplementada aqui: a costura real monta o
+// cliente, percorre as cinco leituras e entrega a evidência que o construtor
+// recibió de fato.
+async function planoDoFixture(mod, snapshot) {
+  const decisao = await mod.decide({
+    snapshot,
+    version: snapshot.version,
+    expectedSha: snapshot.expectedSha,
+    ci: snapshot.ci,
+  });
+  const plano = mod.buildClosePlan({
+    version: decisao.version,
+    expectedSha: decisao.expectedSha,
+    snapshot,
+    eligibility: decisao.eligibility,
+    classificacao: decisao.classification,
+    evidence: decisao.evidence,
+    mutations: decisao.mutations,
+  });
+  return { decisao, plano };
+}
+
+it('o plano carrega as notas e o registro de conclusão do fixture revisado, com digest estável', async () => {
+  const mod = await cli();
+  const { plano } = await planoDoFixture(mod, FIXTURE_REVISADO);
+  assert.notEqual(plano.reviewed, null, 'o snapshot revisado não produziu objeto revisado');
+  assert.equal(plano.reviewed.releaseNotes, FIXTURE_REVISADO.release.data.notes);
+  assert.equal(
+    plano.reviewed.milestoneCompletionRecord,
+    FIXTURE_REVISADO.milestones.data[0].completionRecord,
+  );
+  assert.equal(plano.reviewed.version, FIXTURE_REVISADO.version);
+  assert.equal(plano.reviewed.expectedSha, FIXTURE_REVISADO.expectedSha);
+  assert.equal(plano.reviewed.commitSha, FIXTURE_REVISADO.tagObject.data.object.sha);
+  // O digest do plano é o que a função exportada recalcula — byte a byte.
+  assert.equal(plano.reviewedDigest, mod.canonicalReviewedDigest(plano.reviewed));
+  assert.equal(plano.reviewedDigest, mod.canonicalReviewedDigest(CONTEUDO_REVISADO));
+  assert.match(plano.reviewedDigest, /^[0-9a-f]{64}$/);
+  // Duas execuções do construtor sobre o mesmo snapshot congelado dão o mesmo
+  // digest: um digest não determinístico nunca chega ao operador.
+  const segundo = await planoDoFixture(mod, FIXTURE_REVISADO);
+  assert.equal(segundo.plano.reviewedDigest, plano.reviewedDigest);
+});
+
+it('o plano sem campos revisados não carrega objeto nem digest, e o texto diz isso em PT-BR', async () => {
+  const mod = await cli();
+  const { plano } = await planoDoFixture(mod, fixture('reference'));
+  assert.equal(plano.reviewed, null, 'o baseline de referência não tem notas nem registro de conclusão');
+  assert.equal(plano.reviewedDigest, null, 'o baseline de referência não tem digest');
+  const texto = mod.renderPlanText(plano);
+  assert.match(texto, /não há conteúdo revisado/i);
+  assert.doesNotMatch(texto, /notas da Release: {2,}\S/, 'o texto do plano inventou notas de Release');
+  assert.doesNotMatch(texto, /registro de conclusão: {2,}\S/, 'o texto do plano inventou registro de conclusão');
+});
+
+it('o texto do plano mostra o conteúdo revisado acima dos passos e do contador mutations', async () => {
+  const mod = await cli();
+  const { plano } = await planoDoFixture(mod, FIXTURE_REVISADO);
+  const texto = mod.renderPlanText(plano);
+  const indiceNotas = texto.indexOf(CONTEUDO_REVISADO.releaseNotes);
+  const indiceRegistro = texto.indexOf(CONTEUDO_REVISADO.milestoneCompletionRecord);
+  const indiceDigest = texto.indexOf(plano.reviewedDigest);
+  const indicePassos = texto.indexOf('Passos ordenados');
+  const indiceMutacoes = texto.indexOf('mutations:');
+  assert.ok(indiceNotas >= 0, 'o texto do plano não mostra as notas de Release');
+  assert.ok(indiceRegistro > indiceNotas, 'o registro de conclusão não vem depois das notas');
+  assert.ok(indiceDigest > indiceRegistro, 'o digest não vem depois dos dois textos');
+  assert.ok(indicePassos > indiceDigest, 'os passos ordenados vêm antes do conteúdo revisado');
+  assert.ok(indiceMutacoes > indicePassos, 'o contador mutations não vem depois dos passos');
+  // Os oito passos, a ordem e os marcadores continuam no texto.
+  for (const passo of ORDEM_FIXADA_DOS_PASSOS) {
+    assert.ok(texto.includes(passo), `passo ausente no texto do plano: ${passo}`);
+  }
+  assert.match(texto, /^ {2}1\. \[criar\] release-rascunho /m);
+  assert.match(texto, /^ {2}8\. \[ler\] milestone-readback-final /m);
+});
+
+it('a CLI recusa na fechadura de saída com terminal de entrada vivo e saída redirecionada', async () => {
+  const mod = await cli();
+  // Os dois lados do booleano são afirmados, e é a combinação que torna a
+  // prova carregante: se a CLI lesse `isTTY` do fluxo de ENTRADA, o primeiro
+  // caso passaria da fechadura de saída e cairia na de conteúdo, e o segundo
+  // caso cairia na de saída. Ler do fluxo de saída é a única leitura que
+  // satisfaz os dois.
+  const rodar = async (saidaIsTTY) => {
+    const saida = [];
+    const codigo = await mod.runReleaseClose(['apply', '--yes'], {
+      stdin: { isTTY: true },
+      stdout: { isTTY: saidaIsTTY, write: (t) => saida.push(String(t)) },
+      stderr: { isTTY: true, write: (t) => saida.push(`ERRO:${t}`) },
+    });
+    return {
+      codigo,
+      stdout: saida.filter((t) => !t.startsWith('ERRO:')).join(''),
+      stderr: saida
+        .filter((t) => t.startsWith('ERRO:'))
+        .map((t) => t.slice('ERRO:'.length))
+        .join(''),
+    };
+  };
+
+  const redirecionada = await rodar(false);
+  assert.equal(redirecionada.codigo, 1);
+  assert.equal(redirecionada.stdout, '', 'a recusa por saída escreveu na saída redirecionada');
+  assert.doesNotMatch(redirecionada.stderr, /Confirmar o apply/, 'a recusa por saída abriu a pergunta');
+  assert.match(redirecionada.stderr, /não foi mostrado em um terminal vivo/);
+  assert.doesNotMatch(redirecionada.stderr, /terminal interativo/);
+
+  // Com os dois terminais vivos, a fechadura de saída PASSA e a recusa que vem
+  // a seguir é a de conteúdo revisado — o baseline de referência não tem notas
+  // de Release nem registro de conclusão. O texto distingue as duas famílias,
+  // e é essa distinção que prova de onde o booleano foi lido.
+  const viva = await rodar(true);
+  assert.equal(viva.codigo, 1);
+  assert.match(viva.stderr, /notas de Release nem registro de conclusão/i);
+  assert.doesNotMatch(viva.stderr, /não foi mostrado em um terminal vivo/);
+});
+
+it('o prompt se liquida sozinho quando o terminal fecha logo depois de abrir', async () => {
+  const makeAsk = await fabricaDePrompt();
+  const { reviewed, reviewedDigest } = await revisadoComDigest();
+  const entrada = new PassThrough();
+  entrada.isTTY = true;
+  const eventos = [];
+  const destino = {
+    write: (t) => {
+      eventos.push(`render:${t}`);
+      return true;
+    },
+  };
+  const perguntar = makeAsk(entrada, destino);
+  // O fim de entrada chega DEPOIS de a pergunta abrir, que é o caso que mantinha
+  // o processo vivo até um tempo externo estourar.
+  setTimeout(() => entrada.end(), 1);
+  const resultado = await confirmApply({
+    yesFlag: true,
+    isTTY: true,
+    outputIsTTY: true,
+    planText: PLANO_DE_EXEMPLO,
+    reviewed,
+    reviewedDigest,
+    ask: perguntar,
+    write: (texto) => {
+      eventos.push(`render:${texto}`);
+      return typeof texto === 'string' ? texto.length : 0;
+    },
+  });
+  assert.equal(resultado.confirmed, false);
+  assert.equal(resultado.lock, 'answer');
+  assert.match(resultado.reason, /confirmação não foi recebida|não foi recebida/i);
+  // Uma única pergunta foi aberta, e nenhuma segunda.
+  const perguntas = eventos.filter((e) => e.includes('Confirmar o apply'));
+  assert.equal(perguntas.length, 1, 'a pergunta não foi liquidada uma única vez');
+});
+
+it('o prompt se liquida sozinho quando o fluxo de entrada dá erro depois de abrir', async () => {
+  const makeAsk = await fabricaDePrompt();
+  const { reviewed, reviewedDigest } = await revisadoComDigest();
+  const entrada = new PassThrough();
+  entrada.isTTY = true;
+  const eventos = [];
+  const perguntar = makeAsk(entrada, {
+    write: (t) => {
+      eventos.push(`render:${t}`);
+      return true;
+    },
+  });
+  setTimeout(() => entrada.destroy(new Error('falha de leitura simulada')), 1);
+  const resultado = await confirmApply({
+    yesFlag: true,
+    isTTY: true,
+    outputIsTTY: true,
+    planText: PLANO_DE_EXEMPLO,
+    reviewed,
+    reviewedDigest,
+    ask: perguntar,
+    write: (texto) => {
+      eventos.push(`render:${texto}`);
+      return typeof texto === 'string' ? texto.length : 0;
+    },
+  });
+  assert.equal(resultado.confirmed, false);
+  assert.equal(resultado.lock, 'answer');
+  assert.match(resultado.reason, /erro|falha/i);
+  const perguntas = eventos.filter((e) => e.includes('Confirmar o apply'));
+  assert.equal(perguntas.length, 1, 'a pergunta não foi liquidada uma única vez');
+});
+
+it('dois planos sobre o mesmo snapshot congelado rendem texto e digest byte-idênticos', async () => {
+  const mod = await cli();
+  const primeiro = await planoDoFixture(mod, FIXTURE_REVISADO);
+  const segundo = await planoDoFixture(mod, FIXTURE_REVISADO);
+  assert.equal(segundo.plano.reviewedDigest, primeiro.plano.reviewedDigest);
+  assert.equal(mod.renderPlanText(segundo.plano), mod.renderPlanText(primeiro.plano));
+  assert.equal(primeiro.plano.mutations, 0);
+  assert.equal(segundo.plano.mutations, 0);
 });
