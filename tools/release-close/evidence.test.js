@@ -782,3 +782,247 @@ it('nenhuma fonte não-teste do tool island sintetiza um estado verde de CI', ()
   }
 });
 
+
+// ===========================================================================
+// grupo 3 — tarefa 3: suíte de adaptador sobre todos os cenários congelados
+// ===========================================================================
+//
+// Esta suíte dirige a COSTURA REAL, não um log de chamadas montado à mão: cada
+// caso constrói o cliente a partir do baseline congelado de referência, chama o
+// `decide` exportado e lê o cliente de volta. Nada aqui reimplementa a
+// normalização de evidência — foi exatamente um helper de teste que colapsava
+// os arrays de duplicata e conflito enquanto a suíte ficava verde.
+//
+// Valores esperados: derivative da PRECEDÊNCIA documentada do classificador
+// (FAILED -> CONCURRENT -> CONFLICTING -> DUPLICATE -> no-op -> PARTIAL ->
+// MISSING), não da saída observada. Um valor esperado lido da implementação
+// seria uma tautologia.
+
+// Os oito cenários congelados, com o código de estado exato que a precedência
+// produz para cada um através da costura de produção.
+const CENARIOS = [
+  { nome: 'duplicate', elegibilidade: 'ELIGIBLE', classificacao: 'DUPLICATE', retidos: [9001, 9002] },
+  { nome: 'conflicting', elegibilidade: 'ELIGIBLE', classificacao: 'CONFLICTING', retidos: [9001, 9003] },
+  { nome: 'partial', elegibilidade: 'ELIGIBLE', classificacao: 'PARTIAL', retidos: [9000] },
+  { nome: 'missing', elegibilidade: 'ELIGIBLE', classificacao: 'MISSING', retidos: [] },
+  { nome: 'complete', elegibilidade: 'ELIGIBLE', classificacao: 'MISSING', retidos: [9010] },
+  { nome: 'unrelated', elegibilidade: 'ELIGIBLE', classificacao: 'MISSING', retidos: [] },
+  { nome: 'concurrent', elegibilidade: 'ELIGIBLE', classificacao: 'MISSING', retidos: [] },
+  { nome: 'failed', elegibilidade: 'ELIGIBLE', classificacao: 'MISSING', retidos: [] },
+];
+
+it('os oito cenários congelados atravessam a costura de produção com valores exatos e cinco leituras ordenadas', async () => {
+  const mod = await moduloCom(['decide', 'buildClosePlan']);
+  for (const cenario of CENARIOS) {
+    const snapshot = snapshotDoEstado(cenario.nome);
+    const { client, decisao } = await decidirSobre(snapshot, mod);
+    const rotulo = `[${cenario.nome}]`;
+
+    // As cinco leituras declaradas, na ordem fixa, com numeração de um a cinco.
+    assert.deepEqual(client.calls.map((c) => c.method), ORDEM_DAS_LEITURAS, `${rotulo} ordem das leituras`);
+    assert.deepEqual(client.calls.map((c) => c.seq), [1, 2, 3, 4, 5], `${rotulo} numeração de sequência`);
+
+    // Valores exatos, nunca mera presença.
+    assert.equal(decisao.eligibility.code, cenario.elegibilidade, `${rotulo} código de elegibilidade`);
+    assert.equal(decisao.eligibility.eligible, true, `${rotulo} elegibilidade`);
+    assert.equal(decisao.classification.code, cenario.classificacao, `${rotulo} código de classificação`);
+    assert.ok(decisao.classification.reason.length > 0, `${rotulo} sem motivo PT-BR`);
+
+    // Todo identificador estável de release que casa com o alvo sobrevive.
+    assert.deepEqual(
+      decisao.classification.releases.map((r) => r.id),
+      cenario.retidos,
+      `${rotulo} identificadores de release retidos`,
+    );
+    // Todo número de milestone que nomeia a versão pedida sobrevive.
+    const milestonesDoAlvo = decisao.classification.milestones.map((m) => m.number);
+    const milestonesEsperados = (fixture(cenario.nome).milestones ?? [])
+      .filter((m) => m.title === snapshot.version)
+      .map((m) => m.number);
+    assert.deepEqual(milestonesDoAlvo, milestonesEsperados, `${rotulo} números de milestone retidos`);
+
+    // Nenhuma decisão carrega ação de escrita, e a contagem relatada é a medida.
+    assert.equal(decisao.eligibility.writeAction, null, `${rotulo} writeAction na elegibilidade`);
+    assert.equal(decisao.classification.writeAction, null, `${rotulo} writeAction na classificação`);
+    assert.equal(decisao.mutations, client.mutations, `${rotulo} contagem relatada difere da medida`);
+
+    const plano = planoDo(mod, snapshot, decisao);
+    assert.equal(plano.mutations, client.mutations, `${rotulo} plano com contagem diferente da medida`);
+    assert.equal(plano.applyLiberado, cenario.classificacao !== 'DUPLICATE' && cenario.classificacao !== 'CONFLICTING' && cenario.classificacao !== 'FAILED', `${rotulo} applyLiberado`);
+  }
+});
+
+it('o cenário de conclusão completa chega como o par exato MISSING e COMPLETE_NOOP', async () => {
+  const mod = await moduloCom(['decide', 'buildClosePlan']);
+  const snapshot = snapshotDoEstado('complete');
+  const { decisao } = await decidirSobre(snapshot, mod);
+  // O par exato é o literal que o plano 09-05 fixou, e é o par exato que este
+  // plano exige que a costura de produção exponha: nenhum sétimo estado.
+  assert.equal(decisao.classification.code, 'MISSING');
+  assert.equal(decisao.classification.outcome, 'COMPLETE_NOOP');
+  const plano = planoDo(mod, snapshot, decisao);
+  assert.equal(plano.classificacao.code, 'MISSING');
+  assert.equal(plano.classificacao.outcome, 'COMPLETE_NOOP');
+  assert.deepEqual(decisao.classification.milestones.map((m) => m.number), [9004]);
+});
+
+it('os dois estados que a costura de produção ainda não alcança estão declarados, não implícitos', async () => {
+  const mod = await moduloCom(['decide']);
+  // `closeMarkers` e `failedRunIds` não são campos da evidência de cinco chaves e
+  // nenhuma das cinco leituras os devolve. CONCURRENT e FAILED-por-execução
+  // declarada vermelha são, portanto, INALCANÇÁVEIS pela costura de produção
+  // nesta fase — e a asserção é sobre o valor exato que ela produz, para que a
+  // fronteira fique escrita em vez de suposta. O plano 09-09 liga a costura de
+  // reconciliação que consome as famílias roteirizadas; o vocabulário de
+  // marcadores pertence à Fase 11.
+  for (const nome of ['concurrent', 'failed']) {
+    const { decisao } = await decidirSobre(snapshotDoEstado(nome), mod);
+    assert.equal(
+      decisao.classification.code,
+      'MISSING',
+      `[${nome}] o estado alcançável mudou: a fronteira de evidências mudou e esta prova precisa ser revisada`,
+    );
+    assert.equal(decisao.classification.ciCode, null, `[${nome}] com ciCode inesperado`);
+  }
+  // FAILED por família de CI continua alcançável, e é por onde a CI bloqueia.
+  const ci = structuredClone(referencia().ci);
+  ci.records[0].conclusion = 'cancelled';
+  const { decisao } = await decidirSobre(referenciaCom({ ci }), mod);
+  assert.equal(decisao.classification.code, 'FAILED');
+  assert.equal(decisao.classification.ciCode, 'CI-CANCELLED');
+});
+
+// As onze famílias bloqueantes, cada uma derivada do bloco canônico congelado
+// por uma mutação de CLONE PROFUNDO. A conclusão e o status saem das duas
+// famílias nomeadas em 09-05, e o identificador de execução errado é derivado
+// (`requiredRunIds[0] + 1`) em vez de digitado (D-08).
+const SHA_ALHEIO = fixture('conflicting').releases[1].targetSha;
+
+const FAMILIAS_CI = [
+  { familia: 'CI-MALFORMED', mutar: (ci) => { delete ci.records[0].job; } },
+  { familia: 'CI-MISSING', mutar: (ci) => { ci.records = []; } },
+  { familia: 'CI-WRONG-RUN', mutar: (ci) => { ci.records.push({ ...ci.records[0], runId: ci.requiredRunIds[0] + 1 }); } },
+  { familia: 'CI-WRONG-SHA', mutar: (ci) => { ci.targetSha = SHA_ALHEIO; } },
+  { familia: 'CI-PENDING', mutar: (ci) => { ci.records[0].status = 'in_progress'; } },
+  { familia: 'CI-CANCELLED', mutar: (ci) => { ci.records[0].conclusion = 'cancelled'; } },
+  { familia: 'CI-TIMED-OUT', mutar: (ci) => { ci.records[0].conclusion = 'timed_out'; } },
+  { familia: 'CI-ACTION-REQUIRED', mutar: (ci) => { ci.records[0].conclusion = 'action_required'; } },
+  { familia: 'CI-NEUTRAL', mutar: (ci) => { ci.records[0].conclusion = 'neutral'; } },
+  { familia: 'CI-UNKNOWN', mutar: (ci) => { ci.records[0].conclusion = 'stale'; } },
+  { familia: 'CI-CONTRADICTORY', mutar: (ci) => { ci.records.push({ ...ci.records[0], conclusion: 'cancelled' }); } },
+];
+
+it('cada família de CI bloqueada força o apply liberado a falso e nomeia a sua família', async () => {
+  const mod = await moduloCom(['decide', 'buildClosePlan']);
+  const canonico = referencia().ci;
+  for (const { familia, mutar } of FAMILIAS_CI) {
+    const ci = structuredClone(canonico);
+    mutar(ci);
+    const snapshot = referenciaCom({ ci });
+    const { client, decisao } = await decidirSobre(snapshot, mod);
+    assert.deepEqual(client.calls.map((c) => c.method), ORDEM_DAS_LEITURAS, `[${familia}] as cinco leituras`);
+    assert.equal(decisao.classification.code, 'FAILED', `[${familia}] estado de classificação`);
+    assert.equal(decisao.classification.ciCode, familia, `[${familia}] família nomeada`);
+    assert.ok(decisao.classification.reason.length > 0, `[${familia}] sem motivo PT-BR`);
+    const plano = planoDo(mod, snapshot, decisao);
+    assert.equal(plano.applyLiberado, false, `[${familia}] liberou o apply com CI bloqueada`);
+    assert.match(plano.bloqueio, /^estado FAILED: /, `[${familia}] texto do bloqueio`);
+    // A evidência de release e milestone é retida mesmo com a CI bloqueando: a
+    // retenção não depende de a CI liberar.
+    assert.ok(Array.isArray(decisao.classification.releases), `[${familia}] lista de releases retida`);
+    assert.equal(decisao.mutations, 0, `[${familia}] contagem medida`);
+  }
+});
+
+it('cada família de CI bloqueada libera zero release e a evidência de release continua inteira', async () => {
+  const mod = await moduloCom(['decide', 'buildClosePlan']);
+  const canonico = referencia().ci;
+  for (const { familia, mutar } of FAMILIAS_CI) {
+    const ci = structuredClone(canonico);
+    mutar(ci);
+    const snapshot = referenciaCom({
+      ci,
+      release: envelope(fixture('complete').releases),
+    });
+    const { decisao } = await decidirSobre(snapshot, mod);
+    const plano = planoDo(mod, snapshot, decisao);
+    assert.equal(plano.applyLiberado, false, `[${familia}] liberou o apply com release presente e CI bloqueada`);
+    assert.deepEqual(
+      decisao.classification.releases.map((r) => r.id),
+      [9010],
+      `[${familia}] a retenção de release mudou com a CI bloqueada`,
+    );
+  }
+});
+
+it('a decisão é idempotente: duas execuções sobre o mesmo snapshot congelado rendem payloads byte-idênticos', async () => {
+  const mod = await moduloCom(['decide', 'buildClosePlan', 'renderPlanText']);
+  const snapshot = referencia();
+  const primeira = await decidirSobre(snapshot, mod);
+  const segunda = await decidirSobre(snapshot, mod);
+  const planoPrimeiro = planoDo(mod, snapshot, primeira.decisao);
+  const planoSegundo = planoDo(mod, snapshot, segunda.decisao);
+  assert.equal(
+    mod.renderPlanText(planoPrimeiro),
+    mod.renderPlanText(planoSegundo),
+    'a renderização do plano não é byte-idêntica entre duas execuções da decisão',
+  );
+  assert.equal(
+    JSON.stringify(planoPrimeiro),
+    JSON.stringify(planoSegundo),
+    'o objeto de plano difere entre duas execuções da decisão sobre o mesmo snapshot',
+  );
+  assert.equal(primeira.decisao.mutations, 0);
+  assert.equal(segunda.decisao.mutations, 0);
+  assert.equal(primeira.client.mutations, 0);
+  assert.equal(segunda.client.mutations, 0);
+});
+
+it('dois clientes são isolados: o segundo não registra chamada nem contagem depois da decisão no primeiro', async () => {
+  const mod = await moduloCom(['decide']);
+  const { makeFakeClient } = await import('./fake-client.js');
+  const snapshot = referencia();
+  const primeiro = makeFakeClient(snapshot);
+  const segundo = makeFakeClient(snapshot);
+  await mod.decide({
+    client: primeiro,
+    version: snapshot.version,
+    expectedSha: snapshot.expectedSha,
+    ci: snapshot.ci,
+  });
+  assert.equal(primeiro.calls.length, 5, 'a decisão não percorreu as cinco leituras no primeiro cliente');
+  assert.deepEqual(segundo.calls, [], 'o segundo cliente registrou chamadas de outra execução');
+  assert.equal(primeiro.mutations, 0);
+  assert.equal(segundo.mutations, 0, 'o segundo cliente herdou a contagem medida do primeiro');
+  // NOTA (PT-BR): o travamento de estação entre PROCESSOS é REC-05 e pertence
+  // à Fase 11. Esta suíte não pode alegar aquela cobertura: duas execuções em
+  // processos diferentes não são serializadas por nada neste arquivo, e citar
+  // REC-05 daqui seria uma afirmação que o código não sustenta.
+});
+
+it('a importação da CLI expõe a superfície élargida sem imprimir nada', async () => {
+  const resultado = executarProbe(ROTEIRO_IMPORTACAO);
+  assert.equal(resultado.status, 0, `importar o módulo encerrou o processo: ${resultado.stderr}`);
+  assert.notEqual(resultado.stdout.trim(), '', 'a importação devolveu a marca: ela não devolveu nada');
+  const relato = JSON.parse(resultado.stdout);
+  assert.deepEqual(relato.capturadoSaida, [], 'a importação escreveu na saída padrão');
+  assert.deepEqual(relato.capturadoErro, [], 'a importação escreveu no fluxo de erro padrão');
+  // NOTA (PT-BR): o laço abaixo declara a variável com um nome próprio e
+  // concatena a mensagem em vez de interpolar. Uma versão anterior, com
+  // `for (const simbolo of …)` e a mensagem em template literal, falhava de
+  // forma DETERMINÍSTICA apenas na execução completa do arquivo (nunca isolada)
+  // com `ReferenceError: symbolo is not defined`, apesar de a ligação léxica
+  // estar correta no disco — confirmado por hexdump das linhas e por uma
+  // reprodução mínima que NÃO reproduziu o sintoma. A asserção é idêntica nas
+  // duas formas; a diferença é só de forma. Se alguém voltar ao template
+  // literal, o sintoma reaparece e a interpolação não é a causa — mas também não
+  // é innocentada.
+  for (const simboloVerificado of ['runReleaseClose', 'buildClosePlan', 'renderPlanText']) {
+    assert.equal(relato[simboloVerificado], 'function', simboloVerificado + ' não é alcançável por um importador');
+  }
+  // A superfície que a tarefa 2 acrescentou precisa ser alcançável pelo MESMO
+  // caminho de importação, senão o seam de produção é inacessível a jusante.
+  const mod = await moduloCom(['decide', 'buildCloseEvidence']);
+  assert.equal(typeof mod.decide, 'function');
+  assert.equal(typeof mod.buildCloseEvidence, 'function');
+});
