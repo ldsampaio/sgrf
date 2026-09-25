@@ -170,25 +170,188 @@ describe('elegibilidade de tag (SAFE-02)', () => {
   });
 
   it('dupla execução do verify é segura: saída idêntica e zero escritas (OPS-01 idempotência)', () => {
-    const cli = new URL('./release-close.js', import.meta.url);
-    const primeira = execFileSync(process.execPath, [cli.pathname, 'verify', '--json'], {
-      encoding: 'utf8',
-    });
-    const segunda = execFileSync(process.execPath, [cli.pathname, 'verify', '--json'], {
-      encoding: 'utf8',
-    });
-    assert.equal(primeira, segunda);
-    assert.equal(JSON.parse(primeira).mutations, 0);
+    // Mesma entrada congelada duas vezes: os dois payloads precisam ser
+    // byte a byte idênticos e trazer o contador de mutações medido.
+    const primeira = runCli(['verify', '--json']);
+    const segunda = runCli(['verify', '--json']);
+    assert.equal(primeira.status, 0);
+    assert.equal(segunda.status, 0);
+    assert.equal(primeira.stdout, segunda.stdout);
+    assert.equal(JSON.parse(primeira.stdout).mutations, 0);
+    assert.equal(JSON.parse(segunda.stdout).mutations, 0);
   });
 
   it('clientes fake independentes têm logs isolados (OPS-01 concorrência single-process)', async () => {
+    // Limite explícito desta prova: ela isola instâncias no MESMO processo.
+    // O travamento de workstation entre processos é o REC-05 da Fase 11 — esta
+    // suíte nunca deve ser citada como garantia de lock entre processos.
     const snap = fixture('reference');
     const primeiro = makeFakeClient(snap);
     const segundo = makeFakeClient(snap);
     await checkTagEligibility(primeiro, { version: 'v0.1.1', expectedSha: snap.expectedSha });
     assert.equal(primeiro.calls.length, 3);
+    assert.equal(primeiro.mutations, 0);
     assert.equal(segundo.calls.length, 0);
+    assert.equal(segundo.writes.length, 0);
+    assert.equal(segundo.mutations, 0);
   });
+});
+
+// ── Matriz de códigos exatos ───────────────────────────────────────────────
+// Dezenove famílias nomeadas, cada uma montada a partir de um clone profundo
+// do fixture congelado (nunca uma segunda cópia digitada à mão — o baseline
+// continua sendo a única fonte da verdade, D-08). O contrato de cada linha é
+// o código EN exato; a razão é verificada só como prosa PT-BR não vazia.
+const MARCA_PT_BR = /[áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ]|\bnão\b|\bé\b|esperad/;
+
+const MATRIZ_CODIGOS = [
+  { nome: 'referência congelada', codigo: 'ELIGIBLE' },
+  {
+    nome: 'tag leve de salto único',
+    codigo: 'LIGHTWEIGHT',
+    montar: (s) => {
+      s.tagRef.data.object = { type: 'commit', sha: s.expectedSha };
+    },
+  },
+  {
+    nome: 'ref de outra versão',
+    codigo: 'TAG-IDENTITY',
+    montar: (s) => {
+      s.tagRef.data.ref = 'refs/tags/v0.1.0';
+    },
+  },
+  {
+    nome: 'SHA do objeto da tag abreviado',
+    codigo: 'TAG-IDENTITY',
+    montar: (s) => {
+      s.tagRef.data.object.sha = s.tagRef.data.object.sha.slice(0, 7);
+    },
+  },
+  {
+    nome: 'commit peeled abreviado',
+    codigo: 'TAG-IDENTITY',
+    montar: (s) => {
+      s.tagObject.data.object.sha = s.tagObject.data.object.sha.slice(0, 7);
+    },
+  },
+  {
+    nome: 'identidade do objeto da tag divergente',
+    codigo: 'TAG-IDENTITY',
+    montar: (s) => {
+      s.tagObject.data.sha = 'a'.repeat(40);
+    },
+  },
+  {
+    nome: 'peel em tree',
+    codigo: 'TAG-IDENTITY',
+    montar: (s) => {
+      s.tagObject.data.object.type = 'tree';
+    },
+  },
+  {
+    nome: 'peel em blob',
+    codigo: 'TAG-IDENTITY',
+    montar: (s) => {
+      s.tagObject.data.object.type = 'blob';
+    },
+  },
+  {
+    nome: 'peel em tag (tag que aponta para tag)',
+    codigo: 'TAG-IDENTITY',
+    montar: (s) => {
+      s.tagObject.data.object.type = 'tag';
+    },
+  },
+  {
+    nome: 'tag ausente',
+    codigo: 'MISSING',
+    montar: (s) => {
+      s.tagRef = { ok: false, status: 404, data: null };
+    },
+  },
+  {
+    nome: 'objeto da tag ausente',
+    codigo: 'MISSING',
+    montar: (s) => {
+      s.tagObject = { ok: false, status: 404, data: null };
+    },
+  },
+  {
+    nome: 'commit divergente da main',
+    codigo: 'SAFE-02',
+    montar: (s) => {
+      s.branchHead.data.sha = 'b'.repeat(40);
+    },
+  },
+  { nome: 'SHA esperado divergente', codigo: 'SAFE-02', esperadoSha: 'c'.repeat(40) },
+  {
+    nome: 'permissão negada (401)',
+    codigo: 'PERMISSION',
+    montar: (s) => {
+      s.tagRef = { ok: false, status: 401, data: null };
+    },
+  },
+  {
+    nome: 'permissão negada (403)',
+    codigo: 'PERMISSION',
+    montar: (s) => {
+      s.tagRef = { ok: false, status: 403, data: null };
+    },
+  },
+  { nome: 'limite de requisições (429)', codigo: 'UNAVAILABLE', roteiro: { getTagRef: ['status-429'] } },
+  { nome: 'erro do servidor (500)', codigo: 'UNAVAILABLE', roteiro: { getTagRef: ['status-5xx'] } },
+  {
+    nome: 'envelope malformado',
+    codigo: 'MALFORMED',
+    montar: (s) => {
+      delete s.tagRef.data.object;
+    },
+  },
+  { nome: 'leitura interrompida', codigo: 'TRANSPORT', roteiro: { getTagRef: ['timeout'] } },
+];
+
+it('matriz de códigos exatos: as dezenove famílias devolvem o contrato declarado', async () => {
+  assert.equal(MATRIZ_CODIGOS.length, 19, 'a matriz precisa cobrir as dezenove famílias');
+  const clientes = [];
+  for (const linha of MATRIZ_CODIGOS) {
+    const snap = clone(fixture('reference'));
+    if (linha.montar) linha.montar(snap);
+    const fake = makeFakeClient(snap, linha.roteiro);
+    clientes.push(fake);
+    const decisao = await checkTagEligibility(fake, {
+      version: VERSION,
+      expectedSha: linha.esperadoSha ?? snap.expectedSha,
+    });
+    assert.equal(decisao.code, linha.codigo, `código errado na família "${linha.nome}"`);
+    assert.equal(decisao.eligible, linha.codigo === 'ELIGIBLE', `elegibilidade errada em "${linha.nome}"`);
+    assert.equal(decisao.writeAction, null, `a família "${linha.nome}" carregou writeAction`);
+    assert.notEqual(decisao.reason, decisao.code, `a família "${linha.nome}" repetiu o código como motivo`);
+    assert.ok(decisao.reason.length > 0, `a família "${linha.nome}" ficou sem motivo`);
+    assert.ok(MARCA_PT_BR.test(decisao.reason), `a família "${linha.nome}" não tem marca de PT-BR`);
+  }
+  // Nenhuma linha da matriz pode ter escrito no remoto.
+  for (const fake of clientes) {
+    assert.equal(fake.mutations, 0, 'a matriz escreveu no remoto');
+  }
+});
+
+it('matriz de códigos exatos: o vocabulário de EN é o declarado no contrato', () => {
+  // Uma família nova não pode aparecer com um código fora do vocabulário
+  // publicado, que é o que o runbook da Fase 12 referencia.
+  const publicados = [
+    'ELIGIBLE',
+    'MISSING',
+    'PERMISSION',
+    'UNAVAILABLE',
+    'MALFORMED',
+    'TRANSPORT',
+    'LIGHTWEIGHT',
+    'TAG-IDENTITY',
+    'SAFE-02',
+  ];
+  for (const linha of MATRIZ_CODIGOS) {
+    assert.ok(publicados.includes(linha.codigo), `código fora do vocabulário: ${linha.codigo}`);
+  }
 });
 
 // ── Identidade estrita da tag anotada em dois saltos ────────────────────────
