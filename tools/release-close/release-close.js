@@ -27,7 +27,14 @@ import { checkTagEligibility } from './eligibility.js';
 import { classifySnapshot } from './classify.js';
 import { makeFakeClient } from './fake-client.js';
 import { assertNoMutation } from './client.js';
-import { confirmApply } from './apply-gate.js';
+import { confirmApply, canonicalReviewedDigest } from './apply-gate.js';
+
+// A serialização do conteúdo revisado é reexportada, e não reimplementada aqui.
+// Um consumidor a jusante (a reconciliação da Fase 11, a procedimento do
+// operador da Fase 13) que importasse só este módulo precisa poder RECALCULAR o
+// digest que o portão recalcula, e precisa ser a mesma função — duas cópias
+// divergiriam em silêncio.
+export { canonicalReviewedDigest, renderReviewedText } from './apply-gate.js';
 
 const USAGE = `Uso: node tools/release-close/release-close.js <verify|plan|apply> [opções]
 
@@ -239,6 +246,20 @@ class RecusaDoInvariante extends Error {
   }
 }
 
+// Recusa de INTEGRIDADE do conteúdo revisado, e uma terceira família: nem
+// entrada inválida (a entrada é válida) nem escape remoto (nada foi escrito).
+// São duas execuções da mesma serialização que discordaram, o que significa que
+// o digest não é estável — e um digest instável nunca pode chegar ao operador,
+// porque a aprovação dele não vincularia a nada. Classe própria para que a
+// recusa sobreviva ao tratamento de erro da CLI com o seu texto intacto e
+// continue distinguível das outras duas famílias.
+class RecusaDeIntegridade extends Error {
+  constructor(motivo) {
+    super(motivo);
+    this.name = 'RecusaDeIntegridade';
+  }
+}
+
 // A MEDIÇÃO do cliente, validada. O valor relatado ao operador é o que o
 // invariante devolve, e o invariante devolve alguma coisa apenas quando a
 // contagem é exatamente zero. Não existe caminho de fallback que renderize zero
@@ -343,6 +364,34 @@ function resolveMarker(spec, ctx) {
 // seja, são exatamente os mesmos bytes que o cliente serviu e que as três
 // leituras de elegibilidade provaram byte a byte. São campos de exibição do
 // plano, não evidência de classificação — o classificador nunca os vê.
+// Conteúdo revisado: o objeto IMUTÁVEL cujas duas frases o operador aprova, e
+// o digest canônico que as amarra (T-09-08-02, T-09-08-03).
+//
+// A fonte de cada frase é nomeada e é a evidência que a decisão REALMENTE
+// observeu pelo cliente — nunca o snapshot cru, nunca prosa de template, nunca a
+// lista de passos:
+//   releaseNotes              — o campo `notes` do registro de Release do alvo;
+//   milestoneCompletionRecord — o campo `completionRecord` do registro de
+//                               Milestone que nomeia a versão pedida.
+//
+// Sem release do alvo, sem milestone do alvo, ou qualquer um dos dois textos
+// ausente ou em branco, NÃO há objeto revisado e NÃO há digest: o portão recusa
+// na fechadura de conteúdo, e o renderizador diz isso em PT-BR em vez de
+// inventar texto. Um digest sobre texto inventado vincularia a aprovação do
+// operador a nada.
+function montarConteudoRevisado({ evidencia, version, expectedSha, commitSha }) {
+  const release = evidencia.releases.find((registro) => registro.tagName === version);
+  const milestone = evidencia.milestones.find((registro) => registro.title === version);
+  if (release === undefined || milestone === undefined) return null;
+  const releaseNotes = release.notes;
+  const milestoneCompletionRecord = milestone.completionRecord;
+  if (typeof releaseNotes !== 'string' || releaseNotes.trim().length === 0) return null;
+  if (typeof milestoneCompletionRecord !== 'string' || milestoneCompletionRecord.trim().length === 0) {
+    return null;
+  }
+  return Object.freeze({ version, expectedSha, commitSha, releaseNotes, milestoneCompletionRecord });
+}
+
 export function buildClosePlan({
   version,
   expectedSha,
@@ -384,6 +433,25 @@ export function buildClosePlan({
   // fechado reporta applyLiberado true aqui — e a reconciliação da Fase 11
   // relata um campo de nome diferente (`writeProposed`), nunca derivado deste.
   const bloqueado = BLOCKING_CODES.includes(classificacao.code);
+
+  // O digest vem da ÚNICA função exportada de serialização, nunca de uma
+  // segunda implementação local: um digest reimplementado aqui poderia divergir
+  // do que o portão recalcula no momento da pergunta, e a divergência seria
+  // silenciosa. É calculado DUAS vezes e as duas comparações têm de concordar —
+  // um digest não determinístico recusaria aqui, e não depois, no portão, onde o
+  // operador já teria lido um conteúdo que não corresponde a nada.
+  const reviewed = montarConteudoRevisado({ evidencia, version, expectedSha, commitSha });
+  let reviewedDigest = null;
+  if (reviewed !== null) {
+    reviewedDigest = canonicalReviewedDigest(reviewed);
+    const segunda = canonicalReviewedDigest(reviewed);
+    if (segunda !== reviewedDigest) {
+      throw new RecusaDeIntegridade(
+        'Recusa: o digest do conteúdo revisado não é estável entre duas execuções; nenhum plano foi emitido.',
+      );
+    }
+  }
+
   return {
     verb: 'plan',
     version,
@@ -397,6 +465,8 @@ export function buildClosePlan({
     elegibilidade: eligibility,
     classificacao,
     evidencia,
+    reviewed,
+    reviewedDigest,
     applyLiberado: eligibility.eligible === true && bloqueado === false,
     bloqueio: bloqueado
       ? `estado ${classificacao.code}: ${classificacao.reason}`
@@ -419,6 +489,18 @@ export function renderPlanText(plan) {
   linhas.push(`  milestone atual: ${plan.milestonePresente ? 'presente (adotada)' : 'ausente (criada)'}`);
   if (plan.bloqueio) {
     linhas.push(`  BLOQUEADO:      ${plan.bloqueio}`);
+  }
+  // O conteúdo revisado vem ANTES dos passos ordenados e do contador de
+  // mutações, para que o conteúdo preceda a pergunta também na ordem visível e
+  // não só na ordem dos bytes. O texto vem do fixture congelado; a ausência é
+  // dita, nunca preenchida.
+  if (plan.reviewed === null || plan.reviewed === undefined) {
+    linhas.push('Conteúdo revisado: não há conteúdo revisado para este alvo (sem notas de Release e sem registro de conclusão de Milestone).');
+  } else {
+    linhas.push('Conteúdo revisado (Release e Milestone, texto congelado):');
+    linhas.push(`  notas da Release:        ${plan.reviewed.releaseNotes}`);
+    linhas.push(`  registro de conclusão:   ${plan.reviewed.milestoneCompletionRecord}`);
+    linhas.push(`  digest do conteúdo:     ${plan.reviewedDigest}`);
   }
   linhas.push('Passos ordenados (a ordem de recuperação da Fase 11):');
   for (const step of plan.steps) {
@@ -451,9 +533,11 @@ function renderVerifyJson(decision, mutations, out) {
 // Recusa de entrada inválida: a violação de contrato do classificador (bloco ci
 // ausente, alvo malformado) e a validação do chamador são a MESMA recusa de
 // uso — a CLI escreve o motivo PT-BR e devolve 1. A recusa do invariante de
-// mutação é outra coisa e tem o seu próprio texto, atravessado intacto.
+// mutação e a recusa de integridade do conteúdo revisado são outras coisas e
+// têm os seus próprios textos, atravessados intactos, porque cada uma pede uma
+// ação diferente do operador.
 function tratarRecusa(err, stderr) {
-  if (err instanceof RecusaDoInvariante) {
+  if (err instanceof RecusaDoInvariante || err instanceof RecusaDeIntegridade) {
     stderr.write(`${err.message}\n`);
     return 1;
   }
@@ -499,16 +583,69 @@ async function runPlan({ json, version, sha }, io) {
   return plan.applyLiberado ? 0 : 1;
 }
 
-// Prompt de confirmação sobre o terminal vivo. Só é construído quando a
-// fechadura de TTY já passou no portão; com pipe, a recusa acontece antes.
-function makeAsk(stdin, output) {
+// Adaptador de destino de saída que RELATA a contagem de caracteres.
+// `write` de um fluxo real devolve um booleano de "aceitou o pedaço", e um
+// booleano é indistinguível de um plano engolido — que é exatamente o que a
+// fechadura de sink precisa distinguir. O adaptador faz a escrita e devolve
+// quantos caracteres recebeu, para que o portão possa recusar depois do render
+// quando nada chegou a lugar nenhum. Nenhum fluxo do processo é alcançado aqui:
+// o fluxo chega por argumento, e a guarda estática de evidence.test.js — que
+// proíbe a expressão de fluxo global em qualquer ponto fora de `fluxosPadrao` —
+// é a que confere essa separação.
+function sinkQueContaCaracteres(fluxo) {
+  return (texto) => {
+    const recebido = typeof texto === 'string' ? texto : '';
+    fluxo.write(recebido);
+    return recebido.length;
+  };
+}
+
+// Prompt de confirmação sobre o terminal vivo. Só é construído quando as
+// fechaduras de terminal já passaram no portão; com pipe, a recusa acontece
+// antes e esta fábrica nunca roda.
+//
+// ASSENTA UMA ÚNICA VEZ (T-09-08-04, WR-05). Antes, a promessa só se resolvia
+// pelo retorno da linha digitada: um EOF ou Ctrl-D logo depois de a pergunta
+// abrir deixava o processo vivo até um tempo EXTERNO estourar. Agora ela
+// assenta em três desfechos — resposta, fechamento da interface e erro do
+// fluxo — sob uma única bandeira, de modo que uma resposta tardia depois de um
+// fechamento não assenta de novo nem abre uma segunda pergunta. A interface é
+// fechada em todos os caminhos, e o fim de entrada e o erro de fluxo viram
+// recusa com motivo PT-BR, e não uma "palavra" vazia: o operador não
+// confirmou nada, e dizer que ele digitou algo errado seria mentira.
+export function makeAsk(stdin, output) {
   return () =>
     new Promise((resolve) => {
       const rl = createInterface({ input: stdin, output });
-      rl.question('Confirmar o apply? (sim/nao) ', (answer) => {
+      let assentado = false;
+      const liquidar = (valor) => {
+        if (assentado) return;
+        assentado = true;
+        stdin.removeListener('error', aoErroDoFluxo);
+        rl.removeListener('error', aoErro);
         rl.close();
-        resolve(answer);
-      });
+        resolve(valor);
+      };
+      const motivoDeFluxo = {
+        motivoRecusa:
+          'Apply recusa: o fluxo de entrada falhou depois de a pergunta abrir; a confirmação não foi recebida.',
+      };
+      const motivoDeFim = {
+        motivoRecusa:
+          'Apply recusa: o terminal foi fechado antes de a confirmação ser digitada; a confirmação não foi recebida.',
+      };
+      // O readline REEMITE o erro do fluxo como erro da PRÓPRIA interface — o
+      // erro chega em `rl`, não em `stdin` — e nesse caminho ele não emite
+      // `close`. Os dois ouvintes ficam: o da interface é o que dispara, e o do
+      // fluxo cobre o caso em que a interface não está dirigindo a leitura.
+      const aoErro = () => liquidar(motivoDeFluxo);
+      const aoErroDoFluxo = () => liquidar(motivoDeFluxo);
+      stdin.on('error', aoErroDoFluxo);
+      rl.on('error', aoErro);
+      rl.question('Confirmar o apply? (sim/nao) ', (resposta) => liquidar(resposta));
+      // `close` dispara quando a linha é lida e quando o fluxo TERMINA sem
+      // resposta; a bandeira faz o segundo disparo ser um no-op.
+      rl.once('close', () => liquidar(motivoDeFim));
     });
 }
 
@@ -530,9 +667,13 @@ async function runApply({ json, yes, version, sha }, io) {
     return tratarRecusa(err, io.stderr);
   }
 
-  // A estrutura vai primeiro quando pedida; o texto humano vai sempre em
-  // seguida, antes de qualquer pergunta.
-  if (json) renderJson(plan, io.stdout);
+  // A estrutura em json SÓ é emitida depois que o portão devolveu, nunca
+  // antes: ela carrega o conteúdo revisado e o digest, e escrevê-la antes das
+  // fechaduras de terminal e de conteúdo colocaria o texto que o operador
+  // deveria ler num destino que ninguém revisou. A ordem interna da saída do
+  // apply se mantém — estrutura em json primeiro, texto humano do portão no
+  // fluxo de erro —, e a máquina continua sem poder se análise sozinha até uma
+  // decisão.
   const planText = renderPlanText(plan);
 
   if (!plan.applyLiberado) {
@@ -546,10 +687,23 @@ async function runApply({ json, yes, version, sha }, io) {
   const gate = await confirmApply({
     yesFlag: yes,
     isTTY: io.stdin.isTTY === true,
+    // O booleano de terminal de SAÍDA vem do fluxo de SAÍDA, nunca do de
+    // entrada: é justamente a combinação "entrada viva, saída redirecionada"
+    // que o portão precisa recusar, e ler a entrada duas vezes reabriria o
+    // desvio que a fechadura de saída existe para fechar.
+    outputIsTTY: io.stdout.isTTY === true,
     planText,
+    reviewed: plan.reviewed,
+    reviewedDigest: plan.reviewedDigest,
     ask: makeAsk(io.stdin, io.stdout),
-    write: (texto) => io.stdout.write(texto),
+    // O portão é quem dita a ordem do render: ele não escreve nada antes da
+    // fechadura de conteúdo e escreve o plano e o conteúdo revisado logo depois
+    // dela. A CLI não escreve o plano por conta própria em nenhum caminho deste
+    // bloco.
+    write: sinkQueContaCaracteres(io.stdout),
   });
+
+  if (json) renderJson(plan, io.stdout);
 
   if (!gate.confirmed) {
     io.stderr.write(`${gate.reason} Nenhuma mutação executada (mutations: ${plan.mutations}).\n`);

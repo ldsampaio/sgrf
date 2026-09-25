@@ -1085,12 +1085,16 @@ it('o texto do plano mostra o conteúdo revisado acima dos passos e do contador 
   assert.ok(indiceDigest > indiceRegistro, 'o digest não vem depois dos dois textos');
   assert.ok(indicePassos > indiceDigest, 'os passos ordenados vêm antes do conteúdo revisado');
   assert.ok(indiceMutacoes > indicePassos, 'o contador mutations não vem depois dos passos');
-  // Os oito passos, a ordem e os marcadores continuam no texto.
+  // Os oito passos, a ordem e os marcadores continuam no texto, e o marcador
+  // de cada passo vem do próprio plano — o alvo revisado JÁ tem release e
+  // milestone, então os passos de escrita são de adoção, não de criação.
   for (const passo of ORDEM_FIXADA_DOS_PASSOS) {
     assert.ok(texto.includes(passo), `passo ausente no texto do plano: ${passo}`);
   }
-  assert.match(texto, /^ {2}1\. \[criar\] release-rascunho /m);
-  assert.match(texto, /^ {2}8\. \[ler\] milestone-readback-final /m);
+  assert.equal(plano.steps[0].marcador, 'adotar', 'o passo de escrita do alvo revisado deveria ser adoção');
+  assert.equal(plano.steps[7].marcador, 'ler');
+  assert.ok(texto.includes(`  1. [${plano.steps[0].marcador}] ${plano.steps[0].id} `));
+  assert.ok(texto.includes(`  8. [${plano.steps[7].marcador}] ${plano.steps[7].id} `));
 });
 
 it('a CLI recusa na fechadura de saída com terminal de entrada vivo e saída redirecionada', async () => {
@@ -1146,10 +1150,16 @@ it('o prompt se liquida sozinho quando o terminal fecha logo depois de abrir', a
       return true;
     },
   };
-  const perguntar = makeAsk(entrada, destino);
+  const perguntar = () => {
+    // O desfecho é agendado DEPOIS de a fábrica instalar seus ouvintes: um fim
+    // de entrada que chegasse antes seria um evento sem quem o tratasse, o que
+    // é outra falha e não a que esta prova cobre.
+    const promessa = makeAsk(entrada, destino)();
+    setTimeout(() => entrada.end(), 1);
+    return promessa;
+  };
   // O fim de entrada chega DEPOIS de a pergunta abrir, que é o caso que mantinha
   // o processo vivo até um tempo externo estourar.
-  setTimeout(() => entrada.end(), 1);
   const resultado = await confirmApply({
     yesFlag: true,
     isTTY: true,
@@ -1177,13 +1187,16 @@ it('o prompt se liquida sozinho quando o fluxo de entrada dá erro depois de abr
   const entrada = new PassThrough();
   entrada.isTTY = true;
   const eventos = [];
-  const perguntar = makeAsk(entrada, {
-    write: (t) => {
-      eventos.push(`render:${t}`);
-      return true;
-    },
-  });
-  setTimeout(() => entrada.destroy(new Error('falha de leitura simulada')), 1);
+  const perguntar = () => {
+    const promessa = makeAsk(entrada, {
+      write: (t) => {
+        eventos.push(`render:${t}`);
+        return true;
+      },
+    })();
+    setTimeout(() => entrada.destroy(new Error('falha de leitura simulada')), 1);
+    return promessa;
+  };
   const resultado = await confirmApply({
     yesFlag: true,
     isTTY: true,
@@ -1199,7 +1212,10 @@ it('o prompt se liquida sozinho quando o fluxo de entrada dá erro depois de abr
   });
   assert.equal(resultado.confirmed, false);
   assert.equal(resultado.lock, 'answer');
-  assert.match(resultado.reason, /erro|falha/i);
+  assert.match(resultado.reason, /fluxo de entrada falhou/i);
+  // O motivo é o de FLUXO, e não o de fim de entrada: os dois liquidam sem
+  // resposta, mas são causas diferentes e o operador precisa saber qual.
+  assert.doesNotMatch(resultado.reason, /terminal foi fechado/i);
   const perguntas = eventos.filter((e) => e.includes('Confirmar o apply'));
   assert.equal(perguntas.length, 1, 'a pergunta não foi liquidada uma única vez');
 });
