@@ -2,9 +2,14 @@
 gsd_state_version: "1.0"
 milestone: v0.1.2
 milestone_name: GitHub Release Reliability
-status: planning
-last_updated: "2026-09-25T13:21:18.907Z"
+current_phase: 9
+current_phase_name: Phase 1 of 5 in v0.1.2
+status: Roadmap approved — ready to plan Phase 9
+stopped_at: v0.1.2 roadmap created; ready for approval
+last_updated: "2026-09-25T13:31:53.674Z"
 last_activity: 2026-09-25
+last_activity_desc: Created the v0.1.2 roadmap with 18/18 requirements mapped
+state_head: 78ee1f9c8e680b76731509c7024e757326048914
 progress:
   total_phases: 5
   completed_phases: 0
@@ -26,7 +31,7 @@ See: `.planning/PROJECT.md` (updated 2026-09-25)
 
 Phase: 9 of 13 (Phase 1 of 5 in v0.1.2)
 Plan: —
-Status: Roadmap created — awaiting user approval
+Status: Roadmap approved — ready to plan Phase 9
 Last activity: 2026-09-25 — Created the v0.1.2 roadmap with 18/18 requirements mapped
 
 Progress: [░░░░░░░░░░] 0%
@@ -34,6 +39,7 @@ Progress: [░░░░░░░░░░] 0%
 ## Performance Metrics
 
 **Velocity:**
+
 - Plans completed in v0.1.2: 0
 - Plans completed in v0.1.1: 29
 - Average duration: — min
@@ -55,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 ### Decisions
 
 Decisions are logged in `PROJECT.md`; current milestone constraints are summarized here:
+
 - Continuous numbering continues at Phase 9; v0.1.2 uses Phases 9–13 only.
 - Delivery order is fixed: pure contract/fixtures → read-only exact-SHA preflight → guarded idempotent reconciliation → CI/race rehearsal and runbook → live v0.1.1 recovery.
 - The annotated `v0.1.1` tag is immutable; current `main`, peeled tag, and full target SHA all resolve to `10c62ac85fd3ab275b8926c89f5f34ba4116e2cf`.

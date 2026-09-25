@@ -1,47 +1,32 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v0.1.1",
+  "milestone": "v0.1.2 — GitHub Release Reliability",
   "phases": [
     {
-      "number": "1",
-      "name": "CI Regression Gate",
-      "status": "complete"
+      "number": "9",
+      "name": "Release-Close Contract & Fixtures",
+      "status": "pending"
     },
     {
-      "number": "2",
-      "name": "Rules Decisions (docs/14 close-out)",
-      "status": "complete"
+      "number": "10",
+      "name": "Read-Only Exact-SHA Preflight",
+      "status": "pending"
     },
     {
-      "number": "3",
-      "name": "Deploy & Environment Contract",
-      "status": "complete"
+      "number": "11",
+      "name": "Guarded Idempotent Reconciliation",
+      "status": "pending"
     },
     {
-      "number": "4",
-      "name": "Authorization Hardening",
-      "status": "complete"
+      "number": "12",
+      "name": "CI Race Rehearsal & Operator Runbook",
+      "status": "pending"
     },
     {
-      "number": "5",
-      "name": "Session Refresh",
-      "status": "complete"
-    },
-    {
-      "number": "6",
-      "name": "Voting & Money State Machine",
-      "status": "complete"
-    },
-    {
-      "number": "7",
-      "name": "Background Jobs",
-      "status": "complete"
-    },
-    {
-      "number": "8",
-      "name": "Reports/Audit & Auth Polish",
-      "status": "complete"
+      "number": "13",
+      "name": "v0.1.1 Live Release & Milestone Recovery",
+      "status": "pending"
     }
   ],
   "next": {
@@ -49,5 +34,5 @@
     "label": "Show progress",
     "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-09-25T04:36:25.454Z"
+  "updated_at": "2026-09-25T13:32:05.233Z"
 }
