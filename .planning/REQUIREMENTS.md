@@ -1,64 +1,53 @@
-# Requirements: SGRF — Production Hardening
+# Requirements: SGRF — GitHub Release Reliability
 
-**Defined:** 2026-09-23
+**Defined:** 2026-09-25
 **Core Value:** Requests are decided correctly and funds cannot leak — the right people approve the right amounts, every state change is authorized and auditable, and the ledger always balances.
 
 ## v1 Requirements
 
-Requirements for this milestone (bug fixes + security hardening + CI). Each maps to roadmap phases.
+Requirements for milestone v0.1.2. Each requirement maps to exactly one roadmap phase.
 
-### Security
+### Release Recovery
 
-- [x] **SEC-01**: Every endpoint enforces the documented permission matrix server-side — `cancel`, message `remove`, `getOne`/`list` scoping, `listVotes`, settings `transactions`, `force-password-reset` guard, reports `voting` — deny-by-default via one shared permission map (transcribed from `docs/06-permissoes.md`), with row-level ownership checks in controllers
-- [x] **SEC-02**: Production boot fails fast when `JWT_*` / `INITIAL_ADMIN_*` secrets are missing or insecure — no `dev-*-secret-change-me` fallbacks under `NODE_ENV=production`; local dev fallbacks unchanged
-- [x] **SEC-03**: All auth mutation routes are rate-limited (login, refresh, forgot-password, change-password), login returns a uniform 401 (no 401/403/423 account enumeration), and `trust proxy` is explicitly configured for the deployment topology (hop count / trusted subnets — never bare `true`)
-- [x] **SEC-04**: Cookie/HTTPS story resolved — `secure` flag follows a `COOKIE_SECURE` env var (or TLS termination is documented with `FRONTEND_URL=https://…`); login works on non-localhost hosts
+- [ ] **REL-01**: Operator can run a read-only `verify` for a specified repository, version, and full target SHA, receiving an explicit result for tag, main, CI, Release, and Milestone with `mutations: 0`
+- [ ] **REL-02**: Operator can publish a factual GitHub Release `v0.1.1` from the existing annotated tag after reviewing its notes, without creating, moving, deleting, or replacing the tag
+- [ ] **REL-03**: Operator can create and close the exact-title GitHub Milestone `v0.1.1` only after the Release is published, including the milestone completion record and no open issues
+- [ ] **REL-04**: Operator can declare v0.1.1 recovered only after fresh remote readback confirms the preserved tag, target commit, target-SHA CI, published Release, and closed Milestone with stable IDs and URLs
 
-### Session
+### Release Safety
 
-- [x] **SES-01**: Users stay logged in past 15 minutes — single-flight 401 response interceptor on the shared axios instance refreshes once (`POST /auth/refresh`) and retries the original request; redirect to login only when refresh itself fails; no router import (import cycle)
-- [x] **SES-02**: `mustChangePassword` blocks API access (403 until `changePassword`) and router navigation allows only the change-password flow + logout — the documented "troca obrigatória de senha" guarantee is actually enforced
+- [ ] **SAFE-01**: Tool rejects an invalid version, repository, tag, full SHA, credential, or insufficient endpoint permission before any remote mutation
+- [ ] **SAFE-02**: Tool requires an existing annotated tag whose peeled commit equals both remote `main` and the supplied full target SHA, and contains no ref-write path for tags
+- [ ] **SAFE-03**: Tool requires the canonical `backend` and `frontend` checks from the existing CI workflow to have succeeded on the exact target SHA for both the protected-`main` push run and version-tag push run
+- [ ] **SAFE-04**: `verify` and `plan` perform no mutations, while `apply` requires reviewed Release/Milestone content, a displayed plan, and explicit operator confirmation
+- [ ] **SAFE-05**: Tool waits within a bounded window for late CI and revalidates refs and CI immediately before mutations; pending, contradictory, wrong-SHA, failed, or newly divergent evidence aborts the operation
 
-### Voting & Finance Rules
+### Idempotency & Recovery
 
-<!-- Rule decisions first (docs/14 close-out), then fixes, then tests encoding the rule. -->
+- [ ] **REC-01**: Tool reconciles a matching published Release, matching draft Release, or open/closed Milestone instead of blindly creating another object
+- [ ] **REC-02**: Tool performs recovery in recoverable order — Release draft → readback → publish → readback → Milestone open → readback → close → final readback
+- [ ] **REC-03**: After timeout, lost response, `409`, `422`, `429`, or server failure, tool re-reads the natural GitHub identity before deciding whether to adopt, retry, or report a partial state
+- [ ] **REC-04**: Duplicate or materially conflicting remote objects block publication with an actionable conflict and are never overwritten or deleted
+- [ ] **REC-05**: A local repository/version lock prevents concurrent invocations on one workstation, while a pinned historical `resume` mode requires recorded prior partial-state evidence and cannot become an arbitrary old-commit publish bypass
 
-- [x] **VOT-01**: Ties always resolve — `AGUARDANDO_DESEMPATE` reaches a terminal status even when the chefe already voted during the normal phase (decide mechanism: chefe `changeMyVote` allowed in tiebreak status, or chefe's regular vote excluded from tie-break eligibility); every `status ===` guard grepped before changing
-- [x] **VOT-02**: `CONCLUIDO` counts toward `annualTotalCents` — the annual auto-approval cap cannot be bypassed by cycling requests through `mark-spent`; RN confirmed against `docs/03-regras-de-negocio.md` with a unit test
-- [x] **VOT-03**: Partial-approval aggregation rule decided (median / majority amount / chefe-decides — recorded in `docs/03` + `docs/14`), implemented in `closeVoting` replacing "first partial vote wins", encoded in tests
-- [x] **VOT-04**: Cancellation-after-approval rule decided — `ADMINISTRADOR`/`CHEFE_DEPARTAMENTO` only, mandatory justification, audited compensating reversal (reverse `FinancialTransaction` when funds were provisioned); ordinary cancellation gets the ownership guard from SEC-01
+### Tool & Evidence
 
-### Jobs & Email
-
-- [x] **JOB-01**: Email queue drains on an interval started from `server.js` (re-entrancy-guarded, cleared on SIGTERM); invites/resets/notifications actually send; give-up path alerts the admin after 3 tries per `docs/14-decisoes-em-aberto.md` (not just `logger.error`)
-- [x] **JOB-02**: Voting auto-close runs on an interval — `votingCloser.js` broken requires fixed (`./` → `../`) first; expired `EM_VOTACAO` requests conclude (tally → provision → notify) without manual action; idempotent per run; lands **after** VOT-01 so the job cannot wedge tied requests
-- [x] **JOB-03**: `smtpConfigured` reports reality (`env.smtpEnabled && Boolean(env.smtp.host)`), not hardcoded `true`
-
-### Reports & Audit
-
-- [x] **REP-01**: Every report export (CSV/JSON/PDF) is audited (`report_exported`) before any format branches out — today only PDF audits
-- [x] **REP-02**: CSV formula injection neutralized — leading `=`, `+`, `-`, `@`, tab, CR, LF (and full-width variants) prefixed/stripped per OWASP CSV Injection guidance
-
-### CI
-
-- [x] **CI-01**: Two-job pipeline runs on every push/PR as a required check — backend `npx vitest run` + frontend `npm run build` (Node 22, per-package `working-directory`, per-lockfile npm cache); no workspace tooling, no invented lint/typecheck commands; landed **first** as the regression gate for every other fix
+- [ ] **OPS-01**: Operator can run the checked-in Node 22 ESM release-close tool with `verify`, `plan`, and `apply` modes, using existing `gh` authentication and adding no npm package or hosted service
+- [ ] **OPS-02**: Tool’s pure reconciliation logic is covered by deterministic `node:test` fixtures and mocked API scenarios for missing, partial, duplicate, conflicting, failed, and concurrent states
+- [ ] **OPS-03**: Tool emits structured, secret-free evidence containing action results, timestamps, SHAs, run/job/check IDs, Release ID/URL, Milestone number/URL, and any partial-state next action
+- [ ] **OPS-04**: Operator runbook documents authentication, permissions, preflight, reviewed plan, apply confirmation, safe rerun, partial-state recovery, conflict resolution, rollback boundaries, and the live v0.1.1 procedure
 
 ## v2 Requirements
 
 Deferred to future work. Tracked but not in this roadmap.
 
-### Quality & Tests
+### Future Release Hardening
 
-- HTTP-level authorization regression matrix (supertest 403/404 for cross-user/cross-role) — trigger: opportunistically with each SEC-01 fix
-- Finance invariant reconciliation test (`sum(FinancialTransaction)` vs `FundBalance`) — trigger: first change to any balance-mutation path
-- Job overlap guard + last-run/failure telemetry — trigger: while wiring the two jobs (cheap ride-along)
-- Error-handler hardening (no `err.stack`/Prisma internals leaked) — trigger: when `validate.js` is touched anyway
-
-### Rules & Email
-
-- Remaining `docs/14` decisions: quorum, "sem quóró" manual path, vista-limit doc-vs-`@@unique` conflict — trigger: before declaring the council workflow production-complete
-- One-time reset/invite token instead of emailed plaintext temp password + purge `EmailQueue.body` — trigger: before enabling SMTP for real users
-- nodemailer ≥10 (HIGH advisories on ≤9.x) — trigger: any phase setting `SMTP_ENABLED=true` (send surface is small)
+- Thin `workflow_dispatch` wrapper that calls the same local reconciler contract without duplicating publication logic
+- GitHub Immutable Releases, tag rulesets, attestations, release assets, and generated release notes
+- Distributed locking or an external coordination service when more than one operator host becomes real
+- Automatic publication triggers, automatic tag creation, and automatic SemVer inference
+- General historical publication for versions lacking recorded prior partial-state evidence
 
 ## Out of Scope
 
@@ -66,14 +55,13 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 |---------|--------|
-| New features (file uploads/`RequestFile`, audit read API/UI, RPA/finance integration, email settings UI) | Milestone is fixes + hardening only; untested new surface destroys the verifiable-hardening framing |
-| Broad refactors (balance-service extraction, JSON columns, `validate()` middleware everywhere, role-constant dedup) | Behavior churn in money/auth paths unverifiable with 17 unit tests; refactor only where a fix structurally requires it |
-| CSRF tokens | `docs/11` formally accepts the residual risk (`sameSite: 'lax'` + origin-restricted CORS); revisit if the app spans subdomains |
-| Refresh rotation / session revocation (`tokenVersion`) | Layering rotation onto a not-yet-working refresh flow doubles blast radius; dedicated milestone after SES-01 ships |
-| TypeScript / ESLint / typecheck | `AGENTS.md` forbids inventing these commands; mass churn would obscure the actual fixes |
-| Frontend E2E suite (Playwright etc.) | `npm test` exits 1 by design; an E2E harness dwarfs the fix set; manual UAT per wave + `npm run build` in CI instead |
-| Horizontal scaling / pagination / external rate-limit store | No user volume justifies it; >1 replica would also double-run jobs |
-| MFA / institutional OIDC SSO | Product decision for UTFPR IT, not a bug fix |
+| Recreate, move, delete, or force-update the valid `v0.1.1` tag | The annotated tag already peels to the verified release merge commit; mutation adds risk without repairing publication |
+| Overwrite or delete conflicting Release/Milestone objects | Published and closed objects are historical; fail-closed conflict review protects remote truth |
+| Hosted or automatic publisher | v0.1.2 requires one explicit operator surface; a future wrapper may call the same reconciler but must not become a second implementation |
+| Immutable Releases, attestations, assets, or generated notes | Not required to recover v0.1.1 or prevent the observed partial-publication failure |
+| Arbitrary old-commit or historical publication | Historical resume is constrained to recorded prior partial-state evidence and is not a general publish bypass |
+| Application behavior, API, database, Vue, Docker, or CI command changes | This milestone repairs and safeguards release operations without changing the production application or its regression commands |
+| Deployment automation | Publishing a GitHub Release is not deployment; no automatic application deployment is introduced |
 
 ## Traceability
 
@@ -81,31 +69,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | Phase 4 | Complete |
-| SEC-02 | Phase 3 | Complete |
-| SEC-03 | Phase 8 | Complete |
-| SEC-04 | Phase 3 | Complete |
-| SES-01 | Phase 5 | Complete |
-| SES-02 | Phase 8 | Complete |
-| VOT-01 | Phase 6 | Complete |
-| VOT-02 | Phase 6 | Complete |
-| VOT-03 | Phase 6 | Complete |
-| VOT-04 | Phase 6 | Complete |
-| JOB-01 | Phase 7 | Complete |
-| JOB-02 | Phase 7 | Complete |
-| JOB-03 | Phase 7 | Complete |
-| REP-01 | Phase 8 | Complete |
-| REP-02 | Phase 8 | Complete |
-| CI-01 | Phase 1 | Complete |
-
-*Phase 2 (Rules Decisions, docs/14 close-out) carries no requirement ID directly — it is the decision gate for VOT-03/VOT-04; their implementation lands in Phase 6 after Phase 2's decisions and Phase 4's permission map.*
+| REL-01 | Unassigned | Pending |
+| REL-02 | Unassigned | Pending |
+| REL-03 | Unassigned | Pending |
+| REL-04 | Unassigned | Pending |
+| SAFE-01 | Unassigned | Pending |
+| SAFE-02 | Unassigned | Pending |
+| SAFE-03 | Unassigned | Pending |
+| SAFE-04 | Unassigned | Pending |
+| SAFE-05 | Unassigned | Pending |
+| REC-01 | Unassigned | Pending |
+| REC-02 | Unassigned | Pending |
+| REC-03 | Unassigned | Pending |
+| REC-04 | Unassigned | Pending |
+| REC-05 | Unassigned | Pending |
+| OPS-01 | Unassigned | Pending |
+| OPS-02 | Unassigned | Pending |
+| OPS-03 | Unassigned | Pending |
+| OPS-04 | Unassigned | Pending |
 
 **Coverage:**
-
-- v1 requirements: 16 total
-- Mapped to phases: 16
-- Unmapped: 0 ✓
+- v1 requirements: 18 total
+- Mapped to phases: 0
+- Unmapped: 18 ⚠️
 
 ---
-*Requirements defined: 2026-09-23*
-*Last updated: 2026-09-23 after roadmap creation (traceability filled)*
+
+*Requirements defined: 2026-09-25*
+*Last updated: 2026-09-25 after initial v0.1.2 definition*
