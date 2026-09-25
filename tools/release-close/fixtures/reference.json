@@ -1,0 +1,45 @@
+{
+  "version": "v0.1.1",
+  "expectedSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
+  "tagRef": {
+    "ok": true,
+    "status": 200,
+    "data": {
+      "ref": "refs/tags/v0.1.1",
+      "object": {
+        "type": "tag",
+        "sha": "0a68d6f0c55e7be07d13a0bbc4ed36d4af772630"
+      }
+    }
+  },
+  "tagObject": {
+    "ok": true,
+    "status": 200,
+    "data": {
+      "sha": "0a68d6f0c55e7be07d13a0bbc4ed36d4af772630",
+      "object": {
+        "type": "commit",
+        "sha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf"
+      }
+    }
+  },
+  "branchHead": {
+    "ok": true,
+    "status": 200,
+    "data": {
+      "sha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf"
+    }
+  },
+  "release": {
+    "ok": false,
+    "status": 404,
+    "data": null
+  },
+  "milestones": {
+    "ok": true,
+    "status": 200,
+    "data": []
+  },
+  "frozenAt": "2026-09-25T00:00:00.000Z",
+  "runs": [36095855139, 36095872529]
+}
