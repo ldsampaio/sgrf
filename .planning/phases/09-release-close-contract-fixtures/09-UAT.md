@@ -1,5 +1,5 @@
 ---
-status: complete
+status: partial
 phase: 09-release-close-contract-fixtures
 source:
   - 09-01-SUMMARY.md
@@ -259,7 +259,7 @@ evidence: COVERAGE.md nomeia closeMarkers e failedRunIds.
 
 total: 29
 passed: 29
-issues: 0
+issues: 2
 pending: 0
 skipped: 0
 
@@ -310,4 +310,59 @@ skipped: 0
     - tools/release-close/release-close.js:259
     - tools/release-close/release-close.js:416
     - tools/release-close/release-close.js:692
+  missing: []
+
+- truth: "Uma execução declarada vermelha na evidência bloqueia o plano; o caminho de produção não a descarta."
+  status: open
+  reason: >
+    G-1 do 09-VERIFICATION.md, RECONFIRMADO por execução independente em 2026-09-25 e
+    NÃO afetado pela correção de 09-25. `classifySnapshot` trata `failedRunIds` como
+    membro de primeira classe do contrato validado e lhe dá precedência sobre
+    CONCURRENT, mas `buildCloseEvidence` não tem a chave nem parâmetro para ela — a
+    chave some em silêncio. Medido pelo caminho de produção sobre o `reference` (que
+    é elegível) com apenas `failedRunIds: [36095855139]` transplantado:
+    `classification=MISSING`, `applyLiberado=true`, `bloqueio=null`. A MESMA
+    evidência com a chave presente classifica `FAILED`, com o motivo "Execução(ões)
+    36095855139 declarada(s) vermelha(s) na evidência congelada: o fechamento está
+    bloqueado até o sinal verde". O classificador recusa e a produção libera.
+    Agrava: `evidence.test.js` e `safe04.test.js` fixam `MISSING` como o resultado
+    esperado do fixture chamado `failed`, então um fail-open que também é expectativa
+    não pode ser pego pela suíte que o pegaria.
+    Não é a mesma causa do gap corrigido: fechar aquele exigia guardar as duas
+    leituras; este exige uma FONTE para `failedRunIds` — uma sexta leitura declarada
+    (que tem de passar na checagem de superfície exata do 09-06) ou a evidência de CI
+    da Fase 10, que é a única que poderia trazê-la. Decisão de roadmap, não correção
+    local.
+  severity: major
+  test: 13
+  artifacts:
+    - tools/release-close/classify.js:304
+    - tools/release-close/release-close.js:210
+    - .planning/phases/09-release-close-contract-fixtures/09-VERIFICATION.md:202
+  missing: []
+
+- truth: "O texto que o operador aprova vem do registro que o classificador validou para este alvo."
+  status: open
+  reason: >
+    G-3 do 09-VERIFICATION.md, RECONFIRMADO por execução independente em 2026-09-25.
+    `montarConteudoRevisado` (release-close.js:543) escolhe os registros com dois
+    `find` sobre `evidencia.releases`/`evidencia.milestones`, casando por
+    `tagName === version` e `title === version`, e NUNCA consulta `classificacao` —
+    que já carrega a partição do alvo e `targetShaValidates`. Medido em duas variantes,
+    ambas com release E milestone do alvo para que o objeto revisado exista:
+    (A) release do alvo com `targetSha` divergente e milestone fechada — o
+    classificador diz, no próprio motivo, que "a divergência impede tratar o alvo
+    como concluído", e mesmo assim o plano entrega ao operador as notas daquela
+    release de outro commit, com `targetShaValidates: false` e `applyLiberado: true`.
+    (B) duas milestones do alvo, a primeira `open` — `find` pega a primeira, e o
+    registro aprovado é o da milestone ABERTA, não o da fechada.
+    A seleção é mais fraca que a decisão que ela alimenta: a aprovação do operador
+    passaria a vincular um digest de texto que o classificador já rejeitou. O
+    controle (release e milestone do alvo, SHA correto) produz o objeto revisado
+    correto, o que confirma que a regra é a Selection, não a montagem.
+  severity: major
+  test: 25
+  artifacts:
+    - tools/release-close/release-close.js:543
+    - .planning/phases/09-release-close-contract-fixtures/09-VERIFICATION.md:246
   missing: []
