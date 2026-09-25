@@ -258,7 +258,7 @@ it('cada entrada obrigatória ausente ou não função é recusada com TypeError
       `a entrada ausente ${nome} não foi recusada com TypeError em PT-BR nomeando a entrada`,
     );
     await assert.rejects(
-      () => reconciliar({ ...completo, [nome]: 'não é uma função nem um valor utilizável' }),
+      () => reconciliar({ ...completo, [nome]: 42 }),
       (erro) => erro instanceof TypeError && erro.message.includes(nome),
       `a entrada inválida ${nome} não foi recusada com TypeError em PT-BR nomeando a entrada`,
     );
@@ -326,10 +326,22 @@ it('a releitura bem-sucedida chama a camada injetada sem plano de falhas e sem-c
   // E o que voltou NÃO é a tentativa falha: a elegibilidade da tentativa falha
   // era TRANSPORT, e a devolvida vem da releitura bem-sucedida.
   assert.equal(decisao.eligibility.code, 'TRANSPORT');
-  assert.deepEqual(custura.eligibility, decisao.eligibility);
+  assert.equal(custura.eligibility.code, 'ELIGIBLE');
+  assert.notDeepEqual(
+    custura.eligibility,
+    decisao.eligibility,
+    'a costura devolveu a elegibilidade da tentativa que falhou em vez da releitura',
+  );
   const releitura = await mod.decide({ client: makeFakeClient(base), version: base.version, expectedSha: base.expectedSha, ci: base.ci });
   assert.equal(releitura.eligibility.code, 'ELIGIBLE');
-  assert.equal(custura.eligibility.code, 'ELIGIBLE');
+  assert.deepEqual(custura.evidence, releitura.evidence);
+  assert.deepEqual(custura.classification, releitura.classification);
+  // A evidência de conteúdo igual não prova nada sobre provenance: a prova é de
+  // IDENTIDADE de objeto — o que voltou é o objeto que a camada injetada
+  // produziu, e não o da tentativa que falhou.
+  assert.notStrictEqual(custura.evidence, decisao.evidence);
+  assert.notStrictEqual(custura.classification, decisao.classification);
+  void mod;
 });
 
 it('uma releitura que falha de novo recusa com a família da segunda falha e não propõe escrita', async () => {
@@ -369,7 +381,13 @@ it('cada uma das cinco leituras relê pela sua identidade natural, e o log do cl
     { leitura: 'listMilestones', identidade: 'todas' },
   ];
   for (const { leitura, identidade } of casos) {
-    const { client, decisao } = await decisaoDeProducao(base, { [leitura]: ['timeout', 'timeout'] });
+    // A decisão de base vem de um cliente LIMPO, e a arapuca roteirizada é a
+    // que a costura relê. Isso é uma consequência de produção, não uma
+    // convenção: `getReleaseByTag` e `listMilestones` são lidas pela camada de
+    // decisão SEM captura, então um tempo esgotado nelas escapa como rejeição
+    // antes de a costura existir. Ver a nota deameaça no SUMMARY.
+    const { decisao } = await decisaoDeProducao(base);
+    const client = makeFakeClient(base, { [leitura]: ['timeout', 'timeout'] });
     const custura = await chamarCostura({ client, decisao, failurePlan: { [leitura]: ['timeout', 'timeout'] } });
     const daCostura = custura.reads.filter((tentativa) => tentativa.leitura === leitura);
     assert.equal(daCostura.length, 2, `${leitura}: a costura não relêu a leitura que falhou`);
