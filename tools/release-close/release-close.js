@@ -3,17 +3,24 @@
 //
 // Invocação: node tools/release-close/release-close.js <verify|plan|apply> ...
 // Zero dependências, ESM. `verify` e `plan` servem o fixture de referência via
-// fake-client e são somente-leitura: ambos carregam `mutations: 0`. `apply`
-// renderiza o plano ordenado (previsão da ordem de recuperação da Fase 11),
-// entrega o texto ao portão de dupla trava (apply-gate.js) e falha fechado —
-// nenhum caminho de escrita remota existe nesta fase.
+// fake-client e são somente-leitura: ambos carregam o contador `mutations`.
+// `apply` renderiza o plano ordenado (previsão da ordem de recuperação da
+// Fase 11), entrega o texto ao portão de dupla trava (apply-gate.js) e falha
+// fechado — nenhum caminho de escrita remota existe nesta fase.
 //
 // A ferramenta nunca abre subprocesso, nunca lê variáveis de ambiente de
 // credencial e nunca registra cabeçalhos — a saída limita-se aos campos da
 // decisão, ao plano ordenado e ao contador mutations.
+//
+// Importar este módulo é seguro e sem efeito colateral: a CLI só roda no caso
+// de script de entrada, e nesse caso o código de saída é atribuído a
+// `process.exitCode` em vez de terminar o processo. Um `process.exit`
+// truncaria a saída em buffer nos caminhos com pipe que a suíte SAFE-04
+// exercita, além de matar qualquer importador (WR-04).
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { pathToFileURL } from 'node:url';
 import { checkTagEligibility } from './eligibility.js';
 import { classifySnapshot } from './classify.js';
 import { makeFakeClient } from './fake-client.js';
@@ -108,8 +115,17 @@ const CLOSE_STEP_SPECS = [
   },
 ];
 
-function usageError(message) {
-  process.stderr.write(`${message}\n${USAGE}`);
+// ÚNICO ponto do módulo que alcança os fluxos globais do processo, e ele é
+// resolvido na CHAMADA, nunca capturado na importação. Um chamador que injeta
+// os seus sinks vê toda a saída nos sinks e os fluxos reais ficam intocados;
+// um renderizador que escrevesse direto no global burlaria essa separação, e a
+// varredura estática de evidence.test.js confere que não existe tal ponto.
+function fluxosPadrao() {
+  return { stdin: process.stdin, stdout: process.stdout, stderr: process.stderr };
+}
+
+function usageError(message, err) {
+  err.write(`${message}\n${USAGE}`);
   return 2;
 }
 
@@ -187,7 +203,7 @@ function resolveMarker(spec, ctx) {
 
 // Monta o plano ordenado: o que seria criado, o que seria adotado, em que
 // ordem e contra quais SHAs/IDs congelados (D-15).
-export function buildClosePlan({ version, expectedSha, snapshot, eligibility, classificacao }) {
+export function buildClosePlan({ version, expectedSha, snapshot, eligibility, classificacao, mutations }) {
   const evidence = evidenceFromSnapshot(snapshot, { version, expectedSha });
   const tagSha =
     (snapshot.tagRef && snapshot.tagRef.data && snapshot.tagRef.data.object
@@ -232,7 +248,7 @@ export function buildClosePlan({ version, expectedSha, snapshot, eligibility, cl
       ? `estado ${classificacao.code}: ${classificacao.reason}`
       : null,
     steps,
-    mutations: 0,
+    mutations,
   };
 }
 
@@ -256,26 +272,26 @@ export function renderPlanText(plan) {
       `  ${step.ordem}. [${step.marcador}] ${step.id} — ${MARKER_VERBS[step.marcador]} ${step.assunto}.`,
     );
   }
-  linhas.push('mutations: 0');
+  linhas.push(`mutations: ${plan.mutations}`);
   return `${linhas.join('\n')}\n`;
 }
 
-function renderJson(payload) {
-  process.stdout.write(`${JSON.stringify(payload)}\n`);
+function renderJson(payload, out) {
+  out.write(`${JSON.stringify(payload)}\n`);
 }
 
-function renderVerifyText(version, decision) {
+function renderVerifyText(version, decision, mutations, out) {
   const estado = decision.eligible ? 'ELEGÍVEL' : 'INELEGÍVEL';
-  process.stdout.write(
+  out.write(
     `Elegibilidade de tag ${version}: ${estado}\n` +
       `Motivo: ${decision.reason}\n` +
       `Código: ${decision.code}\n` +
-      `mutations: 0\n`,
+      `mutations: ${mutations}\n`,
   );
 }
 
-function renderVerifyJson(decision) {
-  process.stdout.write(`${JSON.stringify({ ...decision, mutations: 0 })}\n`);
+function renderVerifyJson(decision, mutations, out) {
+  out.write(`${JSON.stringify({ ...decision, mutations })}\n`);
 }
 
 // Decisão compartilhada por verify, plan e apply: elegibilidade da tag +
@@ -294,27 +310,27 @@ async function decide(snapshot, { version, sha }) {
   // bater com o `ci.targetSha` congelado classifica como FAILED com a família
   // CI-WRONG-SHA, que é a resposta fail-closed correta.
   const classificacao = classifySnapshot(evidenceFromSnapshot(snapshot, target));
-  return { resolvedVersion, resolvedSha, eligibility, classificacao };
+  return { resolvedVersion, resolvedSha, eligibility, classificacao, mutations: 0 };
 }
 
-async function runVerify({ json, version, sha }) {
+async function runVerify({ json, version, sha }, io) {
   const snapshot = loadReferenceFixture();
   let decision;
   try {
     decision = await decide(snapshot, { version, sha });
   } catch (err) {
     if (err instanceof TypeError) {
-      process.stderr.write(`Entrada inválida: ${err.message}\n`);
+      io.stderr.write(`Entrada inválida: ${err.message}\n`);
       return 1;
     }
     throw err;
   }
-  if (json) renderVerifyJson(decision.eligibility);
-  else renderVerifyText(decision.resolvedVersion, decision.eligibility);
+  if (json) renderVerifyJson(decision.eligibility, decision.mutations, io.stdout);
+  else renderVerifyText(decision.resolvedVersion, decision.eligibility, decision.mutations, io.stdout);
   return decision.eligibility.eligible ? 0 : 1;
 }
 
-async function runPlan({ json, version, sha }) {
+async function runPlan({ json, version, sha }, io) {
   const snapshot = loadReferenceFixture();
   let plan;
   try {
@@ -325,16 +341,17 @@ async function runPlan({ json, version, sha }) {
       snapshot,
       eligibility: decision.eligibility,
       classificacao: decision.classificacao,
+      mutations: decision.mutations,
     });
   } catch (err) {
     if (err instanceof TypeError) {
-      process.stderr.write(`Entrada inválida: ${err.message}\n`);
+      io.stderr.write(`Entrada inválida: ${err.message}\n`);
       return 1;
     }
     throw err;
   }
-  if (json) renderJson(plan);
-  else process.stdout.write(renderPlanText(plan));
+  if (json) renderJson(plan, io.stdout);
+  else io.stdout.write(renderPlanText(plan));
   return plan.applyLiberado ? 0 : 1;
 }
 
@@ -362,10 +379,11 @@ async function runApply({ json, yes, version, sha }, io) {
       snapshot,
       eligibility: decision.eligibility,
       classificacao: decision.classificacao,
+      mutations: decision.mutations,
     });
   } catch (err) {
     if (err instanceof TypeError) {
-      process.stderr.write(`Entrada inválida: ${err.message}\n`);
+      io.stderr.write(`Entrada inválida: ${err.message}\n`);
       return 1;
     }
     throw err;
@@ -373,13 +391,13 @@ async function runApply({ json, yes, version, sha }, io) {
 
   // A estrutura vai primeiro quando pedida; o texto humano vai sempre em
   // seguida, antes de qualquer pergunta.
-  if (json) renderJson(plan);
+  if (json) renderJson(plan, io.stdout);
   const planText = renderPlanText(plan);
 
   if (!plan.applyLiberado) {
-    process.stdout.write(planText);
-    process.stderr.write(
-      `apply recusa: ${plan.bloqueio ?? `tag inelegível (${plan.elegibilidade.code})`}. Nenhuma mutação executada (mutations: 0).\n`,
+    io.stdout.write(planText);
+    io.stderr.write(
+      `apply recusa: ${plan.bloqueio ?? `tag inelegível (${plan.elegibilidade.code})`}. Nenhuma mutação executada (mutations: ${plan.mutations}).\n`,
     );
     return 1;
   }
@@ -393,41 +411,76 @@ async function runApply({ json, yes, version, sha }, io) {
   });
 
   if (!gate.confirmed) {
-    process.stderr.write(`${gate.reason} Nenhuma mutação executada (mutations: 0).\n`);
+    io.stderr.write(`${gate.reason} Nenhuma mutação executada (mutations: ${plan.mutations}).\n`);
     return 1;
   }
 
   // Confirmação dupla aceita, mas a Fase 9 não possui caminho de escrita: o
   // apply falha fechado até a reconciliação idempotente da Fase 11.
-  process.stderr.write(
-    `${gate.reason} Ainda assim a Fase 9 não executa escrita remota: reconciliação chega na Fase 11. Nenhuma mutação executada (mutations: 0).\n`,
+  io.stderr.write(
+    `${gate.reason} Ainda assim a Fase 9 não executa escrita remota: reconciliação chega na Fase 11. Nenhuma mutação executada (mutations: ${plan.mutations}).\n`,
   );
   return 1;
 }
 
-async function main(argv, io) {
+// Entrada exportada do CLI (o `main` de WR-04). Recebe os fluxos por argumento
+// e devolve o código de saída em vez de terminar o processo, de modo que um
+// teste ou um módulo a jusante possa dirigir um verbo e inspecionar o que foi
+// escrito. Executada como script, os fluxos caem nos do processo e o operador
+// vê exatamente o texto, o destino e o código de sempre.
+export async function runReleaseClose(argv, io = {}) {
+  if (!io || typeof io !== 'object') {
+    throw new TypeError('Entrada inválida: esperado um objeto de fluxos com stdin, stdout e stderr.');
+  }
+  if (!Array.isArray(argv)) {
+    throw new TypeError('Entrada inválida: esperado argv como lista de argumentos.');
+  }
+  const padrao = fluxosPadrao();
+  const fluxos = {
+    stdin: io.stdin ?? padrao.stdin,
+    stdout: io.stdout ?? padrao.stdout,
+    stderr: io.stderr ?? padrao.stderr,
+  };
   const parsed = parseArgs(argv);
   if (parsed.error) {
-    return usageError(parsed.error);
+    return usageError(parsed.error, fluxos.stderr);
   }
   const { verb, help, json, version, sha } = parsed.args;
 
   if (help || verb === null) {
-    process.stdout.write(USAGE);
+    fluxos.stdout.write(USAGE);
     return 0;
   }
 
   if (verb === 'verify') {
-    return runVerify({ json, version, sha });
+    return runVerify({ json, version, sha }, fluxos);
   }
   if (verb === 'plan') {
-    return runPlan({ json, version, sha });
+    return runPlan({ json, version, sha }, fluxos);
   }
   if (verb === 'apply') {
-    return runApply({ json, yes: parsed.args.yes, version, sha }, io);
+    return runApply({ json, yes: parsed.args.yes, version, sha }, fluxos);
   }
-  return usageError(`Verbo desconhecido: ${verb} (use verify, plan ou apply).`);
+  return usageError(`Verbo desconhecido: ${verb} (use verify, plan ou apply).`, fluxos.stderr);
 }
 
-const code = await main(process.argv.slice(2), { stdin: process.stdin, stdout: process.stdout });
-process.exit(code);
+// Só o caso de script de entrada executa um verbo: a URL do módulo é comparada
+// com o caminho de entrada resolvido, e a comparação happen apenas aí — a
+// importação de um módulo alheio nunca executa a CLI. Symlink e caminho
+// relativo são normalizados por realpath, que é a mesma forma que o import.meta
+// carrega.
+function ehScriptDeEntrada() {
+  const entrada = process.argv[1];
+  if (typeof entrada !== 'string' || entrada === '') return false;
+  try {
+    return pathToFileURL(realpathSync(entrada)).href === import.meta.url;
+  } catch {
+    return false;
+  }
+}
+
+// O código é atribuído, não terminado: um `process.exit` aqui truncaria a
+// saída em buffer nos caminhos com pipe e mataria qualquer importador.
+if (ehScriptDeEntrada()) {
+  process.exitCode = await runReleaseClose(process.argv.slice(2));
+}
