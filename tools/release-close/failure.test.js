@@ -167,6 +167,44 @@ function nomesDaAssinatura(texto) {
     .filter((nome) => nome.length > 0);
 }
 
+// Corta o corpo de uma declaração de função a partir do texto-fonte inteiro.
+// A chave inicial é a que abre depois de fecharem todos os parênteses da lista
+// de parâmetros — e não a primeira chave qualquer: numa assinatura
+// desestruturada (`{ client, version }`) a primeira chave é a da
+// desestruturação, e um contador que começa nela devolve a assinatura e nada
+// mais. Uma guarda que inspeciona um fragmento é pior do que nenhuma guarda,
+// porque relata uma aprovação sem ter olhado.
+function corpoDaFuncao(texto, expressao) {
+  const inicio = texto.search(expressao);
+  assert.ok(inicio >= 0, `declaração não encontrada: ${String(expressao)}`);
+  return fatiar(texto, inicio);
+}
+
+function fatiar(texto, inicio) {
+  let profundidade = 0;
+  let chave = -1;
+  for (let i = texto.indexOf('(', inicio); i < texto.length; i += 1) {
+    if (texto[i] === '(') profundidade += 1;
+    else if (texto[i] === ')') {
+      profundidade -= 1;
+      if (profundidade === 0) {
+        chave = texto.indexOf('{', i);
+        break;
+      }
+    }
+  }
+  assert.ok(chave >= 0, 'a declaração não tem corpo');
+  profundidade = 0;
+  for (let i = chave; i < texto.length; i += 1) {
+    if (texto[i] === '{') profundidade += 1;
+    else if (texto[i] === '}') {
+      profundidade -= 1;
+      if (profundidade === 0) return texto.slice(inicio, i + 1);
+    }
+  }
+  return texto.slice(inicio);
+}
+
 // Nenhum objeto devolvido pela costura pode carregar `applyLiberado` em
 // qualquer nível: esse nome tem UM significado no repositório — tag elegível
 // sem estado bloqueante, no objeto de plano — e a costura tem o seu próprio
@@ -432,3 +470,196 @@ it('o no-op concluído chega como MISSING e COMPLETE_NOOP e a costura não prop�
   assert.equal(plano.applyLiberado, true, 'o no-op concluído deixou de liberar o plano no nível do plano');
   assert.equal(custura.writeProposed, false);
 });
+
+// ===========================================================================
+// grupo 2 — tarefa 2: a CLI decidindo ATRAVÉS da costura
+// ===========================================================================
+
+const OITO_ENTRADAS = [
+  'client',
+  'version',
+  'expectedSha',
+  'ci',
+  'evidence',
+  'eligibility',
+  'classification',
+  'decide',
+  'failurePlan',
+];
+
+it('a decisão exportada delega à costura com as nove entradas e não reconstrói nada', () => {
+  const fonte = fonteDoModulo('release-close.js');
+  const corpo = corpoDaFuncao(fonte, /^export async function decide\(/m);
+  assert.match(corpo, /reconciliar\(\{/, 'a decisão exportada não delega à costura de reconciliação');
+  const chamada = corpo.slice(corpo.indexOf('reconciliar({'));
+  const bloco = chamada.slice(0, chamada.indexOf('});') + 2);
+  for (const nome of OITO_ENTRADAS) {
+    assert.match(bloco, new RegExp(`\\b${nome}:`), `a delegação não passa ${nome} para a costura`);
+  }
+  // `evidence` e `ci` chegam COPIADOS do construtor exportado, nunca
+  // reconstruídos: um construtor chamado de novo aqui devolveria um objeto
+  // diferente, e a costura decidiria sobre uma evidência que o classificador
+  // nunca viu.
+  assert.doesNotMatch(corpo, /buildCloseEvidence\(/, 'a decisão delegadora reconstrói a evidência');
+  assert.doesNotMatch(corpo, /classifySnapshot\(|checkTagEligibility\(/, 'a decisão delegadora recalcula as decisões puras');
+  // E `decide` injetada NÃO é a própria função delegadora: uma auto-referência
+  // faria a releitura voltar a entrar na costura, sem fim.
+  const injetada = bloco.match(/decide:\s*([A-Za-z0-9_$]+)/);
+  assert.ok(injetada, 'a delegação não nomeia a camada injetada');
+  assert.notEqual(injetada[1], 'decide', 'a camada injetada é a própria delegadora, e a releitura entraria na costura de novo');
+});
+
+it('a camada de decisão injetada é exportada e para antes da costura', async () => {
+  const mod = await cli();
+  assert.equal(typeof mod.camadaDeDecisao, 'function', 'camadaDeDecisao não é exportado por release-close.js');
+  const base = fixture('reference');
+  const camada = await mod.camadaDeDecisao({
+    client: makeFakeClient(base),
+    version: base.version,
+    expectedSha: base.expectedSha,
+    ci: base.ci,
+  });
+  assert.equal(camada.eligibility.code, 'ELIGIBLE');
+  assert.equal(camada.classification.code, 'MISSING');
+  assert.ok(!Object.prototype.hasOwnProperty.call(camada, 'reconciliation'), 'a camada injetada já carrega o bloco de reconciliação');
+});
+
+it('a decisão exportada carrega o bloco de reconciliação com as mesmas três decisões que ela decidiu', async () => {
+  const { decisao } = await decisaoDeProducao(fixture('reference'));
+  assert.ok(Object.prototype.hasOwnProperty.call(decisao, 'reconciliation'), 'a decisão não carrega o bloco de reconciliação');
+  // Identidade de objeto, e não igualdade profunda: é o que prova que a
+  // costura recebeu a evidência e as duas decisões da camada, e não cópias.
+  assert.strictEqual(decisao.reconciliation.evidence, decisao.evidence);
+  assert.strictEqual(decisao.reconciliation.eligibility, decisao.eligibility);
+  assert.strictEqual(decisao.reconciliation.classification, decisao.classification);
+  assert.strictEqual(decisao.reconciliation.ci, decisao.ci);
+  assert.deepEqual(decisao.reconciliation.reads, []);
+  assert.equal(decisao.reconciliation.family, null);
+  assert.equal(decisao.reconciliation.recovered, false);
+  assert.equal(decisao.reconciliation.writeProposed, false);
+  assert.equal(decisao.reconciliation.mutations, decisao.mutations);
+  semApplyLiberado(decisao.reconciliation);
+});
+
+it('uma família roteirizada que chega à decisão da CLI recusa, libera nada e não escreve', async () => {
+  const mod = await cli();
+  const base = fixture('reference');
+  for (const { desfecho, codigo } of FAMILIAS_ROTEIRIZADAS) {
+    const client = makeFakeClient(base, { getTagRef: [desfecho, desfecho, desfecho] });
+    const decisao = await mod.decide({
+      client,
+      version: base.version,
+      expectedSha: base.expectedSha,
+      ci: base.ci,
+      failurePlan: { getTagRef: [desfecho, desfecho, desfecho] },
+    });
+    assert.equal(decisao.reconciliation.family, codigo, `${desfecho}: a CLI não recusa com o código da família`);
+    assert.equal(typeof decisao.reconciliation.reason, 'string');
+    assert.ok(decisao.reconciliation.reason.length > 0);
+    assert.equal(decisao.eligibility.eligible, false, `${desfecho}: a elegibilidade ficou verdadeira com uma leitura que falhou`);
+    assert.equal(decisao.reconciliation.writeProposed, false);
+    assert.equal(decisao.reconciliation.writeAction, null);
+    assert.equal(decisao.mutations, 0);
+    const plano = mod.buildClosePlan({
+      version: decisao.version,
+      expectedSha: decisao.expectedSha,
+      snapshot: base,
+      eligibility: decisao.eligibility,
+      classificacao: decisao.classification,
+      evidence: decisao.evidence,
+      mutations: decisao.mutations,
+      reconciliation: decisao.reconciliation,
+    });
+    // `applyLiberado` falso vem do ESTADO, e `writeProposed` falso vem da
+    // costura: um plano bloqueado NÃO é a razão pela qual a costura não propõe
+    // escrita, e a costura não propõe escrita TAMBÉM num plano liberado — é o
+    // par do no-op concluído que prova que os dois nomes são independentes.
+    assert.equal(plano.applyLiberado, false, `${desfecho}: o apply foi liberado com uma família de falha`);
+    assert.equal(plano.reconciliation.writeProposed, false);
+    assert.match(plano.bloqueio, new RegExp(codigo), `${desfecho}: o bloqueio do plano não nomeia a família`);
+    assert.match(plano.bloqueio, /desconhecido, não ausente/);
+  }
+});
+
+it('a CLI não tem opção de injeção de falha, o texto de uso não a menciona e opção desconhecida devolve dois', async () => {
+  const fonte = fonteDoModulo('release-close.js');
+  const uso = fatiarTexto(fonte, /^const USAGE = /m);
+  const analisador = corpoDaFuncao(fonte, /^function parseArgs\(/m);
+  for (const [nome, trecho] of [
+    ['analisador de opções', analisador],
+    ['texto de uso', uso],
+  ]) {
+    assert.doesNotMatch(
+      trecho,
+      /failur|falha|inject|injet|falh|--falh|roteiriz/i,
+      `o ${nome} da CLI nomeia a injeção de falhas, e ela tem de ser inalcançável pela linha de comando`,
+    );
+  }
+  // E a superfície real: uma opção desconhecida continua sendo recusa de uso
+  // com código 2, e o texto de uso continua sendo o mesmo.
+  const mod = await cli();
+  const escrito = [];
+  const fluxo = { write: (texto) => escrito.push(texto) };
+  const codigo = await mod.runReleaseClose(['verify', '--falhar'], { stdout: fluxo, stderr: fluxo, stdin: {} });
+  assert.equal(codigo, 2, `uma opção desconhecida devolveu ${codigo} em vez de 2`);
+  const recusa = escrito.join('');
+  assert.match(recusa, /Opção desconhecida: --falhar\./);
+  assert.match(recusa, /Uso: node tools\/release-close\/release-close\.js <verify\|plan\|apply> \[opções\]/);
+  // E a injeção EXISTE — como parâmetro programático da decisão exportada, e
+  // só lá. Uma asserção de que ela não existe em lugar nenhum passaria também
+  // com a funcionalidade ausente; o que se prova é a assimetria: presente na
+  // assinatura programática, ausente do analisador e do texto de uso.
+  assert.match(
+    corpoDaFuncao(fonte, /^export async function decide\(/m),
+    /failurePlan/,
+    'a decisão exportada não aceita o plano de falhas como parâmetro programático',
+  );
+});
+
+it('o baseline congelado continua o mesmo e só ganha o bloco de reconciliação', async () => {
+  const mod = await cli();
+  const base = fixture('reference');
+  const { decisao } = await decisaoDeProducao(base);
+  assert.equal(decisao.reconciliation.family, null, 'o baseline congelado chegou com família de falha');
+  assert.deepEqual(decisao.reconciliation.reads, []);
+  assert.equal(decisao.mutations, 0);
+  const plano = mod.buildClosePlan({
+    version: decisao.version,
+    expectedSha: decisao.expectedSha,
+    snapshot: base,
+    eligibility: decisao.eligibility,
+    classificacao: decisao.classification,
+    evidence: decisao.evidence,
+    mutations: decisao.mutations,
+    reconciliation: decisao.reconciliation,
+  });
+  assert.equal(plano.applyLiberado, true);
+  assert.equal(plano.bloqueio, null);
+  assert.equal(plano.reconciliation.family, null);
+  assert.equal(plano.reconciliation.writeProposed, false);
+  assert.equal(plano.steps.length, 8);
+  assert.equal(plano.mutations, 0);
+  // O texto do operador não ganhou linha nenhuma: a reconciliação é uma
+  // superfície de DADOS, e nada nela ocorre no baseline congelado — o texto
+  // que o plano 09-08 congelou continua byte a byte o mesmo.
+  const texto = mod.renderPlanText(plano);
+  assert.doesNotMatch(texto, /reconcilia|fam[ií]lia|releitura/i);
+  assert.match(texto, /^mutations: 0$/m);
+});
+
+// Bloco de texto de uma declaração por atribuição, contando chaves a partir do
+// primeiro `{` depois do `=`.
+function fatiarTexto(texto, expressao) {
+  const inicio = texto.search(expressao);
+  assert.ok(inicio >= 0, `declaração não encontrada: ${String(expressao)}`);
+  const chave = texto.indexOf('{', inicio);
+  let profundidade = 0;
+  for (let i = chave; i < texto.length; i += 1) {
+    if (texto[i] === '{') profundidade += 1;
+    else if (texto[i] === '}') {
+      profundidade -= 1;
+      if (profundidade === 0) return texto.slice(inicio, i + 1);
+    }
+  }
+  return texto.slice(inicio);
+}
