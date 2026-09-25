@@ -347,3 +347,143 @@ it('snapshot em formato de cliente é rejeitado pelo classificador (TypeError)',
   // do classificador, e a rejeição é uma violação de contrato, não um palpite.
   assert.throws(() => classifySnapshot(fixture('reference')), TypeError);
 });
+
+// ---------------------------------------------------------------------------
+// Evidência com escopo de alvo: partição, comparação e validação, nessa ordem
+// (probes de nível superior).
+// ---------------------------------------------------------------------------
+
+// Evidência plana derivada de um fixture congelado, com releases e milestones
+// injetadas. Nenhum SHA, identificador de execução ou identificador de release
+// é retyped: tudo vem dos fixtures que já os carregam (D-08). Nomes de tag,
+// números de milestone e contagens de issue dos cenários sintetizados são dados
+// de cenário, não identificadores congelados.
+function evidencia(base, { releases, milestones, closeMarkers } = {}) {
+  return {
+    target: { version: base.target.version, expectedSha: base.target.expectedSha },
+    ci: clonar(base.ci),
+    releases: releases ?? clonar(base.releases),
+    milestones: milestones ?? clonar(base.milestones),
+    closeMarkers: closeMarkers ?? clonar(base.closeMarkers),
+  };
+}
+
+const tagAlheia = (base, sufixo) => `${base.target.version}${sufixo}`;
+
+it('duas releases idênticas da versão pedida são DUPLICATE com os dois identificadores retidos', () => {
+  const decisao = classifySnapshot(fixture('duplicate'));
+  assert.equal(decisao.code, 'DUPLICATE');
+  assert.deepEqual(decisao.releases.map((r) => r.id), [9001, 9002]);
+  assert.equal(decisao.targetShaValidates, true);
+  assert.equal(decisao.outcome, undefined);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('duas releases da versão pedida com alvos diferentes são CONFLICTING com os dois identificadores retidos', () => {
+  const base = fixture('conflicting');
+  const decisao = classifySnapshot(fixture('conflicting'));
+  assert.equal(decisao.code, 'CONFLICTING');
+  assert.deepEqual(decisao.releases.map((r) => r.id), [9001, 9003]);
+  assert.equal(decisao.targetShaValidates, false);
+  assert.equal(decisao.outcome, undefined);
+  assert.ok(decisao.reason.includes(base.releases[0].targetSha));
+  assert.ok(decisao.reason.includes(base.releases[1].targetSha));
+});
+
+it('o fixture conflicting congelado reporta CONFLICTING em vez de filtrar o registro divergente', () => {
+  // A divergência de SHA alvo é o SINAL de comparação, nunca um filtro de
+  // entrada: o registro que diverge continua na partição e continua visível.
+  const decisao = classifySnapshot(fixture('conflicting'));
+  assert.equal(decisao.code, 'CONFLICTING');
+  assert.deepEqual(decisao.releases.map((r) => r.id), [9001, 9003]);
+  assert.equal(decisao.targetShaValidates, false);
+  assert.deepEqual(decisao.unrelatedReleases, []);
+});
+
+it('release única da versão pedida com SHA divergente fica na partição com targetShaValidates falso', () => {
+  const base = fixture('conflicting');
+  const decisao = classifySnapshot(evidencia(base, { releases: [clonar(base.releases[1])] }));
+  assert.equal(decisao.code, 'PARTIAL');
+  assert.deepEqual(decisao.releases.map((r) => r.id), [9003]);
+  assert.equal(decisao.targetShaValidates, false);
+  assert.ok(decisao.reason.includes(base.releases[1].targetSha));
+  assert.equal(decisao.outcome, undefined);
+});
+
+it('duas releases de duas outras versões ficam fora da decisão do alvo e do motivo', () => {
+  const decisao = classifySnapshot(fixture('unrelated'));
+  assert.equal(decisao.code, 'MISSING');
+  assert.equal(decisao.outcome, undefined);
+  assert.deepEqual(decisao.releases, []);
+  assert.deepEqual(decisao.unrelatedReleases.map((r) => r.tagName), ['v0.1.0', 'v0.1.1-anterior']);
+  assert.equal(decisao.reason.includes('v0.1.0'), false);
+  assert.equal(decisao.reason.includes('v0.1.1-anterior'), false);
+  assert.equal(decisao.reason.includes('conflit'), false);
+});
+
+it('uma release de outra versão não decide o alvo quando existe uma release da versão pedida', () => {
+  const base = fixture('conflicting');
+  const alheia = { ...clonar(base.releases[1]), tagName: tagAlheia(base, '-anterior') };
+  const decisao = classifySnapshot(
+    evidencia(base, { releases: [clonar(base.releases[0]), alheia] }),
+  );
+  assert.equal(decisao.code, 'PARTIAL');
+  assert.deepEqual(decisao.releases.map((r) => r.id), [9001]);
+  assert.deepEqual(decisao.unrelatedReleases.map((r) => r.id), [9003]);
+});
+
+it('duas milestones da versão pedida são ambas retidas e o alvo continua em aberto', () => {
+  const base = fixture('complete');
+  const segunda = { ...clonar(base.milestones[0]), number: base.milestones[0].number + 1 };
+  const decisao = classifySnapshot(
+    evidencia(base, { milestones: [clonar(base.milestones[0]), segunda] }),
+  );
+  assert.equal(decisao.code, 'PARTIAL');
+  assert.equal(decisao.outcome, undefined);
+  assert.deepEqual(decisao.milestones.map((m) => m.number), [
+    base.milestones[0].number,
+    base.milestones[0].number + 1,
+  ]);
+  assert.deepEqual(decisao.milestones.map((m) => m.state), ['closed', 'closed']);
+});
+
+it('uma milestone de outra versão fica fora da decisão do alvo', () => {
+  const base = fixture('complete');
+  const alheia = { ...clonar(base.milestones[0]), title: tagAlheia(base, '-anterior') };
+  const decisao = classifySnapshot(
+    evidencia(base, { milestones: [clonar(base.milestones[0]), alheia] }),
+  );
+  assert.equal(decisao.code, 'MISSING');
+  assert.equal(decisao.outcome, undefined);
+  assert.deepEqual(decisao.milestones.map((m) => m.number), [base.milestones[0].number]);
+  assert.deepEqual(decisao.unrelatedMilestones.map((m) => m.number), [
+    base.milestones[0].number + 1,
+  ]);
+});
+
+it('release publicada com milestone fechada sem issue aberta é MISSING com outcome COMPLETE_NOOP', () => {
+  const decisao = classifySnapshot(fixture('complete'));
+  assert.equal(decisao.code, 'MISSING');
+  assert.equal(decisao.outcome, 'COMPLETE_NOOP');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+  assert.deepEqual(decisao.releases.map((r) => r.id), [9010]);
+  assert.deepEqual(decisao.milestones.map((m) => m.number), [9004]);
+  assert.equal(decisao.targetShaValidates, true);
+  assert.ok(decisao.reason.length > 0);
+});
+
+it('release de rascunho para a versão pedida é PARTIAL sem outcome', () => {
+  const decisao = classifySnapshot(fixture('partial'));
+  assert.equal(decisao.code, 'PARTIAL');
+  assert.equal(decisao.outcome, undefined);
+  assert.deepEqual(decisao.releases.map((r) => r.id), [9000]);
+});
+
+it('milestone aberta com issue aberta é PARTIAL sem outcome', () => {
+  const base = fixture('complete');
+  const aberta = { ...clonar(base.milestones[0]), state: 'open', openIssues: 1 };
+  const decisao = classifySnapshot(evidencia(base, { milestones: [aberta] }));
+  assert.equal(decisao.code, 'PARTIAL');
+  assert.equal(decisao.outcome, undefined);
+});
