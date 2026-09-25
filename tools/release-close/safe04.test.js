@@ -16,7 +16,11 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { checkTagEligibility } from './eligibility.js';
 import { classifySnapshot } from './classify.js';
 import { makeFakeClient } from './fake-client.js';
-import { confirmApply, CONFIRMATION_WORD, APPLY_LOCKS } from './apply-gate.js';
+import {
+  confirmApply,
+  CONFIRMATION_WORD,
+  APPLY_LOCKS,
+} from './apply-gate.js';
 
 const TOOL_DIR = new URL('./', import.meta.url);
 const CLI_PATH = new URL('./release-close.js', import.meta.url).pathname;
@@ -80,6 +84,61 @@ const PLANO_DE_EXEMPLO = [
 
 const fixture = (name) =>
   JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), 'utf8'));
+
+// O texto revisado do operador tem UMA fonte nomeada no repositório: os campos
+// `release.data.notes` e `milestones.data[0].completionRecord` do fixture
+// congelado `fixtures/reviewed.json`. Nada aqui é prosa de template — um digest
+// sobre texto inventado vincularia a aprovação do operador a nada.
+const FIXTURE_REVISADO = fixture('reviewed');
+
+const CONTEUDO_REVISADO = Object.freeze({
+  version: FIXTURE_REVISADO.version,
+  expectedSha: FIXTURE_REVISADO.expectedSha,
+  commitSha: FIXTURE_REVISADO.tagObject.data.object.sha,
+  releaseNotes: FIXTURE_REVISADO.release.data.notes,
+  milestoneCompletionRecord: FIXTURE_REVISADO.milestones.data[0].completionRecord,
+});
+
+// Os símbolos novos do portão entram por `import` DINÂMICO e com guarda de tipo
+// por prova. Um `import` estático de um símbolo que ainda não existe derruba o
+// carregamento do arquivo inteiro: o runner morre antes de descobrir qualquer
+// teste, o que é descoberta zero — RED inválido — e não RED. A guarda também
+// separa "o símbolo não é exportado" (falha que descreve o comportamento
+// faltante) de "não é uma função" (erro de sonda).
+let moduloDoPortao = null;
+async function portao() {
+  if (moduloDoPortao === null) {
+    const mod = await import('./apply-gate.js');
+    for (const nome of ['canonicalReviewedDigest', 'renderReviewedText']) {
+      assert.equal(typeof mod[nome], 'function', `${nome} não é exportado por apply-gate.js`);
+    }
+    moduloDoPortao = mod;
+  }
+  return moduloDoPortao;
+}
+
+// O digest NUNCA é escrito à mão: vem da função exportada que o portão recalcula
+// no momento da pergunta, de modo que o valor que a suíte compara é o mesmo
+// valor que a fechadura de conteúdo compara.
+async function revisadoComDigest() {
+  const mod = await portao();
+  return {
+    reviewed: CONTEUDO_REVISADO,
+    reviewedDigest: mod.canonicalReviewedDigest(CONTEUDO_REVISADO),
+  };
+}
+
+// Sink de gravação que RELATA a contagem de caracteres recebidos. Um
+// `process.stdout.write` de verdade devolve booleano, e é exatamente por isso
+// que a CLI entrega um adaptador: a fechadura de sink precisa saber se o plano
+// chegou a algum lugar.
+function sinkQueConta(eventos, rotulo) {
+  return (texto) => {
+    const recebido = typeof texto === 'string' ? texto : '';
+    eventos.push(`${rotulo}:${recebido}`);
+    return recebido.length;
+  };
+}
 
 function evidenceFromSnapshot(snapshot) {
   if (!snapshot.milestones || !snapshot.milestones.ok) {
@@ -260,41 +319,68 @@ describe('zero mutação em verify e plan (D-16)', () => {
 
 describe('portão de dupla trava do apply (D-14)', () => {
   it('recusa sem a flag --yes e nomeia a fechadura ausente', async () => {
+    const { reviewed, reviewedDigest } = await revisadoComDigest();
+    const eventos = [];
+    const perguntou = [];
     const resultado = await confirmApply({
       yesFlag: false,
       isTTY: true,
+      outputIsTTY: false,
       planText: PLANO_DE_EXEMPLO,
-      ask: async () => CONFIRMATION_WORD,
-    });
-    assert.equal(resultado.confirmed, false);
-    assert.equal(resultado.lock, 'flag');
-    assert.match(resultado.reason, /--yes/);
-  });
-
-  it('recusa com entrada não interativa mesmo com a flag --yes', async () => {
-    const perguntou = [];
-    const resultado = await confirmApply({
-      yesFlag: true,
-      isTTY: false,
-      planText: PLANO_DE_EXEMPLO,
+      reviewed,
+      reviewedDigest,
       ask: async () => {
         perguntou.push(true);
         return CONFIRMATION_WORD;
       },
+      write: sinkQueConta(eventos, 'plano'),
+    });
+    assert.equal(resultado.confirmed, false);
+    assert.equal(resultado.lock, 'flag');
+    assert.match(resultado.reason, /--yes/);
+    // A recusa por flag é uma recusa ANTES da renderização: o sink não é
+    // chamado nenhuma vez e nenhuma pergunta é aberta. Esta é a prova canônica da
+    // posição de renderização.
+    assert.deepEqual(eventos, [], 'a recusa por flag escreveu no sink');
+    assert.deepEqual(perguntou, [], 'a recusa por flag perguntou algo');
+  });
+
+  it('recusa com entrada não interativa mesmo com a flag --yes', async () => {
+    const { reviewed, reviewedDigest } = await revisadoComDigest();
+    const eventos = [];
+    const perguntou = [];
+    const resultado = await confirmApply({
+      yesFlag: true,
+      isTTY: false,
+      outputIsTTY: false,
+      planText: PLANO_DE_EXEMPLO,
+      reviewed,
+      reviewedDigest,
+      ask: async () => {
+        perguntou.push(true);
+        return CONFIRMATION_WORD;
+      },
+      write: sinkQueConta(eventos, 'plano'),
     });
     assert.equal(resultado.confirmed, false);
     assert.equal(resultado.lock, 'tty');
     assert.match(resultado.reason, /terminal interativo/);
     assert.deepEqual(perguntou, [], 'a recusa por pipe não pode perguntar nada');
+    assert.deepEqual(eventos, [], 'a recusa por pipe escreveu no sink');
   });
 
   it('recusa quando a confirmação digitada não é sim', async () => {
+    const { reviewed, reviewedDigest } = await revisadoComDigest();
     for (const resposta of ['nao', 's', 'simmm', 'y', 'yes', '', '  ']) {
       const resultado = await confirmApply({
         yesFlag: true,
         isTTY: true,
+        outputIsTTY: true,
         planText: PLANO_DE_EXEMPLO,
+        reviewed,
+        reviewedDigest,
         ask: async () => resposta,
+        write: () => PLANO_DE_EXEMPLO.length,
       });
       assert.equal(resultado.confirmed, false, `resposta ${JSON.stringify(resposta)} confirmou`);
       assert.equal(resultado.lock, 'answer');
@@ -302,51 +388,75 @@ describe('portão de dupla trava do apply (D-14)', () => {
   });
 
   it('confirma somente com flag, terminal interativo e a digitação sim', async () => {
+    const { reviewed, reviewedDigest } = await revisadoComDigest();
     const resultado = await confirmApply({
       yesFlag: true,
       isTTY: true,
+      outputIsTTY: true,
       planText: PLANO_DE_EXEMPLO,
+      reviewed,
+      reviewedDigest,
       ask: async () => ` ${CONFIRMATION_WORD.toUpperCase()} `,
+      write: () => PLANO_DE_EXEMPLO.length,
     });
     assert.equal(resultado.confirmed, true);
     assert.equal(resultado.lock, null);
+    assert.equal(resultado.reviewedDigest, reviewedDigest);
   });
 
   it('grava o plano antes de qualquer pergunta', async () => {
+    const { reviewed, reviewedDigest } = await revisadoComDigest();
     const eventos = [];
     const resultado = await confirmApply({
       yesFlag: true,
       isTTY: true,
+      outputIsTTY: true,
       planText: PLANO_DE_EXEMPLO,
+      reviewed,
+      reviewedDigest,
       ask: async () => {
         eventos.push('pergunta');
         return CONFIRMATION_WORD;
       },
-      write: (texto) => eventos.push(`plano:${texto}`),
+      write: sinkQueConta(eventos, 'plano'),
     });
     assert.equal(resultado.confirmed, true);
-    assert.deepEqual(eventos, [`plano:${PLANO_DE_EXEMPLO}`, 'pergunta']);
+    // Ordem declarada uma única vez: o plano ordenado, o conteúdo revisado e só
+    // então a pergunta.
+    assert.deepEqual(eventos, [
+      `plano:${PLANO_DE_EXEMPLO}`,
+      `plano:${(await portao()).renderReviewedText(reviewed)}`,
+      'pergunta',
+    ]);
   });
 
-  it('grava o plano antes de perguntar mesmo quando vai recusar', async () => {
+  it('não mostra plano algum para um apply que já ia recusar', async () => {
+    const { reviewed, reviewedDigest } = await revisadoComDigest();
     const eventos = [];
-    await confirmApply({
+    const resultado = await confirmApply({
       yesFlag: false,
       isTTY: false,
+      outputIsTTY: false,
       planText: PLANO_DE_EXEMPLO,
+      reviewed,
+      reviewedDigest,
       ask: async () => {
         eventos.push('pergunta');
         return CONFIRMATION_WORD;
       },
-      write: (texto) => eventos.push(`plano:${texto}`),
+      write: sinkQueConta(eventos, 'plano'),
     });
-    assert.deepEqual(eventos, [`plano:${PLANO_DE_EXEMPLO}`]);
+    assert.deepEqual(eventos, []);
+    assert.equal(resultado.confirmed, false);
+    assert.equal(resultado.lock, 'flag');
   });
 
   it('verifica flag, depois terminal, depois resposta, nessa ordem', async () => {
+    const { reviewed, reviewedDigest } = await revisadoComDigest();
     const semFlag = await confirmApply({
       yesFlag: false,
       isTTY: false,
+      outputIsTTY: false,
       planText: PLANO_DE_EXEMPLO,
       ask: async () => 'nao',
     });
@@ -355,6 +465,7 @@ describe('portão de dupla trava do apply (D-14)', () => {
     const semTerminal = await confirmApply({
       yesFlag: true,
       isTTY: false,
+      outputIsTTY: false,
       planText: PLANO_DE_EXEMPLO,
       ask: async () => 'nao',
     });
@@ -363,19 +474,38 @@ describe('portão de dupla trava do apply (D-14)', () => {
     const respostaErrada = await confirmApply({
       yesFlag: true,
       isTTY: true,
+      outputIsTTY: true,
       planText: PLANO_DE_EXEMPLO,
+      reviewed,
+      reviewedDigest,
       ask: async () => 'nao',
+      write: () => PLANO_DE_EXEMPLO.length,
     });
     assert.equal(respostaErrada.lock, 'answer', 'a resposta é a última fechadura');
-    assert.deepEqual(APPLY_LOCKS, ['plan', 'flag', 'tty', 'prompt', 'answer']);
+    // A ordem é comparada com a lista EXPORTADA pelo portão, nunca repetida
+    // aqui como cópia literal do mesmo texto.
+    assert.deepEqual(APPLY_LOCKS, [
+      'plan',
+      'flag',
+      'tty',
+      'output',
+      'sink',
+      'content',
+      'prompt',
+      'answer',
+    ]);
   });
 
   it('recusa quando nenhum plano foi renderizado para revisão', async () => {
+    const { reviewed, reviewedDigest } = await revisadoComDigest();
     for (const plano of ['', '   ', null, undefined]) {
       const resultado = await confirmApply({
         yesFlag: true,
         isTTY: true,
+        outputIsTTY: true,
         planText: plano,
+        reviewed,
+        reviewedDigest,
         ask: async () => CONFIRMATION_WORD,
       });
       assert.equal(resultado.confirmed, false);
@@ -384,14 +514,28 @@ describe('portão de dupla trava do apply (D-14)', () => {
   });
 
   it('avaliações sequenciais do portão não compartilham estado (hipótese F)', async () => {
+    const { reviewed, reviewedDigest } = await revisadoComDigest();
     const base = { planText: PLANO_DE_EXEMPLO };
-    const aprovada = await confirmApply({ ...base, yesFlag: true, isTTY: true, ask: async () => 'sim' });
+    const aprovada = await confirmApply({
+      ...base,
+      yesFlag: true,
+      isTTY: true,
+      outputIsTTY: true,
+      reviewed,
+      reviewedDigest,
+      ask: async () => 'sim',
+      write: () => PLANO_DE_EXEMPLO.length,
+    });
     const negada = await confirmApply({ ...base, yesFlag: false, isTTY: false, ask: async () => 'nao' });
     const aprovadaDeNovo = await confirmApply({
       ...base,
       yesFlag: true,
       isTTY: true,
+      outputIsTTY: true,
+      reviewed,
+      reviewedDigest,
       ask: async () => 'sim',
+      write: () => PLANO_DE_EXEMPLO.length,
     });
     assert.equal(aprovada.confirmed, true);
     assert.equal(negada.confirmed, false);
@@ -402,8 +546,13 @@ describe('portão de dupla trava do apply (D-14)', () => {
   it('a CLI recusa com pipe mesmo com a flag --yes e não pergunta nada', () => {
     const resultado = runCliPiped(['apply', '--yes']);
     assert.notEqual(resultado.status, 0);
+    // A cláusula `terminal interativo` mora no motivo da fechadura `tty`, e
+    // `tty` é a fechadura que um filho com pipe alcança: o processo filho tem a
+    // entrada E a saída em pipe, então a fechadura de saída é inalcançável a
+    // partir dele. A recusa NÃO é atribuída a `output`.
     assert.match(resultado.stderr, /terminal interativo/);
     assert.doesNotMatch(resultado.stdout, /Confirmar o apply/);
+    assert.equal(resultado.stdout, '', 'um apply com pipe não pode renderizar nada antes de recusa');
   });
 
   it('a CLI recusa sem a flag --yes antes de abrir qualquer prompt', () => {
@@ -450,14 +599,16 @@ describe('plano ordenado visível antes da pergunta (D-15)', () => {
     assert.equal(plan.bloqueio, null);
   });
 
-  it('a CLI mostra o plano completo antes de recusar o apply por pipe', () => {
+  it('a CLI com pipe não renderiza nada e recusa na fechadura de terminal de entrada', () => {
     const resultado = runCliPiped(['apply', '--yes']);
-    for (const passo of ORDEM_FIXADA_DOS_PASSOS) {
-      assert.ok(resultado.stdout.includes(passo), `passo ausente no plano: ${passo}`);
-    }
-    const indiceDoPrimeiroPasso = resultado.stdout.indexOf(ORDEM_FIXADA_DOS_PASSOS[0]);
-    const indiceDaRecusa = resultado.stdout.length;
-    assert.ok(indiceDoPrimeiroPasso >= 0 && indiceDoPrimeiroPasso < indiceDaRecusa);
+    // A afirmação é o oposto da antiga: um apply com pipe não mostra plano
+    // algum. Ele falha na fechadura `tty` (lock três), que vem ANTES da
+    // fechadura de saída (lock quatro), então um processo filho com pipe jamais
+    // alcança `output`.
+    assert.notEqual(resultado.status, 0);
+    assert.match(resultado.stderr, /terminal interativo/);
+    assert.equal(resultado.stdout, '');
+    assert.doesNotMatch(resultado.stderr, /Confirmar o apply/);
   });
 });
 
@@ -486,6 +637,7 @@ describe('higiene de segredo na saída e nas fontes (Pitfall 7)', () => {
   });
 
   it('as saídas capturadas de verify, plan e apply não carregam forma de credencial', async () => {
+    const { reviewed, reviewedDigest } = await revisadoComDigest();
     const saidas = [
       runCli(['verify']),
       runCli(['verify', '--json']),
@@ -500,18 +652,37 @@ describe('higiene de segredo na saída e nas fontes (Pitfall 7)', () => {
     }
     const portao = [];
     portao.push(
-      await confirmApply({ yesFlag: false, isTTY: false, planText: PLANO_DE_EXEMPLO, ask: async () => 'sim' }),
+      await confirmApply({ yesFlag: false, isTTY: false, outputIsTTY: false, planText: PLANO_DE_EXEMPLO, ask: async () => 'sim' }),
     );
     portao.push(
-      await confirmApply({ yesFlag: true, isTTY: false, planText: PLANO_DE_EXEMPLO, ask: async () => 'sim' }),
+      await confirmApply({ yesFlag: true, isTTY: false, outputIsTTY: false, planText: PLANO_DE_EXEMPLO, ask: async () => 'sim' }),
     );
     portao.push(
-      await confirmApply({ yesFlag: true, isTTY: true, planText: PLANO_DE_EXEMPLO, ask: async () => 'nao' }),
+      await confirmApply({
+        yesFlag: true,
+        isTTY: true,
+        outputIsTTY: true,
+        planText: PLANO_DE_EXEMPLO,
+        reviewed,
+        reviewedDigest,
+        ask: async () => 'nao',
+        write: () => PLANO_DE_EXEMPLO.length,
+      }),
     );
+    const renderizados = [];
     portao.push(
-      await confirmApply({ yesFlag: true, isTTY: true, planText: PLANO_DE_EXEMPLO, ask: async () => 'sim' }),
+      await confirmApply({
+        yesFlag: true,
+        isTTY: true,
+        outputIsTTY: true,
+        planText: PLANO_DE_EXEMPLO,
+        reviewed,
+        reviewedDigest,
+        ask: async () => 'sim',
+        write: sinkQueConta(renderizados, 'render'),
+      }),
     );
-    saidas.push(JSON.stringify(portao), PLANO_DE_EXEMPLO);
+    saidas.push(JSON.stringify(portao), PLANO_DE_EXEMPLO, ...renderizados);
 
     for (const saida of saidas) {
       for (const forma of FORMAS_DE_CREDENCIAL) {
@@ -529,4 +700,281 @@ describe('higiene de segredo na saída e nas fontes (Pitfall 7)', () => {
       assert.ok(!/process\.env\./.test(texto), `${arquivo} lê process.env`);
     }
   });
+});
+
+// ===========================================================================
+// fechaduras novas: terminal de saída, sink real, conteúdo revisado ligado ao
+// digest canônico, e a posição única de renderização
+// ===========================================================================
+//
+// CONVENÇÃO OBRIGATÓRIA: toda prova NOVA deste arquivo é um `it()` de nível
+// superior, nunca aninhado em `describe`. O node indenta subtestes TAP aninhados,
+// e um teste alvo dentro de um `describe` fica invisível para o verificador de
+// evidência RED (`check tdd-red-evidence`), que precisa enxergar a falha do
+// teste nomeado. Os `describe` acima agrupam as provas herdadas de 09-03; as
+// provas novas ficam aqui, no nível superior, por esse motivo e não por gosto.
+
+it('recusa com terminal de entrada vivo e saída ausente, sem escrever e sem perguntar', async () => {
+  const { reviewed, reviewedDigest } = await revisadoComDigest();
+  const eventos = [];
+  const perguntou = [];
+  const resultado = await confirmApply({
+    yesFlag: true,
+    isTTY: true,
+    outputIsTTY: false,
+    planText: PLANO_DE_EXEMPLO,
+    reviewed,
+    reviewedDigest,
+    ask: async () => {
+      perguntou.push(true);
+      return CONFIRMATION_WORD;
+    },
+    write: sinkQueConta(eventos, 'plano'),
+  });
+  assert.equal(resultado.confirmed, false);
+  assert.equal(resultado.lock, 'output');
+  assert.match(resultado.reason, /terminal/i);
+  assert.deepEqual(eventos, [], 'a recusa por saída renderizou algo');
+  assert.deepEqual(perguntou, [], 'a recusa por saída perguntou algo');
+});
+
+it('recusa com sink ausente ou que não é função, antes de qualquer renderização', async () => {
+  const { reviewed, reviewedDigest } = await revisadoComDigest();
+  for (const write of [undefined, null, 'stdout', 42, {}]) {
+    const eventos = [];
+    const resultado = await confirmApply({
+      yesFlag: true,
+      isTTY: true,
+      outputIsTTY: true,
+      planText: PLANO_DE_EXEMPLO,
+      reviewed,
+      reviewedDigest,
+      ask: async () => {
+        eventos.push('pergunta');
+        return CONFIRMATION_WORD;
+      },
+      write,
+    });
+    assert.equal(resultado.confirmed, false, `sink ${JSON.stringify(write)} confirmou`);
+    assert.equal(resultado.lock, 'sink', `sink ${JSON.stringify(write)} não recusa em sink`);
+    assert.deepEqual(eventos, [], `sink ${JSON.stringify(write)} abriu a pergunta`);
+  }
+});
+
+it('recusa com sink que relata zero caracteres depois do render e antes da pergunta', async () => {
+  const { reviewed, reviewedDigest } = await revisadoComDigest();
+  const eventos = [];
+  const perguntou = [];
+  const resultado = await confirmApply({
+    yesFlag: true,
+    isTTY: true,
+    outputIsTTY: true,
+    planText: PLANO_DE_EXEMPLO,
+    reviewed,
+    reviewedDigest,
+    ask: async () => {
+      perguntou.push(true);
+      return CONFIRMATION_WORD;
+    },
+    write: (texto) => {
+      eventos.push(`plano:${texto}`);
+      return 0;
+    },
+  });
+  assert.equal(resultado.confirmed, false);
+  assert.equal(resultado.lock, 'sink');
+  // Esta é a ÚNICA família de recusa cujo observável de escrita são chamadas de
+  // sink, e não zero chamadas: o render aconteceu e o total relatado foi zero.
+  assert.equal(eventos.length, 2, 'a recusa por zero caracteres não fez as duas renderizações');
+  assert.deepEqual(perguntou, [], 'a recusa por zero caracteres perguntou algo');
+});
+
+it('recusa com sink que não relata contagem de caracteres', async () => {
+  const { reviewed, reviewedDigest } = await revisadoComDigest();
+  for (const relato of [true, false, null, undefined, 'dois', NaN, -1]) {
+    const resultado = await confirmApply({
+      yesFlag: true,
+      isTTY: true,
+      outputIsTTY: true,
+      planText: PLANO_DE_EXEMPLO,
+      reviewed,
+      reviewedDigest,
+      ask: async () => CONFIRMATION_WORD,
+      // `process.stdout.write` devolve booleano: um sink que não relata contagem
+      // não pode ser distinguido de um sink que engoliu o plano.
+      write: () => relato,
+    });
+    assert.equal(resultado.confirmed, false, `relato ${String(relato)} confirmou`);
+    assert.equal(resultado.lock, 'sink', `relato ${String(relato)} não recusa em sink`);
+  }
+});
+
+it('recusa sem conteúdo revisado, em branco, ou sem notas e sem registro de conclusão', async () => {
+  const mod = await portao();
+  const semCampos = {
+    version: CONTEUDO_REVISADO.version,
+    expectedSha: CONTEUDO_REVISADO.expectedSha,
+    commitSha: CONTEUDO_REVISADO.commitSha,
+  };
+  const casos = [
+    ['ausente', undefined],
+    ['nulo', null],
+    ['objeto vazio', {}],
+    ['lista', []],
+    ['sem notas de release', { ...CONTEUDO_REVISADO, releaseNotes: '' }],
+    ['notas em branco', { ...CONTEUDO_REVISADO, releaseNotes: '   \n  ' }],
+    ['sem registro de conclusão', { ...CONTEUDO_REVISADO, milestoneCompletionRecord: '' }],
+    ['registro em branco', { ...CONTEUDO_REVISADO, milestoneCompletionRecord: '  ' }],
+    ['sem os dois textos', semCampos],
+    ['sem versão', { ...CONTEUDO_REVISADO, version: '' }],
+    ['sem sha esperado', { ...CONTEUDO_REVISADO, expectedSha: '' }],
+    ['sem commit observations', { ...CONTEUDO_REVISADO, commitSha: '' }],
+  ];
+  for (const [rotulo, reviewed] of casos) {
+    const eventos = [];
+    const perguntou = [];
+    const resultado = await confirmApply({
+      yesFlag: true,
+      isTTY: true,
+      outputIsTTY: true,
+      planText: PLANO_DE_EXEMPLO,
+      reviewed,
+      reviewedDigest: reviewed === undefined ? undefined : mod.canonicalReviewedDigest(reviewed),
+      ask: async () => {
+        perguntou.push(true);
+        return CONFIRMATION_WORD;
+      },
+      write: sinkQueConta(eventos, 'plano'),
+    });
+    assert.equal(resultado.confirmed, false, `conteúdo ${rotulo} confirmou`);
+    assert.equal(resultado.lock, 'content', `conteúdo ${rotulo} não recusa em content`);
+    assert.deepEqual(eventos, [], `conteúdo ${rotulo} renderizou algo`);
+    assert.deepEqual(perguntou, [], `conteúdo ${rotulo} perguntou algo`);
+  }
+});
+
+it('recusa quando o conteúdo revisado mudou entre a renderização e a confirmação', async () => {
+  const { reviewed } = await revisadoComDigest();
+  const eventos = [];
+  const perguntou = [];
+  const resultado = await confirmApply({
+    yesFlag: true,
+    isTTY: true,
+    outputIsTTY: true,
+    planText: PLANO_DE_EXEMPLO,
+    reviewed,
+    // O digest é o que o plano carregava; o conteúdo é o que mudou. Um gate que
+    // aceitasse o digest sem recalcular deixaria uma frase trocada passar.
+    reviewedDigest: '0'.repeat(64),
+    ask: async () => {
+      perguntou.push(true);
+      return CONFIRMATION_WORD;
+    },
+    write: sinkQueConta(eventos, 'plano'),
+  });
+  assert.equal(resultado.confirmed, false);
+  assert.equal(resultado.lock, 'content');
+  assert.match(resultado.reason, /mudou|mudou entre/i);
+  assert.deepEqual(eventos, [], 'a recusa por digest renderizou algo');
+  assert.deepEqual(perguntou, [], 'a recusa por digest perguntou algo');
+});
+
+it('toda recusa antes do render nomeia a primeira fechadura que falhou e deixa o sink intocado', async () => {
+  const { reviewed, reviewedDigest } = await revisadoComDigest();
+  const base = {
+    yesFlag: true,
+    isTTY: true,
+    outputIsTTY: true,
+    planText: PLANO_DE_EXEMPLO,
+    reviewed,
+    reviewedDigest,
+    ask: async () => CONFIRMATION_WORD,
+    write: () => PLANO_DE_EXEMPLO.length,
+  };
+  const familia = [
+    ['plan', { ...base, planText: '   ' }],
+    ['flag', { ...base, yesFlag: false }],
+    ['tty', { ...base, isTTY: false }],
+    ['output', { ...base, outputIsTTY: false }],
+    ['sink', { ...base, write: undefined }],
+    ['content', { ...base, reviewed: { ...CONTEUDO_REVISADO, releaseNotes: '' } }],
+  ];
+  for (const [fechadura, entrada] of familia) {
+    const eventos = [];
+    const resultado = await confirmApply({
+      ...entrada,
+      ask: async () => {
+        eventos.push('pergunta');
+        return CONFIRMATION_WORD;
+      },
+      write:
+        entrada.write === undefined
+          ? () => {
+              eventos.push('plano');
+              return 1;
+            }
+          : (texto) => {
+              eventos.push(`plano:${texto}`);
+              return typeof texto === 'string' ? texto.length : 0;
+            },
+    });
+    assert.equal(resultado.confirmed, false, `fechadura ${fechadura} confirmou`);
+    assert.equal(resultado.lock, fechadura, `fechadura esperada ${fechadura}, recebida ${resultado.lock}`);
+    assert.deepEqual(eventos, [], `fechadura ${fechadura} tocou o sink ou a pergunta`);
+  }
+});
+
+it('as três fechaduras novas ficam entre a de terminal e a de pergunta, e as cinco antigas guardam a ordem', () => {
+  assert.equal(APPLY_LOCKS.length, 8);
+  const posicao = (fechadura) => APPLY_LOCKS.indexOf(fechadura);
+  assert.ok(posicao('tty') < posicao('output'), 'output precisa vir depois de tty');
+  assert.ok(posicao('output') < posicao('sink'), 'sink precisa vir depois de output');
+  assert.ok(posicao('sink') < posicao('content'), 'content precisa vir depois de sink');
+  assert.ok(posicao('content') < posicao('prompt'), 'prompt precisa vir depois de content');
+  // As cinco originais mantêm a ordem relativa entre si, e as três novas são
+  // exatamente o acréscimo.
+  const antigas = APPLY_LOCKS.filter((fechadura) =>
+    ['plan', 'flag', 'tty', 'prompt', 'answer'].includes(fechadura),
+  );
+  assert.deepEqual(antigas, ['plan', 'flag', 'tty', 'prompt', 'answer']);
+  const novas = APPLY_LOCKS.filter(
+    (fechadura) => !['plan', 'flag', 'tty', 'prompt', 'answer'].includes(fechadura),
+  );
+  assert.deepEqual(novas, ['output', 'sink', 'content']);
+});
+
+it('mostra o plano ordenado e o conteúdo revisado no terminal vivo, antes da pergunta', async () => {
+  // O texto do plano é o que a própria CLI renderiza, não uma cópia local: a
+  // prova é sobre o que o operador leria, não sobre um literal do teste.
+  const textoDoPlano = runCli(['plan']);
+  const { reviewed, reviewedDigest } = await revisadoComDigest();
+  const eventos = [];
+  const resultado = await confirmApply({
+    yesFlag: true,
+    isTTY: true,
+    outputIsTTY: true,
+    planText: textoDoPlano,
+    reviewed,
+    reviewedDigest,
+    ask: async () => {
+      eventos.push('pergunta');
+      return CONFIRMATION_WORD;
+    },
+    write: sinkQueConta(eventos, 'render'),
+  });
+  assert.equal(resultado.confirmed, true);
+  const [plano, revisado] = eventos;
+  for (const passo of ORDEM_FIXADA_DOS_PASSOS) {
+    assert.ok(plano.includes(passo), `passo ausente no que o sink recebeu: ${passo}`);
+  }
+  assert.ok(plano.includes('Passos ordenados'), 'o render do plano não carrega os passos ordenados');
+  assert.ok(
+    revisado.includes(CONTEUDO_REVISADO.releaseNotes),
+    'o render do conteúdo revisado não mostra as notas de Release do fixture',
+  );
+  assert.ok(
+    revisado.includes(CONTEUDO_REVISADO.milestoneCompletionRecord),
+    'o render do conteúdo revisado não mostra o registro de conclusão do fixture',
+  );
+  assert.equal(eventos[2], 'pergunta', 'a pergunta não veio depois dos dois renders');
 });
