@@ -4,16 +4,16 @@ milestone: v0.1.2
 milestone_name: GitHub Release Reliability
 current_phase: 09
 current_phase_name: Release-Close Contract & Fixtures
-status: gaps_found
-stopped_at: Phase 9 verification found gaps
-last_updated: "2026-09-25T15:17:02.652Z"
+status: Ready to execute — six gap-closure plans pending
+stopped_at: Planned Phase 09 gap closure
+last_updated: "2026-09-25T16:38:30.103Z"
 last_activity: 2026-09-25
-last_activity_desc: Phase 09 plans executed; verification found six fail-closed contract gaps
-state_head: 186b4ca48b9775f4fea8778c0b0e81aa4c3fdb13
+last_activity_desc: Gap-closure plans 09-04 through 09-09 planned and plan-checker approved
+state_head: 1f50f3ab905de6755cb0387cb7973d662502fac6
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 3
+  total_plans: 9
   completed_plans: 3
 ---
 
@@ -28,12 +28,12 @@ See: `.planning/PROJECT.md` (updated 2026-09-25)
 
 ## Current Position
 
-Phase: 09 (Release-Close Contract & Fixtures) — PLANS COMPLETE (3 of 3)
-Plan: 3 of 3
-Status: Verification gaps found — gap-closure planning required
-Last activity: 2026-09-25 — Independent verification found six fail-closed contract gaps
+Phase: 09 (Release-Close Contract & Fixtures) — READY TO EXECUTE
+Plan: Gap closure 09-04 through 09-09
+Status: Ready to execute — six gap-closure plans pending
+Last activity: 2026-09-25 — Gap-closure plans 09-04 through 09-09 planned and plan-checker approved
 
-Progress: [██████████] 100% plans executed; phase completion blocked pending gap closure
+Progress: [███░░░░░░░] 33% (3/9 plans; six gap-closure plans pending)
 
 ## Performance Metrics
 
@@ -102,11 +102,11 @@ Explicit operator confirmation remains a required Phase 13 gate, not a current r
 ## Session Continuity
 
 Last session: 2026-09-25T15:17:02.641Z
-Stopped at: Phase 9 verification found gaps
-Resume file: /home/lucas/Documentos/Projetos/sgrf/.planning/phases/09-release-close-contract-fixtures/09-VERIFICATION.md
+Stopped at: Planned Phase 09 gap closure
+Resume file: /home/lucas/Documentos/Projetos/sgrf/.planning/phases/09-release-close-contract-fixtures/09-09-PLAN.md
 
 ## Operator Next Steps
 
-- Plan the six verification gaps with `/gsd-plan-phase 09 --gaps`.
-- Re-run `/gsd-execute-phase 09 --gaps-only` after gap plans are created, then verify Phase 9 again.
+- Execute the six approved gap-closure plans with `/gsd-execute-phase 09 --gaps-only`.
+- Re-run Phase 9 verification after the gap plans complete; only a passing verification may close the phase.
 - Do not advance to Phase 10 or perform any live Release or Milestone mutation while Phase 9 has open verification gaps.

@@ -38,7 +38,7 @@ Phase numbering continues from the completed v0.1.1 milestone. Decimal phases ap
   3. Deterministic `node:test` fixtures and mocked API scenarios classify missing, partial, duplicate, conflicting, failed, and concurrent states, and the tool exposes no ref-write or destructive tag path.
   4. The pure eligibility contract accepts an existing annotated tag only when its peeled commit equals both the full expected SHA and the observed remote `main`; any mismatch is reported without a write action.
 
-**Plans**: 3/3 plans executed
+**Plans**: 3/9 plans executed
 Plans:
 **Wave 1**
 
@@ -51,6 +51,24 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 09-03-PLAN.md — Double-locked apply, plan display, mutations-zero and secret-hygiene proofs, coverage declaration
+
+**Wave 4** *(gap closure; parallel, disjoint file ownership)*
+
+- [ ] 09-04-PLAN.md — Strict annotated-tag identity and normalized read failures
+- [ ] 09-05-PLAN.md — Exact CI allowlist, target-scoped evidence, and completed no-op classification
+- [ ] 09-06-PLAN.md — Exact read-only client surface and enforceable mutation counter
+
+**Wave 5** *(gap closure; blocked on Wave 4 completion)*
+
+- [ ] 09-07-PLAN.md — Five-read production evidence path, import-safe CLI, and measured mutation propagation
+
+**Wave 6** *(gap closure; blocked on Wave 5 completion)*
+
+- [ ] 09-08-PLAN.md — Human-visible reviewed-content digest gate and robust TTY prompt settlement
+
+**Wave 7** *(gap closure; blocked on Wave 6 completion)*
+
+- [ ] 09-09-PLAN.md — Production failure normalization and same-identity re-read seam
 
 ### Phase 10: Read-Only Exact-SHA Preflight
 
@@ -123,7 +141,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 9. Release-Close Contract & Fixtures | v0.1.2 | 3/3 | In Progress|  |
+| 9. Release-Close Contract & Fixtures | v0.1.2 | 3/9 | In Progress|  |
 | 10. Read-Only Exact-SHA Preflight | v0.1.2 | 0/TBD | Not started | - |
 | 11. Guarded Idempotent Reconciliation | v0.1.2 | 0/TBD | Not started | - |
 | 12. CI Race Rehearsal & Operator Runbook | v0.1.2 | 0/TBD | Not started | - |
