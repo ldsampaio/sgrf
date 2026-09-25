@@ -28,6 +28,7 @@ import { classifySnapshot } from './classify.js';
 import { makeFakeClient } from './fake-client.js';
 import { assertNoMutation } from './client.js';
 import { confirmApply, canonicalReviewedDigest } from './apply-gate.js';
+import { reconciliar } from './reconcile.js';
 
 // A serialização do conteúdo revisado é reexportada, e não reimplementada aqui.
 // Um consumidor a jusante (a reconciliação da Fase 11, a procedimento do
@@ -273,9 +274,9 @@ function medirMutacoes(client) {
   }
 }
 
-// Decisão de produção: a costuradora única da fase. Monta o cliente uma vez,
-// percorre as cinco leituras declaradas e entrega ao classificador a evidência
-// que elas produziram.
+// CAMADA de decisão de produção: a costuradora única da fase. Monta o cliente
+// uma vez, percorre as cinco leituras declaradas e entrega ao classificador a
+// evidência que elas produziram.
 //
 // A ordem é fixa e é a mesma que o log de chamadas da suíte de elegibilidade
 // exige: as três leituras de tag e main primeiro, em ordem, e só então as duas
@@ -289,7 +290,12 @@ function medirMutacoes(client) {
 // `version`, `expectedSha` e `ci` chegam resolvidos ou saem do snapshot. `client`
 // chega injetado ou é construído a partir do snapshot. `ci` nunca é derivado de
 // outro valor: o que não foi fornecido e não está no snapshot fica ausente.
-export async function decide({ snapshot, client, version, expectedSha, ci }) {
+//
+// Esta função é a dependência INJETADA na costura de reconciliação, e é
+// exportada com nome próprio para que uma releitura possa re-derivar as mesmas
+// três decisões sem voltar a entrar na costura. Ela não conhece a costura: o
+// ciclo seria infinito.
+export async function camadaDeDecisao({ snapshot, client, version, expectedSha, ci }) {
   const entrada = { snapshot, client, version, expectedSha, ci };
   if (
     (entrada.client === undefined || entrada.client === null) &&
@@ -342,6 +348,61 @@ export async function decide({ snapshot, client, version, expectedSha, ci }) {
     mutations,
     client: resolvedClient,
   };
+}
+
+// A decisão EXPORTADA: a camada de produção mais a costura de reconciliação.
+//
+// É aqui que as duas coisas ficam ligadas. A camada devolve as três decisões e a
+// evidência que ela OBSERVOU — com a contagem medida já validada — e a costura
+// recebe essas três como DADO, mais a camada injetada, e decide sobre a
+// releitura quando alguma delas falhou. A costura não importa nem
+// `eligibility.js` nem `classify.js`, e a CLI não passa a decisión para ela:
+// as decisões são valores que a CLI já detém, e é por isso que a fronteira de
+// módulo e a prova de independência do classificador continuam de pé.
+//
+// Cada uma das nove entradas da costura é nomeada aqui porque a costura não
+// pode sourcingar nenhuma delas por si:
+//
+//   client       o cliente que a camada acabou de construir e usar
+//   version      o valor já resolvido pela camada
+//   expectedSha  o valor já resolvido pela camada
+//   ci           cópia byte a byte do bloco ci que a camada recebeu — o
+//               construtor exportado de evidência já o copiou para a própria
+//               saída, e nenhuma das cinco leituras devolve CI
+//   evidence     o objeto de cinco chaves que o construtor exportado devolveu,
+//               passado adiante SEM reconstruir: reconstruir aqui devolveria um
+//               objeto diferente, e a costura decidiria sobre uma evidência que
+//               o classificador nunca viu
+//   eligibility  a decisão da camada
+//   classification a decisão da camada
+//   decide       a própria camada de produção, injetada — NÃO a função
+//               delegadora, para que a releitura rode as leituras, o construtor
+//               e as duas decisões puras e PARE ali
+//   failurePlan  só quando um chamador programático passou um; ausente por
+//               omissão, e inalcançável pela linha de comando
+//
+// `failurePlan` é parâmetro PROGRAMÁTICO e não tem contraparte na linha de
+// comando: o analisador de opções não tem chave para ele e o texto de uso não
+// o menciona. Uma falha roteirizada é um artefato de teste, e um teste que
+// precisa de uma opção nova na CLI está pedindo uma backdoor de produção.
+export async function decide({ snapshot, client, version, expectedSha, ci, failurePlan }) {
+  const base = await camadaDeDecisao({ snapshot, client, version, expectedSha, ci });
+  // A medição é feita aqui, na função que a CLI chama, e não só dentro da
+  // camada: o valor que o operador lê é o que a fronteira mediu, e a costura
+  // mede de novo por conta própria depois das suas releituras.
+  const mutations = medirMutacoes(base.client);
+  const reconciliation = await reconciliar({
+    client: base.client,
+    version: base.version,
+    expectedSha: base.expectedSha,
+    ci: base.ci,
+    evidence: base.evidence,
+    eligibility: base.eligibility,
+    classification: base.classification,
+    decide: camadaDeDecisao,
+    failurePlan,
+  });
+  return { ...base, mutations, reconciliation };
 }
 
 function resolveMarker(spec, ctx) {
@@ -400,6 +461,7 @@ export function buildClosePlan({
   classificacao,
   evidence,
   mutations,
+  reconciliation,
 }) {
   const evidencia = evidence ?? buildCloseEvidence({ version, expectedSha, ci: snapshot.ci });
   const tagSha =
@@ -433,6 +495,18 @@ export function buildClosePlan({
   // fechado reporta applyLiberado true aqui — e a reconciliação da Fase 11
   // relata um campo de nome diferente (`writeProposed`), nunca derivado deste.
   const bloqueado = BLOCKING_CODES.includes(classificacao.code);
+  // Uma RECUSA da costura bloqueia o plano, e por um motivo que não é o
+  // estado: uma releitura que falhou de novo deixou o estado remoto
+  // INDETERMINADO, e um estado indeterminado não é um estado limpo — liberá-lo
+  // seria tratar "não sei" como "sei que está bem". É a regra que faz a
+  // afirmação do plano se sustentar por conta própria, e não por acidente de
+  // uma elegibilidade que também ficou falsa. Nenhum dos dois nomes de campo é
+  // derivado do outro: `writeProposed` continua falso aqui E num plano liberado.
+  const recusou = reconciliation !== null && reconciliation !== undefined && reconciliation.family !== null;
+  const bloqueioPorEstado = bloqueado ? `estado ${classificacao.code}: ${classificacao.reason}` : null;
+  const bloqueioPorRecusa = recusou
+    ? `reconciliação recusada (${reconciliation.family}): ${reconciliation.reason}`
+    : null;
 
   // O digest vem da ÚNICA função exportada de serialização, nunca de uma
   // segunda implementação local: um digest reimplementado aqui poderia divergir
@@ -467,10 +541,9 @@ export function buildClosePlan({
     evidencia,
     reviewed,
     reviewedDigest,
-    applyLiberado: eligibility.eligible === true && bloqueado === false,
-    bloqueio: bloqueado
-      ? `estado ${classificacao.code}: ${classificacao.reason}`
-      : null,
+    reconciliation: reconciliation ?? null,
+    applyLiberado: eligibility.eligible === true && bloqueado === false && recusou === false,
+    bloqueio: bloqueioPorRecusa ?? bloqueioPorEstado,
     steps,
     mutations,
   };
@@ -558,7 +631,11 @@ async function runVerify({ json, version, sha }, io) {
   }
   if (json) renderVerifyJson(decision.eligibility, decision.mutations, io.stdout);
   else renderVerifyText(decision.version, decision.eligibility, decision.mutations, io.stdout);
-  return decision.eligibility.eligible ? 0 : 1;
+  // Uma família de falha da costura sai com código diferente de zero mesmo que a
+  // elegibilidade tenha sobrevivido: a costura rodou sobre o mesmo cliente, e
+  // uma releitura que voltou a falhar é o estado mais indeterminado que existe.
+  const recusou = decision.reconciliation !== null && decision.reconciliation.family !== null;
+  return decision.eligibility.eligible && !recusou ? 0 : 1;
 }
 
 async function runPlan({ json, version, sha }, io) {
@@ -574,6 +651,7 @@ async function runPlan({ json, version, sha }, io) {
       classificacao: decision.classification,
       evidence: decision.evidence,
       mutations: decision.mutations,
+      reconciliation: decision.reconciliation,
     });
   } catch (err) {
     return tratarRecusa(err, io.stderr);
@@ -662,6 +740,7 @@ async function runApply({ json, yes, version, sha }, io) {
       classificacao: decision.classification,
       evidence: decision.evidence,
       mutations: decision.mutations,
+      reconciliation: decision.reconciliation,
     });
   } catch (err) {
     return tratarRecusa(err, io.stderr);

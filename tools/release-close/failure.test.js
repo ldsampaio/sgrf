@@ -361,6 +361,11 @@ it('a releitura bem-sucedida chama a camada injetada sem plano de falhas e sem-c
   assert.equal(chamadas.length, 1, 'a releitura bem-sucedida não chamou a camada injetada');
   assert.deepEqual(Object.keys(chamadas[0]).sort(), ['ci', 'client', 'expectedSha', 'version']);
   assert.ok(!Object.prototype.hasOwnProperty.call(chamadas[0], 'failurePlan'), 'a camada injetada recebeu o plano de falhas');
+  // E o bloco ci que a costura recebeu é o MESMO objeto que a decisão carrega,
+  // byte a byte com o congelado do snapshot: um bloco reescrito aqui seria a
+  // evidência de CI que a releitura usaria, e ela não seria a do repositório.
+  assert.strictEqual(chamadas[0].ci, decisao.ci);
+  assert.deepEqual(chamadas[0].ci, base.ci);
   // E o que voltou NÃO é a tentativa falha: a elegibilidade da tentativa falha
   // era TRANSPORT, e a devolvida vem da releitura bem-sucedida.
   assert.equal(decisao.eligibility.code, 'TRANSPORT');
@@ -494,7 +499,9 @@ it('a decisão exportada delega à costura com as nove entradas e não reconstr�
   const chamada = corpo.slice(corpo.indexOf('reconciliar({'));
   const bloco = chamada.slice(0, chamada.indexOf('});') + 2);
   for (const nome of OITO_ENTRADAS) {
-    assert.match(bloco, new RegExp(`\\b${nome}:`), `a delegação não passa ${nome} para a costura`);
+    // O nome da chave, com ou sem dois pontos: a forma abreviada (`failurePlan,`)
+    // é uma entrada passada tanto quanto a forma explícita (`failurePlan: valor`).
+    assert.match(bloco, new RegExp(`\\b${nome}\\b`), `a delegação não passa ${nome} para a costura`);
   }
   // `evidence` e `ci` chegam COPIADOS do construtor exportado, nunca
   // reconstruídos: um construtor chamado de novo aqui devolveria um objeto
@@ -532,7 +539,6 @@ it('a decisão exportada carrega o bloco de reconciliação com as mesmas três 
   assert.strictEqual(decisao.reconciliation.evidence, decisao.evidence);
   assert.strictEqual(decisao.reconciliation.eligibility, decisao.eligibility);
   assert.strictEqual(decisao.reconciliation.classification, decisao.classification);
-  assert.strictEqual(decisao.reconciliation.ci, decisao.ci);
   assert.deepEqual(decisao.reconciliation.reads, []);
   assert.equal(decisao.reconciliation.family, null);
   assert.equal(decisao.reconciliation.recovered, false);
