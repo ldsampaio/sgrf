@@ -153,20 +153,29 @@ function loadReferenceFixture() {
   return JSON.parse(readFileSync(url, 'utf8'));
 }
 
-// Evidência plana de classificação derivada do fixture de referência: o
-// cliente fake entrega envelopes, a classificação consome campos.
-function evidenceFromSnapshot(snapshot) {
+// Evidência plana de classificação no contrato de cinco chaves, derivada do
+// fixture de referência: o cliente fake entrega envelopes, a classificação
+// consome campos.
+//
+// Este é o ÚNICO lugar do módulo onde a tradução de envelope para lista é
+// permitida: `snapshot.release` e `snapshot.milestones` são envelopes `ok` que
+// o cliente serve, e o classificador lê listas. O bloco `ci` é copiado
+// atravessado — nenhuma evidência de CI é reconstruída aqui, e o literal
+// `checks: { state: 'success' }` que existia aqui (o vetor de falsificação que
+// esta fase fecha) foi removido: um estado verde de CI não é um valor que a
+// ferramenta possa inventar a partir de identificadores de execução.
+export function evidenceFromSnapshot(snapshot, target) {
+  if (!target || typeof target !== 'object') {
+    throw new TypeError('Entrada inválida: o alvo resolvido é obrigatório para montar a evidência.');
+  }
   const release = snapshot.release && snapshot.release.ok ? snapshot.release.data : null;
   const milestones = snapshot.milestones && snapshot.milestones.ok ? snapshot.milestones.data : [];
   return {
-    release,
-    // O fixture de referência descreve um único objeto de release; a lista
-    // `releases` (duplicatas/conflitos) pertence aos fixtures de estado.
-    releases: [],
-    milestone: Array.isArray(milestones) && milestones.length > 0 ? milestones[0] : null,
-    checks: { state: 'success', runs: snapshot.runs ?? [] },
+    target: { version: target.version, expectedSha: target.expectedSha },
+    ci: snapshot.ci,
+    releases: release ? [release] : [],
+    milestones: Array.isArray(milestones) ? [...milestones] : [],
     closeMarkers: [],
-    eligibility: null,
   };
 }
 
@@ -179,7 +188,7 @@ function resolveMarker(spec, ctx) {
 // Monta o plano ordenado: o que seria criado, o que seria adotado, em que
 // ordem e contra quais SHAs/IDs congelados (D-15).
 export function buildClosePlan({ version, expectedSha, snapshot, eligibility, classificacao }) {
-  const evidence = evidenceFromSnapshot(snapshot);
+  const evidence = evidenceFromSnapshot(snapshot, { version, expectedSha });
   const tagSha =
     (snapshot.tagRef && snapshot.tagRef.data && snapshot.tagRef.data.object
       ? snapshot.tagRef.data.object.sha
@@ -192,8 +201,8 @@ export function buildClosePlan({ version, expectedSha, snapshot, eligibility, cl
     version,
     tagSha,
     commitSha,
-    releasePresente: evidence.release !== null,
-    milestonePresente: evidence.milestone !== null,
+    releasePresente: evidence.releases.length > 0,
+    milestonePresente: evidence.milestones.length > 0,
   };
   const steps = CLOSE_STEP_SPECS.map((spec) => {
     const marcador = resolveMarker(spec, ctx);
@@ -274,12 +283,17 @@ function renderVerifyJson(decision) {
 async function decide(snapshot, { version, sha }) {
   const resolvedVersion = version ?? snapshot.version;
   const resolvedSha = sha ?? snapshot.expectedSha;
+  const target = { version: resolvedVersion, expectedSha: resolvedSha };
   const client = makeFakeClient(snapshot);
   const eligibility = await checkTagEligibility(client, {
     version: resolvedVersion,
     expectedSha: resolvedSha,
   });
-  const classificacao = classifySnapshot(evidenceFromSnapshot(snapshot));
+  // O alvo resolvido entra no contrato: um override de `--version` ou `--sha`
+  // flui para a classificação em vez de ser ignorado. Um override que deixa de
+  // bater com o `ci.targetSha` congelado classifica como FAILED com a família
+  // CI-WRONG-SHA, que é a resposta fail-closed correta.
+  const classificacao = classifySnapshot(evidenceFromSnapshot(snapshot, target));
   return { resolvedVersion, resolvedSha, eligibility, classificacao };
 }
 

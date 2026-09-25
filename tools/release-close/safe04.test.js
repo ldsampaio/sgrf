@@ -86,32 +86,40 @@ function evidenceFromSnapshot(snapshot) {
     throw new TypeError('Snapshot de cliente inválido: milestones ausente.');
   }
   const milestones = snapshot.milestones.data;
+  const release = snapshot.release && snapshot.release.ok ? snapshot.release.data : null;
   return {
-    release: snapshot.release.ok ? snapshot.release.data : null,
-    releases: [],
-    milestone: Array.isArray(milestones) && milestones.length > 0 ? milestones[0] : null,
-    checks: { state: 'success', runs: snapshot.runs ?? [] },
+    target: { version: snapshot.version, expectedSha: snapshot.expectedSha },
+    ci: snapshot.ci,
+    releases: release ? [release] : [],
+    milestones: Array.isArray(milestones) ? [...milestones] : [],
     closeMarkers: [],
-    eligibility: null,
   };
 }
 
-// Evidência de classificação por fixture: os fixtures de estado já são
-// evidencia plana; o fixture de referência é formato de cliente e precisa da
-// mesma normalização que o CLI aplica.
+// Discriminador de forma: o ÚNICO literal que separa as duas formas declaradas
+// nesta fase é `Array.isArray(snapshot.milestones)` — true é evidência plana de
+// classificação, false é snapshot de cliente cujo `milestones` é um envelope
+// `ok`. Nunca discrimine por `target` ou `ci`: o fixture de referência é
+// formato de cliente e carrega os dois blocos, então usá-los como marca de
+// evidência plana o rotearia pelo caminho errado.
+//
+// Temporário: a tarefa 3 do plano 09-08 apaga este helper e o `evidenceFromSnapshot`
+// junto, no lugar do construtor de cinco leituras de produção.
 function evidenciaDe(fixtureCarregado) {
-  const ehFormatoCliente =
-    fixtureCarregado.milestones !== undefined && fixtureCarregado.checks === undefined;
-  return ehFormatoCliente ? evidenceFromSnapshot(fixtureCarregado) : fixtureCarregado;
+  return Array.isArray(fixtureCarregado.milestones)
+    ? fixtureCarregado
+    : evidenceFromSnapshot(fixtureCarregado);
 }
 
 // Snapshot no formato do cliente para um fixture de estado: as três leituras de
 // tag e main são o baseline imutável (o mesmo v0.1.1 em todos os estados) e
-// só as leituras de release e milestone variam por estado.
+// só as leituras de release e milestone variam por estado. Os campos migrados
+// `releases` e `milestones` são lidos das listas, nunca dos campos singulares
+// removidos.
 function clientSnapshotFor(estado) {
   const base = fixture('reference');
-  const release =
-    estado.release ?? (Array.isArray(estado.releases) ? estado.releases[0] ?? null : null);
+  const release = Array.isArray(estado.releases) ? estado.releases[0] ?? null : null;
+  const milestones = Array.isArray(estado.milestones) ? estado.milestones : [];
   return {
     version: estado.version,
     expectedSha: estado.expectedSha,
@@ -121,9 +129,8 @@ function clientSnapshotFor(estado) {
     release: release
       ? { ok: true, status: 200, data: release }
       : { ok: false, status: 404, data: null },
-    milestones: estado.milestone
-      ? { ok: true, status: 200, data: [estado.milestone] }
-      : { ok: true, status: 200, data: [] },
+    milestones: { ok: true, status: 200, data: milestones },
+    ci: estado.ci ?? base.ci,
     runs: estado.runs ?? base.runs,
   };
 }
@@ -182,7 +189,19 @@ describe('zero mutação em verify e plan (D-16)', () => {
       assert.equal(saida.mutations, 0, `${nome} emitiu mutações diferentes de zero`);
       assert.equal(saida.elegibilidade.writeAction, null, `${nome} carregou writeAction`);
       assert.equal(saida.classificacao.writeAction, null, `${nome} carregou writeAction`);
-      assert.equal(typeof saida.classificacao.code, 'string', `${nome} sem código de estado`);
+      if (nome === 'reference') {
+        // O baseline de referência é o único que chega ao classificador pelo
+        // caminho normalizado de produção, então é o único aqui que pode
+        // carregar o código exato. Os outros seis ainda passam por um helper
+        // local que colapsa os arrays de duplicata e conflito, e afirmar
+        // códigos exatos neles falharia até a tarefa 3 do plano 09-08 trocar
+        // esse helper pelo construtor de produção.
+        assert.equal(saida.classificacao.code, 'MISSING');
+        assert.equal(saida.classificacao.eligible, false);
+        assert.ok(saida.classificacao.reason.length > 0, `${nome} sem motivo PT-BR`);
+      } else {
+        assert.equal(typeof saida.classificacao.code, 'string', `${nome} sem código de estado`);
+      }
     }
   });
 
