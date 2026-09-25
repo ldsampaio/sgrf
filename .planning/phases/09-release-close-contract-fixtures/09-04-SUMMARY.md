@@ -274,7 +274,7 @@ Task 1 is `type="tracer"`. Mode resolution: no `gate="blocking-human"`, auto mod
 ## Verification
 
 - `node --test tools/release-close/eligibility.test.js` -> 36 tests, 36 pass, exit 0
-- `node --test tools/release-close/` -> 81 tests, 81 pass, 0 fail (baseline before this plan was 57; no regression in the classifier, gate, no-write or SAFE-04 suites)
+- `node --test "tools/release-close/*.test.js"` -> 81 tests, 81 pass, 0 fail (baseline before this plan was 57; no regression in the classifier, gate, no-write or SAFE-04 suites)
 - `node tools/release-close/release-close.js verify --json` -> exit 0 with `code: ELIGIBLE` on the frozen baseline; exit 1 with `code: SAFE-02` under `--sha bbbb...`
 - `git diff --name-only c13c4165..HEAD` -> only `tools/release-close/eligibility.js` and `tools/release-close/eligibility.test.js`; `.github/workflows/ci.yml`, `backend/`, `frontend/`, `package.json`, `fixtures/`, `classify.js`, `fake-client.js`, `release-close.js`, `apply-gate.js`, `client.js` and `gh-client.js` all confirmed untouched
 - `tools/release-close/package.json` still declares no `dependencies` key (zero-dependency suite preserved)

@@ -53,7 +53,7 @@ earlier findings are now closed, which remain, and what the fixes themselves bro
 left half-built.
 
 **Method and its limits, stated up front.** No shell/terminal tool is available in this
-session, so I could **not** execute `node --test tools/release-close/` and the
+session, so I could **not** execute `node --test "tools/release-close/*.test.js"` and the
 "214 passing" baseline is taken from `09-09-SUMMARY.md:370` rather than re-measured.
 Every finding below is derived from the source as it stands on disk, cited by file and
 line, and each one is a claim about code I read rather than about a test result I

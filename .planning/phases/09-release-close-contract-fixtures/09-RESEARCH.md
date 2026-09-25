@@ -46,7 +46,7 @@ Phase 9 builds a brand-new, zero-dependency Node 22 ESM CLI at `tools/release-cl
 
 All building blocks were verified hands-on this session: `node:test` with ESM `import` syntax and JSON fixtures passes under a zero-dependency `{"type": "module"}` package (local probe green); `gh` 2.101.0 is installed and its `api` subcommand supports the exact flags the tool needs (`--method`, `--jq`, `--paginate`, `--input`); `gh` has **no** `milestone` subcommand so Milestone reads must go through `gh api repos/{owner}/{repo}/milestones`; and the local `v0.1.1` tag is confirmed annotated peeling to the canonical commit. The single most consequential design finding is the client-seam shape: pure functions must accept an injected `client` object and never parse `gh` stderr text, so Phase 10 can swap fake → real `gh` subprocess without touching any pure logic.
 
-**Primary recommendation:** Build `tools/release-close/` as zero-dependency ESM with an injected async `client` seam (fake in Phase 9, `gh`-backed in Phase 10), pure `eligibility.js` + `classify.js` returning `{ eligible, code, reason, writeAction: null }` data objects, six JSON fixtures under `fixtures/`, a `mutations: 0`-carrying text-default/`--json` output, and a double-locked `apply` (`--yes` AND TTY prompt) — all proven by scoped `node --test tools/release-close/` runs.
+**Primary recommendation:** Build `tools/release-close/` as zero-dependency ESM with an injected async `client` seam (fake in Phase 9, `gh`-backed in Phase 10), pure `eligibility.js` + `classify.js` returning `{ eligible, code, reason, writeAction: null }` data objects, six JSON fixtures under `fixtures/`, a `mutations: 0`-carrying text-default/`--json` output, and a double-locked `apply` (`--yes` AND TTY prompt) — all proven by scoped `node --test "tools/release-close/*.test.js"` runs.
 
 ## Architectural Responsibility Map
 
@@ -62,7 +62,7 @@ All building blocks were verified hands-on this session: `node:test` with ESM `i
 ## Project Constraints (from AGENTS.md)
 
 - Two packages, **no workspaces** — `tools/release-close/package.json` must be standalone (zero `dependencies`); never add a root workspace that would rope it into backend/frontend installs.
-- **No lint/typecheck configured** — do not invent `lint`/`typecheck` scripts or CI steps; verification is `node --test tools/release-close/` (new) alongside existing `cd backend && npx vitest run` and `cd frontend && npm run build`.
+- **No lint/typecheck configured** — do not invent `lint`/`typecheck` scripts or CI steps; verification is `node --test "tools/release-close/*.test.js"` (new) alongside existing `cd backend && npx vitest run` and `cd frontend && npm run build`.
 - **Never commit** `backend/.env`, `*.db*`, `backend/uploads/*` — irrelevant to this phase (no backend changes), but new fixture/test files must not accidentally sweep secrets; fixtures contain only public GitHub IDs/SHAs.
 - **Money-as-cents, UUID strings, no raw SQL** — not used by this tool; planner must not introduce backend conventions into the tool.
 - **CI gate** (`.github/workflows/ci.yml` jobs `backend` + `frontend` required on `main`) — Phase 9 should avoid editing `ci.yml` (see Open Questions); at minimum it must not break or rename the two required jobs.
@@ -99,7 +99,7 @@ All building blocks were verified hands-on this session: `node:test` with ESM `i
 # Nothing to install. The tool is zero-dependency by design (D-02):
 #   tools/release-close/package.json  ->  { "type": "module" } + zero "dependencies"
 # Run directly:  node tools/release-close/release-close.js verify --help
-# Test:          node --test tools/release-close/
+# Test:          node --test "tools/release-close/*.test.js"
 ```
 
 **Version verification:** No npm/PyPI/crates packages are recommended — the stack is Node builtins + the preinstalled `gh` CLI, so registry verification is inapplicable. Toolchain versions confirmed on this machine: Node `v26.10.0`, `gh` `2.101.0` [VERIFIED: local `node --version` / `gh --version`]; CI pins Node 22 [VERIFIED: .github/workflows/ci.yml:36-38].
@@ -231,7 +231,7 @@ export async function checkTagEligibility(client, { version, expectedSha }) {
 ### Pitfall 1: Unscoped `node --test` sweeping backend vitest suites
 **What goes wrong:** Running `node --test` from the repo root discovers `backend/tests/*.test.js`, which import `vitest` and need a database — they fail under the stdlib runner, looking like a Phase 9 regression.
 **Why it happens:** `node --test <dir>` recursively runs test-pattern files; backend tests share the `*.test.js` suffix.
-**How to avoid:** Always scope: `node --test tools/release-close/`. Never add a root `test` script that sweeps. If CI ever runs the tool suite, point it at the tool dir only.
+**How to avoid:** Always scope: `node --test "tools/release-close/*.test.js"`. Never add a root `test` script that sweeps. If CI ever runs the tool suite, point it at the tool dir only.
 **Warning signs:** Failures mentioning `vitest` imports or `DATABASE_URL` when running tool tests.
 
 ### Pitfall 2: ESM/CJS boundary confusion
@@ -370,7 +370,7 @@ async function confirmApply({ yesFlag, planText }) {
 
 ## Open Questions
 
-1. **Should Phase 9 wire `node --test tools/release-close/` into `.github/workflows/ci.yml`?**
+1. **Should Phase 9 wire `node --test "tools/release-close/*.test.js"` into `.github/workflows/ci.yml`?**
    - What we know: AGENTS.md + PROJECT.md freeze existing CI commands; milestone constraint keeps `ci.yml` as regression authority with unchanged `backend`/`frontend` commands. A third job adds surface without changing existing commands, but any `ci.yml` edit risks the required-checks gate (`backend`, `frontend` contexts).
    - What's unclear: whether reviewers consider a new non-required job acceptable inside "CI unchanged".
    - Recommendation: Do NOT touch `ci.yml` in Phase 9 — verify via local `node --test` runs + commit evidence; revisit CI wiring in Phase 12 alongside the runbook. Planner: make this explicit in PLAN.md.
@@ -408,20 +408,20 @@ async function confirmApply({ yesFlag, planText }) {
 |----------|-------|
 | Framework | `node:test` (stdlib, Node 22 per CI) + `node:assert/strict` |
 | Config file | none — zero-dependency by design; invocation is the config |
-| Quick run command | `node --test tools/release-close/` |
-| Full suite command | `node --test tools/release-close/` (same; suite is seconds-scale, no DB/network) |
+| Quick run command | `node --test "tools/release-close/*.test.js"` |
+| Full suite command | `node --test "tools/release-close/*.test.js"` (same; suite is seconds-scale, no DB/network) |
 
 ### Phase Requirements → Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| OPS-01 | CLI exposes `verify`/`plan`/`apply` + `--help`; direct-`node` invocation; zero-dep package | CLI smoke (arg parse, help text, package.json asserts) | `node --test tools/release-close/` | ❌ Wave 0 (no `tools/` dir yet [VERIFIED: local `ls`]) |
-| OPS-02 | Six states classified from fixtures; scripted fake sequences (timeout/409/422/429) observable | unit (`node:test`, Portuguese `it` names) | `node --test tools/release-close/` | ❌ Wave 0 |
-| SAFE-02 | Annotated-tag peel == main == expected SHA accepted; every mismatch shape rejected; no ref-write path (grep test) | unit + negative static test | `node --test tools/release-close/` | ❌ Wave 0 |
-| SAFE-04 | `verify`/`plan` runs assert `mutations: 0` + zero write calls; `apply` refuses without `--yes`/TTY/plan-visible | unit (fake write-trap) + gate tests with stubbed TTY | `node --test tools/release-close/` | ❌ Wave 0 |
+| OPS-01 | CLI exposes `verify`/`plan`/`apply` + `--help`; direct-`node` invocation; zero-dep package | CLI smoke (arg parse, help text, package.json asserts) | `node --test "tools/release-close/*.test.js"` | ❌ Wave 0 (no `tools/` dir yet [VERIFIED: local `ls`]) |
+| OPS-02 | Six states classified from fixtures; scripted fake sequences (timeout/409/422/429) observable | unit (`node:test`, Portuguese `it` names) | `node --test "tools/release-close/*.test.js"` | ❌ Wave 0 |
+| SAFE-02 | Annotated-tag peel == main == expected SHA accepted; every mismatch shape rejected; no ref-write path (grep test) | unit + negative static test | `node --test "tools/release-close/*.test.js"` | ❌ Wave 0 |
+| SAFE-04 | `verify`/`plan` runs assert `mutations: 0` + zero write calls; `apply` refuses without `--yes`/TTY/plan-visible | unit (fake write-trap) + gate tests with stubbed TTY | `node --test "tools/release-close/*.test.js"` | ❌ Wave 0 |
 
 ### Sampling Rate
-- **Per task commit:** `node --test tools/release-close/`
-- **Per wave merge:** `node --test tools/release-close/` + `cd backend && npx vitest run` (prove no collateral damage; backend untouched)
+- **Per task commit:** `node --test "tools/release-close/*.test.js"`
+- **Per wave merge:** `node --test "tools/release-close/*.test.js"` + `cd backend && npx vitest run` (prove no collateral damage; backend untouched)
 - **Phase gate:** Full tool suite green + backend vitest green + `gh`-surface grep tests green before `/gsd-verify-work`
 
 ### Wave 0 Gaps

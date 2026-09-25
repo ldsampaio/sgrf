@@ -385,7 +385,7 @@ _No REFACTOR commit: both GREEN implementations were written in one cohesive pas
 ## Verification
 
 - `node --test tools/release-close/canary.test.js` -> 32 tests, 32 pass, 0 fail, exit 0
-- `node --test tools/release-close/` -> 135 tests, 135 pass, 0 fail, exit 0 (baseline before this plan was 103; the four out-of-scope `fake.writes.length` assertions in `eligibility.test.js` and `safe04.test.js` are among the 32 that stayed green untouched, and the classifier, gate, no-write and SAFE-04 suites show no regression)
+- `node --test "tools/release-close/*.test.js"` -> 135 tests, 135 pass, 0 fail, exit 0 (baseline before this plan was 103; the four out-of-scope `fake.writes.length` assertions in `eligibility.test.js` and `safe04.test.js` are among the 32 that stayed green untouched, and the classifier, gate, no-write and SAFE-04 suites show no regression)
 - Manual probe, attaching an extra callable to the frozen client -> `TypeError: Cannot add property createRelease, object is not extensible`
 - Manual probe, spreading the client to bypass the freeze -> `TypeError: Superfície de cliente inválida: capacidade extra "createRelease" não pertence aos cinco métodos de leitura`; the measured count is 1, the escaped copy still reports 0, and `assertNoMutation` refuses naming the capability and the count
 - `git diff --name-only efb504c..HEAD` -> exactly the three declared `files_modified`; `eligibility.test.js`, `safe04.test.js`, `classify.js`, `classify.test.js`, `release-close.js`, `gh-client.js`, `nowrite.test.js` and every file under `fixtures/` confirmed untouched

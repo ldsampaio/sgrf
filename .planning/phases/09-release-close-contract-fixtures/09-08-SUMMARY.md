@@ -409,7 +409,7 @@ Each task followed the RED → GREEN procedure; task 3 is a test-only consolidat
 ## Verification
 
 - `node --test tools/release-close/safe04.test.js` → 47 tests, 47 pass, 0 fail, exit 0
-- `node --test tools/release-close/` → 186 tests, 186 pass, 0 fail, exit 0, deterministic across three consecutive runs. The baseline before this plan was 164; the 164 stayed green untouched and include the eligibility, classifier, canary, evidence and no-write suites
+- `node --test "tools/release-close/*.test.js"` → 186 tests, 186 pass, 0 fail, exit 0, deterministic across three consecutive runs. The baseline before this plan was 164; the 164 stayed green untouched and include the eligibility, classifier, canary, evidence and no-write suites
 - `node tools/release-close/release-close.js plan`, `plan --json` and `verify` → all exit 0 on the frozen baseline
 - **Manual probe, fully piped** — `apply --yes </dev/null` → exit 1, **0 bytes** on stdout, the `terminal interativo` reason on stderr, no prompt
 - **Manual probe, live input terminal with a redirected output (the CR-01 reproduction)** — a real pty on stdin with stdout pointed at a file, driven through `pty.openpty` and `subprocess` → exit 1, **0 bytes** written to the file, the prompt never opened, and the output-lock reason `o plano não foi mostrado em um terminal vivo` on stderr
@@ -455,6 +455,6 @@ None - no external service configuration required.
 - All five task commits confirmed present: `c8b3be2`, `228d8b9`, `8e80fe0`, `3196434`, `b5cddec`
 - `git rev-list --count 8daef72..HEAD` → 5, matching the frontmatter `commits`, measured from the persisted plan-head ledger rather than narrated
 - Every task-3 `<acceptance_criteria>` item was re-checked mechanically before the commit: 27 of 27 criteria pass, including the exact per-scenario codes and outcome, the reviewed and reference-baseline reviewed-content handling, the retained identifier lists, the one consolidated refusal table with its distinct zero-character row, the fully-piped row asserting `tty` and the *absence* of the output phrase, the plan-then-reviewed-then-prompt event order, the empty event list on every pre-render refusal, the single settled prompt on both end-of-input and stream error, the no-drift proofs, and the four source guards
-- `node --test tools/release-close/` exits 0 (not a timeout) with 186 tests and 186 passes, against a pre-plan baseline of 164, deterministic across three consecutive runs
+- `node --test "tools/release-close/*.test.js"` exits 0 (not a timeout) with 186 tests and 186 passes, against a pre-plan baseline of 164, deterministic across three consecutive runs
 - Collateral project gates green: backend 131/131, frontend build exit 0
 - No stub, skipped test or unrun `<verify>` remains open in this plan's files

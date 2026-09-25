@@ -217,8 +217,8 @@ export function buildCloseEvidence({ version, expectedSha, ci, release, mileston
   return {
     target: { version, expectedSha },
     ci,
-    releases: normalizarLista(release),
-    milestones: normalizarLista(milestones),
+    releases: normalizarLista(release, 'getReleaseByTag'),
+    milestones: normalizarLista(milestones, 'listMilestones'),
     closeMarkers: [],
   };
 }
@@ -226,12 +226,77 @@ export function buildCloseEvidence({ version, expectedSha, ci, release, mileston
 // Envelope `{ ok, status, data }` -> lista de evidência. Ausente (404) vira
 // lista vazia; `data` que já é lista é copiado inteiro; `data` que é um único
 // registro vira lista de um elemento.
-function normalizarLista(envelope) {
-  if (!envelope || envelope.ok !== true) return [];
+//
+// O 404 é a ÚNICA entrada que produz lista vazia, e ele chega aqui por uma
+// porta só: `lerEvidencia` já recusou todo envelope que não seja `ok` com um
+// status diferente de 404. A guarda abaixo é a segunda barreira, e ela existe
+// para que uma chamada direta a `buildCloseEvidence` — que é exportado — não
+// reintroduza o fail-OPEN que a fase 09 tem de não ter: um envelope que não se
+// prova `ok` não pode virar ausência silenciosa.
+function normalizarLista(envelope, metodo) {
+  // Ausência de envelope é ausência de REGISTRO, não prova de ausência remota:
+  // uma leitura que não devolveu envelope não chegou a dizer nada sobre o
+  // remoto. O 404 é a única ausência que um envelope pode provar.
+  if (envelope === undefined || envelope === null) {
+    throw new RecusaDeLeitura(
+      `Leitura de ${metodo ?? 'de evidência'} não devolveu envelope: esperado um registro com ok, status e data.`,
+    );
+  }
+  if (envelope.ok !== true) {
+    if (envelope.status === 404) return [];
+    throw new RecusaDeLeitura(
+      `Leitura de ${metodo ?? 'de evidência'} respondeu ${String(envelope.status)}: o estado remoto está indeterminado, e só o 404 prova ausência.`,
+    );
+  }
   const data = envelope.data;
   if (Array.isArray(data)) return [...data];
   if (data === null || data === undefined) return [];
   return [data];
+}
+
+// Uma leitura de evidência, guardada. Devolve o envelope INTEIRO, nunca uma
+// lista: a tradução é de `normalizarLista`, e uma lista construída aqui
+// perderia o status que distingue ausência de falha.
+//
+// Um throw é TRANSPORT — a leitura não completou e o estado remoto é
+// desconhecido. Um envelope sem `ok` segue a mesma tabela que
+// `readEnvelope` aplica às três leituras de elegibilidade: 404 é ausência
+// provada, 401/403 é PERMISSION, e todo o resto é UNAVAILABLE. Em nenhum caso
+// o retorno é uma lista vazia que o classificador leria como "não existe".
+//
+// Um envelope que nem é registro é MALFORMED, e este é um VEREDITO, não uma
+// recusa: é a mesma distinção que `readEnvelope` faz para as três leituras de
+// elegibilidade, que devolvem MALFORMED como decisão em vez de lançar. Devolver
+// o envelope intacto deixa `normalizarLista` recusar com a família certa, e
+// mantém a medição do invariante como a última linha — a recusa de medição
+// corrompida continua alcançável, porque ela vem depois das leituras.
+async function lerEvidencia(client, metodo, ...args) {
+  let envelope;
+  try {
+    envelope = await client[metodo](...args);
+  } catch {
+    throw new RecusaDeLeitura(
+      `Falha de transporte na leitura de ${metodo}: a leitura não completou e o estado remoto é desconhecido, não ausente.`,
+    );
+  }
+  // Um envelope que não é registro NÃO recusa aqui: `readEnvelope` devolve
+  // MALFORMED como veredito para as três leituras de elegibilidade, e este é o
+  // mesmo caso. Ele segue intacto para `normalizarLista`, que o rejeita como
+  // envelope fora de formato. Assim a medição do invariante — que vem depois
+  // das leituras — continua sendo alcançável, como a suíte exige.
+  if (envelope === null || typeof envelope !== 'object' || Array.isArray(envelope)) {
+    return envelope;
+  }
+  if (envelope.ok === true) return envelope;
+  if (envelope.status === 404) return envelope;
+  if (envelope.status === 401 || envelope.status === 403) {
+    throw new RecusaDeLeitura(
+      `Leitura de ${metodo} respondeu ${envelope.status}: a credencial do operador não alcança o recurso, e o estado remoto é desconhecido, não ausente.`,
+    );
+  }
+  // Todo status que não prova ausência segue como envelope para a tradução
+  // recusar: 5xx, 429, status desconhecido e ausente numérico caem aqui.
+  return envelope;
 }
 
 // Recusa do invariante compartilhado de zero mutação (09-06). É uma classe
@@ -258,6 +323,29 @@ class RecusaDeIntegridade extends Error {
   constructor(motivo) {
     super(motivo);
     this.name = 'RecusaDeIntegridade';
+  }
+}
+
+// Recusa de LEITURA de evidência, e uma quarta família. As duas leituras de
+// release e milestone são o único ponto onde uma falha de transporte ou um
+// envelope fora de formato alcançavam o operador de duas formas ruins, e as
+// duas são o mesmo defeito: a leitura não foi guardada.
+//
+// A catch (a leitura lança) chegava como crash, porque um Error genérico não é
+// nenhuma das três classes que `tratarRecusa` reconhece. A não-catch era pior:
+// `normalizarLista` converte QUALQUER envelope que não seja `ok` em lista
+// vazia, então um 5xx ou um 429 viravam "nenhuma release existe" — a
+// classificação MISSING e `applyLiberado: true`, com um plano byte a byte
+// idêntico ao do caso honesto. Isso é fail-OPEN: a ferramenta respondia que o
+// fechamento não existia quando na verdade não conseguira perguntar.
+//
+// Só 404 prova ausência. As duas leituras seguem a mesma regra que
+// `readEnvelope` já aplica às três de elegibilidade, e por isso a ausência
+// provada continua sendo lista vazia — agora por motivo, e não por descarte.
+class RecusaDeLeitura extends Error {
+  constructor(motivo) {
+    super(motivo);
+    this.name = 'RecusaDeLeitura';
   }
 }
 
@@ -317,13 +405,29 @@ export async function camadaDeDecisao({ snapshot, client, version, expectedSha, 
   // As duas leituras de evidência, na mesma ordem fixa. Elas correm
   // incondicionalmente: mesmo com a elegibilidade já decidida, a evidência de
   // release e milestone é obrigatória para classificar.
-  const release = await resolvedClient.getReleaseByTag(resolvedVersion);
-  const milestones = await resolvedClient.listMilestones();
+  //
+  // As duas são guardadas com a mesma regra que `checkTagEligibility` aplica às
+  // três de elegibilidade, e pelo mesmo motivo: são leituras remotas, e uma
+  // leitura remota que falha não prova nada sobre o remoto. Um throw vira
+  // recusa de família TRANSPORT, e um envelope que não é `ok` só vira lista
+  // vazia quando o status é 404 — que é o único status que prova ausência.
+  // Qualquer outro status recusa, nomeando a leitura e a família, em vez de
+  // virar "não existe" e liberar o apply com um estado remoto desconhecido.
+  const release = await lerEvidencia(resolvedClient, 'getReleaseByTag', resolvedVersion);
+  const milestones = await lerEvidencia(resolvedClient, 'listMilestones');
 
   // O alvo resolvido entra no contrato: um override de `--version` ou `--sha`
   // flui para a classificação em vez de ser ignorado. Um override que deixa de
   // bater com o `ci.targetSha` congelado classifica como FAILED com a família
   // CI-WRONG-SHA, que é a resposta fail-closed correta.
+  // A medição roda ANTES da construção da evidência, e continua antes de
+  // qualquer renderização. A ordem importa: um cliente que não é medível é um
+  // cliente corrompido, e essa é a família correta para recusá-lo — não a de
+  // uma leitura malformada. Medindo depois, a tradução da evidência recusaria
+  // primeiro um `undefined` de leitura e a recusa de medição ficaria
+  // inalcançável.
+  const mutations = medirMutacoes(resolvedClient);
+
   const evidence = buildCloseEvidence({
     version: resolvedVersion,
     expectedSha: resolvedSha,
@@ -332,10 +436,6 @@ export async function camadaDeDecisao({ snapshot, client, version, expectedSha, 
     milestones,
   });
   const classification = classifySnapshot(evidence);
-
-  // A medição é feita ANTES de qualquer renderização e é o que o relatório
-  // carrega: o número que o operador lê é o que a fronteira mediu.
-  const mutations = medirMutacoes(resolvedClient);
 
   return {
     version: resolvedVersion,
@@ -463,7 +563,19 @@ export function buildClosePlan({
   mutations,
   reconciliation,
 }) {
-  const evidencia = evidence ?? buildCloseEvidence({ version, expectedSha, ci: snapshot.ci });
+  // A evidência de produção é a que a camada entregou. O caminho de reconstrução
+  // a partir do snapshot existe para quem monta um plano sem decisão, e ele
+  // precisa fornecer as DUAS leituras de evidência do próprio snapshot: sem
+  // elas, `buildCloseEvidence` receberia `undefined` e recusaria — que é o
+  // comportamento certo para uma leitura que não devolveu envelope, e não o
+  // certo para um snapshot que tem os dois envelopes à mão.
+  const evidencia = evidence ?? buildCloseEvidence({
+    version,
+    expectedSha,
+    ci: snapshot.ci,
+    release: snapshot.release,
+    milestones: snapshot.milestones,
+  });
   const tagSha =
     (snapshot.tagRef && snapshot.tagRef.data && snapshot.tagRef.data.object
       ? snapshot.tagRef.data.object.sha
@@ -610,7 +722,7 @@ function renderVerifyJson(decision, mutations, out) {
 // têm os seus próprios textos, atravessados intactos, porque cada uma pede uma
 // ação diferente do operador.
 function tratarRecusa(err, stderr) {
-  if (err instanceof RecusaDoInvariante || err instanceof RecusaDeIntegridade) {
+  if (err instanceof RecusaDoInvariante || err instanceof RecusaDeIntegridade || err instanceof RecusaDeLeitura) {
     stderr.write(`${err.message}\n`);
     return 1;
   }

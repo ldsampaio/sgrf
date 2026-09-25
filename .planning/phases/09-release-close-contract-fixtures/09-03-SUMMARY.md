@@ -110,7 +110,7 @@ coverage:
         ref: "gsd-tools check api-coverage.verify-pre .planning/phases/09-release-close-contract-fixtures — block:false, none_declared:true"
         status: pass
       - kind: unit
-        ref: "node --test tools/release-close/ — 57 tests, 57 pass, 0 fail"
+        ref: "node --test "tools/release-close/*.test.js" — 57 tests, 57 pass, 0 fail"
         status: pass
       - kind: unit
         ref: "cd backend && npx vitest run — 6 files, 131 tests passed"
@@ -216,7 +216,7 @@ None - no external service configuration required. Zero dependencies, no install
 
 - All 4 files FOUND on disk (3 tool sources + `COVERAGE.md`)
 - All 3 task commits FOUND (65be870, 3c56d13, bcd8663); `git rev-list --count cd527ed..HEAD` = 3
-- `node --test tools/release-close/`: 57 tests, 57 pass, 0 fail, exit 0
+- `node --test "tools/release-close/*.test.js"`: 57 tests, 57 pass, 0 fail, exit 0
 - `node tools/release-close/release-close.js apply --yes < /dev/null`: exit 1 with a terminal-interativo refusal, eight plan steps on stdout
 - `check api-coverage.verify-pre`: `block: false`, `none_declared: true`
 - `cd backend && npx vitest run`: 6 files, 131 tests passed; `cd frontend && npm run build`: built

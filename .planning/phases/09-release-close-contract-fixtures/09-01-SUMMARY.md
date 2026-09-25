@@ -74,7 +74,7 @@ coverage:
     requirement: "OPS-01"
     verification:
       - kind: unit
-        ref: "node --test tools/release-close/ — 12 tests, 12 pass, 0 fail"
+        ref: "node --test "tools/release-close/*.test.js" — 12 tests, 12 pass, 0 fail"
         status: pass
     human_judgment: false
 
@@ -132,7 +132,7 @@ None - plan executed exactly as written.
 
 ## Issues Encountered
 
-None. The scoped `node --test tools/release-close/` run stays green (12/12) and never sweeps the backend vitest suites; backend and frontend trees are untouched.
+None. The scoped `node --test "tools/release-close/*.test.js"` run stays green (12/12) and never sweeps the backend vitest suites; backend and frontend trees are untouched.
 
 ## User Setup Required
 
@@ -147,7 +147,7 @@ None - no external service configuration required. Zero dependencies, no network
 
 - All 7 created files FOUND on disk
 - All 3 task commits FOUND (f5493a9, 14a1a9b, 0bde390)
-- `node --test tools/release-close/`: 12 pass, 0 fail
+- `node --test "tools/release-close/*.test.js"`: 12 pass, 0 fail
 - `verify --help` documents verify/plan/apply; `--bogus-flag` exits non-zero with usage on stderr
 - No `require(`, `child_process`, token env reads, or verbose flags in tool sources
 - backend/ and frontend/ trees untouched

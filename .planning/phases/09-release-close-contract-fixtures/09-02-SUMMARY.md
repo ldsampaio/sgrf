@@ -81,7 +81,7 @@ coverage:
     requirement: "SAFE-02"
     verification:
       - kind: unit
-        ref: "node --test tools/release-close/ — 32 tests, 32 pass, 0 fail"
+        ref: "node --test "tools/release-close/*.test.js" — 32 tests, 32 pass, 0 fail"
         status: pass
       - kind: unit
         ref: "tools/release-close/nowrite.test.js#nenhuma fonte carrega verbo de método de escrita"
@@ -157,7 +157,7 @@ None other - plan executed otherwise exactly as written.
 
 ## Issues Encountered
 
-None. The scoped `node --test tools/release-close/` run stays green (32/32) and never sweeps the backend vitest suites; backend and frontend trees are untouched; `ci.yml` untouched.
+None. The scoped `node --test "tools/release-close/*.test.js"` run stays green (32/32) and never sweeps the backend vitest suites; backend and frontend trees are untouched; `ci.yml` untouched.
 
 ## User Setup Required
 
@@ -172,7 +172,7 @@ None - no external service configuration required. Zero dependencies, no network
 
 - All 11 created/modified files FOUND on disk
 - All 3 task commits FOUND (fe73f31, e9f8b5d, e749886)
-- `node --test tools/release-close/`: 32 pass, 0 fail
+- `node --test "tools/release-close/*.test.js"`: 32 pass, 0 fail
 - Six fixtures map one-to-one to six codes with null writeAction; invalid shape throws TypeError
 - 429-then-data script returns failure first and data second with ordered log entries
 - backend/ and frontend/ trees untouched

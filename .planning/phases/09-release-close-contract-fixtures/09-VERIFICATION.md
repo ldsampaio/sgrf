@@ -293,7 +293,7 @@ The digest machinery is sound; the selection rule is weaker than the decision it
 | `mutations` | closure tally via `medirMutacoes` | Yes — measured, provably non-zero-capable | ✓ FLOWING |
 | `applyLiberado` | `eligibility && !bloqueado && !recusou` | Yes — but the red trigger never reaches it | ⚠️ PARTIAL (G-1) |
 | `reviewed` / `reviewedDigest` | `find` over raw evidence | Yes — but possibly the wrong record | ⚠️ PARTIAL (G-3) |
-| a read failure on 2 of 5 reads | — | No — becomes an unhandled rejection | ✗ DISCONNECTED (G-2) |
+| a read failure on 2 of 5 reads | `lerEvidencia` (release-close.js:273) | Yes — as a PT-BR refusal, verified 2026-09-25 | ✓ FLOWING (G-2 closed) |
 
 ## Behavioral Spot-Checks
 

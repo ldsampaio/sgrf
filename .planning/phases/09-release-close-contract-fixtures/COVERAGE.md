@@ -97,36 +97,96 @@ regression-recording point is that the classification itself is fully covered �
 `CONCURRENT` and the explicit-red `FAILED` are proven at the classifier — and
 only the *transport* of those states into the production evidence is missing.
 
-One residual seam in the same area, narrower and also real: a transport throw
-from `getReleaseByTag` or `listMilestones` escapes `camadaDeDecisao` as an
-unhandled rejection, because those two reads are the only ones the layer does
-not guard (`checkTagEligibility` guards the other three). The failure is
-surfaced to the operator as a crash rather than as a PT-BR refusal. The six
-scripted families are exercised on the first read, so this plan's verification
-does not hit it; it is reported in `09-09-SUMMARY.md` as a Threat Flag rather
-than fixed, because changing those two reads is outside this plan's declared
-behaviour for the decision layer.
+### The unguarded evidence reads — RESOLVED 2026-09-25
+
+An earlier revision of this file reported a "residual seam" here and classified it
+as a Threat Flag rather than a fix, on the grounds that changing those two reads
+was outside plan 09-09's declared behaviour. **That classification was wrong, and
+the residual seam was two defects, not one.** Both were confirmed by execution and
+both are now fixed in `release-close.js`.
+
+The cause was a single one: `camadaDeDecisao` did not guard the two evidence reads
+(`getReleaseByTag`, `listMilestones`), while the three eligibility reads were
+guarded by `checkTagEligibility`, which captures a throw and turns it into a
+family verdict. Two consequences followed from the same unguarded pair:
+
+1. **A throw reached the operator as a crash.** The fake's transport failures
+   raise a plain `Error`, and `tratarRecusa` recognised only `RecusaDoInvariante`,
+   `RecusaDeIntegridade` and `TypeError` — so it rethrew. Reproduced on the real
+   `runVerify` path: `CRASH|Error|Tempo esgotado na leitura getReleaseByTag`.
+
+2. **A non-`ok` envelope reached the operator as fail-OPEN.** This was the
+   serious one. `normalizarLista` converted *any* envelope that was not `ok` into
+   an empty list, so a 5xx or a 429 became "no release exists": classification
+   `MISSING`, `applyLiberado: true`, and a plan byte-for-byte identical to the
+   honest case (`IDENTICOS|true`). The tool answered "the close does not exist"
+   when it had in fact never managed to ask. That is fail-OPEN in a release
+   preflight, and it is the exact class of bug this phase exists to prevent —
+   which is why "outside the plan's declared behaviour" was the wrong call: the
+   behaviour the phase *did* declare is that a transport failure becomes a PT-BR
+   refusal, and the six scripted families are that contract. Two of them were
+   not being honoured.
+
+The fix keeps the existing pattern rather than inventing a new one. `lerEvidencia`
+guards the throw as a `RecusaDeLeitura` and returns the envelope **intact**, so
+the status that distinguishes absence from failure survives to
+`normalizarLista`; that function now produces an empty list only for 404, the
+single status that proves absence, and refuses for everything else.
+`tratarRecusa` learned the fourth class. The invariant measurement moved ahead of
+evidence construction, so a client that cannot be measured is refused as a
+*corrupted client* — the correct family — rather than as a malformed read, which
+is what the suite requires (`evidence.test.js:710`).
+
+Verified by execution, not by inspection: the scripted outcomes `timeout`,
+`lost-response`, `status-409`, `status-422`, `status-429` and `status-5xx` on both
+evidence reads all produce a PT-BR refusal with exit 1; none of them kills the
+process; a genuine 404 still yields `releases: []` with `MISSING` and
+`applyLiberado: true`; and a 200 still retains the record whole (`PARTIAL`). The
+absence rule is unchanged in the direction that matters — absence is still absence,
+but now only when it is proven. Suite 214/214, backend 131/131, frontend build
+green.
+
+### The two states the production path still cannot reach
 
 ## Failure families: where they are reachable from
 
 Since 09-09, every scripted failure family passes through a production seam
-(`tools/release-close/reconcile.js`), but **not through the operator surface**:
-the failure plan is a programmatic parameter of the exported `decide` and there
-is no command-line flag, environment variable or usage-text entry that reaches
-it, so `verify`, `plan` and `apply` always run the seam with no plan and with an
-empty observed read sequence. The families are proven through the exported
-decision and the exported seam; they are not, and this phase does not claim
-they are, reachable from a command line.
+(`tools/release-close/reconcile.js`). The failure plan remains a programmatic
+parameter of the exported `decide` and there is still no command-line flag,
+environment variable or usage-text entry that reaches it, so `verify`, `plan`
+and `apply` run the seam with no plan and with an empty observed read sequence.
+That is deliberate and unchanged: a test that needs a new CLI option is asking
+for a production backdoor.
+
+What the 2026-09-25 fix changed here is narrower and worth stating precisely.
+The scripted outcomes can no longer be exercised *through the CLI*, but the
+**rule they encode** now governs both evidence reads on every real run, because
+`lerEvidencia` applies it unconditionally: a throw becomes a `TRANSPORT`
+refusal, 401/403 becomes `PERMISSION`, 404 is the only absence, and every other
+status is an indeterminate-state refusal. When Phase 10 replaces the fake with
+live `gh api` reads, the failure modes stop being test artifacts and become the
+live ones — and the handling for them is already in place and already proven.
 
 
 ## Zero dependencies and zero network
 
 `tools/release-close/package.json` declares `"type": "module"` with no
-`dependencies`, and the suite runs on `node --test tools/release-close/` — no
-install step, no clock, no database, no subprocess. The tool never reads a
-credential environment variable, and the secret-hygiene proof in
-`safe04.test.js` fails if any source or captured output ever carries
-credential-shaped material.
+`dependencies`, and the suite runs on no install step, no clock, no database, no
+subprocess. The tool never reads a credential environment variable, and the
+secret-hygiene proof in `safe04.test.js` fails if any source or captured output
+ever carries credential-shaped material.
+
+**The suite command needs the glob form on Node 26.** `node --test
+tools/release-close/` — the form the plan summaries used — fails with
+`MODULE_NOT_FOUND` on Node v26.7.0, because that argument is resolved as a module
+entry point rather than as a test directory. The working invocation is:
+
+```
+node --test "tools/release-close/*.test.js"
+```
+
+which reports 214 passing tests. Recorded in `09-UAT.md` as a minor gap against
+the summaries; the fix is a documentation correction, not a code change.
 
 ## Milestone for live calls
 

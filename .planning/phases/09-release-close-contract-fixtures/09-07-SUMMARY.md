@@ -373,7 +373,7 @@ _No REFACTOR commit: both GREEN implementations were written in one cohesive pas
 ## Verification
 
 - `node --test tools/release-close/evidence.test.js` → 29 tests, 29 pass, 0 fail, exit 0
-- `node --test tools/release-close/` → 164 tests, 164 pass, 0 fail, exit 0, deterministic across three consecutive runs. Baseline before this plan was 135; the pre-existing 135 stayed green untouched and include the SAFE-04 CLI probes, the eligibility, classifier, gate, no-write and canary suites
+- `node --test "tools/release-close/*.test.js"` → 164 tests, 164 pass, 0 fail, exit 0, deterministic across three consecutive runs. Baseline before this plan was 135; the pre-existing 135 stayed green untouched and include the SAFE-04 CLI probes, the eligibility, classifier, gate, no-write and canary suites
 - `node tools/release-close/release-close.js verify --json` → exit 0; `plan --json` → exit 0
 - `plan --json` carries `target` (`{version, expectedSha}`), the five-key `evidencia` whose `ci` deep-equals the frozen block, the retained identifier lists (`classificacao.releases`, `.milestones`, `.unrelatedReleases`, `.unrelatedMilestones`), the eight ordered steps and the measured `mutations`
 - Manual probe, the completed no-op through the production seam → `code=MISSING outcome=COMPLETE_NOOP applyLiberado=true mutations=0`, the exact pair plan 09-05 fixed

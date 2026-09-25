@@ -359,7 +359,7 @@ _No REFACTOR commit: both GREEN implementations were written in one cohesive pas
 ## Verification
 
 - `node --test tools/release-close/classify.test.js` -> 35 tests, 35 pass, exit 0 (baseline before this plan was 12)
-- `node --test tools/release-close/` -> 103 tests, 103 pass, 0 fail (baseline before this plan was 81; no regression in the eligibility, gate, no-write or SAFE-04 suites)
+- `node --test "tools/release-close/*.test.js"` -> 103 tests, 103 pass, 0 fail (baseline before this plan was 81; no regression in the eligibility, gate, no-write or SAFE-04 suites)
 - `node tools/release-close/release-close.js verify --json` -> exit 0 with `code: ELIGIBLE` on the frozen baseline
 - `node tools/release-close/release-close.js plan --json` -> exit 0 with `applyLiberado: true`, `bloqueio: null`, eight steps all marked `criar`/`ler`
 - `node tools/release-close/release-close.js plan --json --sha <40-hex>` -> exit 1 with `applyLiberado: false` and `classificacao.ciCode: CI-WRONG-SHA` (the override flows into the contract instead of being ignored)
