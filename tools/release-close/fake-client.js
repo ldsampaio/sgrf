@@ -156,6 +156,9 @@ function buildFakeClient(snapshot, failurePlan, { trapVisivel }) {
     async listMilestones() {
       return serve('listMilestones', [], () => snapshot.milestones);
     },
+    async listCiRuns(expectedSha, branch = 'main') {
+      return serve('listCiRuns', [expectedSha, branch], () => snapshot.ciRuns || { runs: [], failedRunIds: [] });
+    },
   };
 
   if (trapVisivel) {

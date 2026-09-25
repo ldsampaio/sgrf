@@ -133,14 +133,14 @@ describe('prova estática de zero-escrita (SAFE-02)', () => {
     }
   });
 
-  it('o rascunho gh falha fechado em todos os métodos nomeando a Fase 10', async () => {
+  it('o cliente gh real passa na forma e não tem métodos de escrita', async () => {
     const { ghClient } = await import('./gh-client.js');
-    for (const metodo of ['getTagRef', 'getTagObject', 'getBranchHead', 'getReleaseByTag', 'listMilestones']) {
-      await assert.rejects(
-        () => ghClient[metodo]('v0.1.1'),
-        (erro) => erro instanceof Error && erro.message.includes('Fase 10'),
-        `método ${metodo} não falha nomeando a Fase 10`,
-      );
+    const { assertClientShape } = await import('./client.js');
+    assertClientShape(ghClient);
+    const fs = await import('node:fs');
+    const texto = fs.readFileSync(new URL('./gh-client.js', import.meta.url), 'utf8');
+    for (const verb of ['post', 'patch', 'put', 'delete', 'force-update', 'create', 'delete-ref']) {
+      assert.ok(!texto.includes(verb), `gh-client.js contém verbo de escrita: ${verb}`);
     }
   });
 });

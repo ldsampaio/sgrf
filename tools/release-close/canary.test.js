@@ -68,26 +68,28 @@ function listarFontesDeProducao() {
   return achadas;
 }
 
-// Cliente mínimo que satisfaz a superfície: exatamente as cinco leituras.
+// Cliente mínimo que satisfaz a superfície: exatamente as seis leituras.
 const LEITURAS = () => ({
   getTagRef: async () => null,
   getTagObject: async () => null,
   getBranchHead: async () => null,
   getReleaseByTag: async () => null,
   listMilestones: async () => null,
+  listCiRuns: async () => null,
 });
 
 // ── Grupo A.1: a superfície declarada ───────────────────────────────────────
 
-it('contrato: READ_METHODS mantém os cinco nomes na ordem original', () => {
+it('contrato: READ_METHODS mantém os seis nomes na ordem original', () => {
   assert.deepEqual(contrato.READ_METHODS, [
     'getTagRef',
     'getTagObject',
     'getBranchHead',
     'getReleaseByTag',
     'listMilestones',
+    'listCiRuns',
   ]);
-  assert.equal(contrato.READ_METHODS.length, 5, 'a superfície declarada tem exatamente cinco leituras');
+  assert.equal(contrato.READ_METHODS.length, 6, 'a superfície declarada tem exatamente seis leituras');
 });
 
 it('superfície exata: aceita os cinco métodos com contabilidade não chamável', () => {
@@ -196,16 +198,20 @@ it('superfície exata: membros herdados e não enumeráveis não são capacidade
   assert.equal(contrato.assertClientShape(naoEnumeravel), true);
 });
 
-it('costura gh: o rascunho continua aceito e continua falhando fechado na Fase 10', async () => {
+it('costura gh: o cliente real passa na forma, não tem escrita e 404 mapeia para null', async () => {
   const { ghClient } = await import('./gh-client.js');
   assert.equal(contrato.assertClientShape(ghClient), true);
-  for (const metodo of contrato.READ_METHODS) {
-    await assert.rejects(
-      () => ghClient[metodo]('v0.1.1'),
-      (erro) => erro instanceof Error && erro.message.includes('Fase 10'),
-      `método ${metodo} não falha nomeando a Fase 10`,
-    );
+  // Nenhum método de escrita no módulo
+  const fs = await import('node:fs');
+  const texto = fs.readFileSync(new URL('./gh-client.js', import.meta.url), 'utf8');
+  for (const verb of ['post', 'patch', 'put', 'delete', 'force-update', 'create', 'delete-ref']) {
+    assert.ok(!texto.includes(verb), `gh-client.js contém verbo de escrita: ${verb}`);
   }
+  // 404 mapeia para null, nunca lança
+  const resultado = await ghClient.getTagRef('v9.9.9');
+  assert.equal(resultado.ok, false);
+  assert.equal(resultado.status, 404);
+  assert.equal(resultado.data, null);
 });
 
 // ── Grupo A.2: o invariante compartilhado de zero mutação ────────────────────
@@ -519,10 +525,10 @@ it('arapuca: a numeração de sequência começa em um e sobe de um em um', asyn
   }
   assert.deepEqual(
     fake.calls.map((c) => c.seq),
-    [1, 2, 3, 4, 5],
+    [1, 2, 3, 4, 5, 6],
   );
   assert.equal(fake.calls[0].method, 'getTagRef');
-  assert.equal(fake.calls[4].method, 'listMilestones');
+  assert.equal(fake.calls[5].method, 'listCiRuns');
 });
 
 it('arapuca: a ordem das leituras é ref, objeto da tag, cabeça, release, milestones', async () => {
@@ -532,7 +538,7 @@ it('arapuca: a ordem das leituras é ref, objeto da tag, cabeça, release, miles
   }
   assert.deepEqual(
     fake.calls.map((c) => c.method),
-    ['getTagRef', 'getTagObject', 'getBranchHead', 'getReleaseByTag', 'listMilestones'],
+    ['getTagRef', 'getTagObject', 'getBranchHead', 'getReleaseByTag', 'listMilestones', 'listCiRuns'],
   );
 });
 

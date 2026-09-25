@@ -34,6 +34,7 @@ export const READ_METHODS = [
   'getBranchHead',
   'getReleaseByTag',
   'listMilestones',
+  'listCiRuns',
 ];
 
 export function assertClientShape(client) {
