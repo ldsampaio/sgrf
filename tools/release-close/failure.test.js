@@ -669,3 +669,325 @@ function fatiarTexto(texto, expressao) {
   }
   return texto.slice(inicio);
 }
+
+// ===========================================================================
+// grupo 3 — tarefa 3: as seis famílias, a recuperação, a dupla falha, a prova
+// de zero escrita cega, o no-op concluído e o determinismo
+// ===========================================================================
+
+// A forma da decisão devolvida pela costura, nomeada uma vez. Um campo a mais
+// seria uma superfície nova: a lista é o que diz que nenhuma delas é capaz de
+// carregar uma ação de escrita, porque não há lugar onde uma ação caberia.
+const CHAVES_DA_DECISAO = [
+  'evidence',
+  'eligibility',
+  'classification',
+  'reads',
+  'mutations',
+  'family',
+  'reason',
+  'recovered',
+  'writeAction',
+  'writeProposed',
+];
+
+// Clona o que a costura recebe. Só o que é DADO é clonado: o cliente é a
+// arapuca viva, com seus métodos e sua fila, e cloná-la produziria um objeto
+// sem nenhuma das duas coisas.
+function clonarEntradas(decisao) {
+  return {
+    version: decisao.version,
+    expectedSha: decisao.expectedSha,
+    ci: structuredClone(decisao.ci),
+    evidence: structuredClone(decisao.evidence),
+    eligibility: structuredClone(decisao.eligibility),
+    classification: structuredClone(decisao.classification),
+  };
+}
+
+it('cada uma das seis famílias recusa pelo seam da CLI com o código exato e sem nenhuma escrita', async () => {
+  const mod = await cli();
+  const base = fixture('reference');
+  for (const { desfecho, codigo } of FAMILIAS_ROTEIRIZADAS) {
+    const client = makeFakeClient(base, { getTagRef: [desfecho, desfecho, desfecho] });
+    const decisao = await mod.decide({
+      client,
+      version: base.version,
+      expectedSha: base.expectedSha,
+      ci: base.ci,
+      failurePlan: { getTagRef: [desfecho, desfecho, desfecho] },
+    });
+    const r = decisao.reconciliation;
+    assert.equal(r.family, codigo, `${desfecho}: código da família`);
+    assert.equal(r.recovered, false, `${desfecho}: a recusa veio marcada como recuperação`);
+    assert.equal(decisao.eligibility.eligible, false, `${desfecho}: elegibilidade verdadeira`);
+    assert.equal(decisao.eligibility.writeAction, null, `${desfecho}: a elegibilidade carrega ação de escrita`);
+    assert.equal(decisao.classification.writeAction, null, `${desfecho}: a classificação carrega ação de escrita`);
+    assert.ok(typeof r.reason === 'string' && r.reason.length > 0, `${desfecho}: motivo PT-BR vazio`);
+    assert.equal(r.writeAction, null, `${desfecho}: writeAction`);
+    assert.equal(r.writeProposed, false, `${desfecho}: writeProposed`);
+    assert.deepEqual(Object.keys(r), CHAVES_DA_DECISAO, `${desfecho}: a decisão carrega um campo além da forma declarada`);
+    semApplyLiberado(decisao);
+    // Nenhuma entrada da sequência observada carrega uma carga que pudesse ser
+    // uma ação: só o método, a identidade, o número e o desfecho.
+    for (const tentativa of r.reads) {
+      assert.deepEqual(
+        Object.keys(tentativa).filter((chave) => chave !== 'familia'),
+        ['leitura', 'identidade', 'tentativa', 'desfecho'],
+        `${desfecho}: a entrada da sequência carrega campos a mais`,
+      );
+    }
+    // E o log do cliente concorda com a sequência que a costura relata: a
+    // tentativa que falhou e a releitura são a MESMA leitura com a MESMA
+    // identidade, e uma sequência autoconsistente e errada não passaria.
+    const doCliente = client.calls.filter((chamada) => chamada.method === 'getTagRef');
+    assert.equal(doCliente.length, 3, `${desfecho}: o cliente não viu a tentativa e a releitura`);
+    assert.deepEqual(doCliente[1].args, [base.version]);
+    assert.deepEqual(doCliente[2].args, [base.version]);
+    assert.equal(r.reads.length, 2);
+    assert.equal(r.reads[0].identidade, r.reads[1].identidade);
+  }
+});
+
+it('as seis famílias recuperam: a decisão devolvida é a da camada injetada, chamada sem plano de falhas', async () => {
+  const base = fixture('reference');
+  for (const { desfecho } of FAMILIAS_ROTEIRIZADAS) {
+    const { decisao } = await decisaoDeProducao(base);
+    const client = makeFakeClient(base, { getTagRef: [desfecho] });
+    const camada = await camadaDeDecisao();
+    const chamadas = [];
+    const comEspiao = async (argumentos) => {
+      chamadas.push(argumentos);
+      return camada(argumentos);
+    };
+    const custura = await chamarCostura({ client, decisao, decide: comEspiao, failurePlan: { getTagRef: [desfecho] } });
+    assert.equal(custura.recovered, true, `${desfecho}: a releitura bem-sucedida não foi marcada como recuperação`);
+    assert.equal(custura.family, null, `${desfecho}: a recuperação carrega família`);
+    assert.equal(chamadas.length, 1, `${desfecho}: a camada injetada não foi chamada uma vez`);
+    assert.ok(!Object.prototype.hasOwnProperty.call(chamadas[0], 'failurePlan'), `${desfecho}: a releitura levou o plano de falhas de novo`);
+    assert.deepEqual(Object.keys(chamadas[0]).sort(), ['ci', 'client', 'expectedSha', 'version'], `${desfecho}: a camada injetada recebeu um argumento a mais`);
+    // O que voltou é o OBJETO que a camada injetada produziu — identidade, não
+    // igualdade: duas evidências de conteúdo igual não provariam provenance.
+    assert.notStrictEqual(custura.evidence, decisao.evidence, `${desfecho}: a costura devolveu a evidência da tentativa que falhou`);
+    assert.notStrictEqual(custura.classification, decisao.classification, `${desfecho}: a costura devolveu a classificação da tentativa que falhou`);
+    assert.equal(custura.writeAction, null);
+    assert.equal(custura.writeProposed, false);
+    // Duas tentativas, e só duas: a que falhou e a releitura que respondeu. A
+    // releitura bem-sucedida é o ÚNICO caminho de recuperação — não há uma
+    // terceira tentativa escondida atrás de um contador de retentativas.
+    assert.equal(custura.reads.length, 2, `${desfecho}: a recuperação não foi uma releitura única`);
+    assert.equal(custura.reads[0].desfecho, 'falhou');
+    assert.equal(custura.reads[1].desfecho, 'respondeu');
+  }
+});
+
+it('as seis duplas falhas recusam com a família da segunda e a contagem medida continua zero', async () => {
+  const mod = await cli();
+  const base = fixture('reference');
+  for (const { desfecho, codigo } of FAMILIAS_ROTEIRIZADAS) {
+    const client = makeFakeClient(base, { getTagRef: [desfecho, desfecho, desfecho] });
+    const decisao = await mod.decide({
+      client,
+      version: base.version,
+      expectedSha: base.expectedSha,
+      ci: base.ci,
+      failurePlan: { getTagRef: [desfecho, desfecho, desfecho] },
+    });
+    assert.equal(decisao.reconciliation.family, codigo, `${desfecho}: a dupla falha não recuou com a família da segunda`);
+    assert.equal(decisao.reconciliation.recovered, false);
+    assert.equal(decisao.reconciliation.writeProposed, false);
+    assert.equal(decisao.mutations, 0, `${desfecho}: a execução que falhou levou uma escrita`);
+    assert.equal(client.mutations, 0, `${desfecho}: a arapuca mediu uma escrita`);
+    assert.equal(assertNoMutation(client), 0, `${desfecho}: o invariante compartilhado recusou uma contagem zero`);
+    semApplyLiberado(decisao.reconciliation);
+  }
+});
+
+it('a arapuca armada mede zero numa execução que falha, e armada de fato o invariante recusa sem ser a família que disfarça', async () => {
+  const base = fixture('reference');
+  const { decisao } = await decisaoDeProducao(base);
+
+  // Primeira execução: falha roteirizada, arapuca armada, nada aconteceu. A
+  // contagem medida é zero e o invariante aceita.
+  const limpa = makeArmedFakeClient(base, { getTagRef: ['timeout', 'timeout'] });
+  const custura = await chamarCostura({ client: limpa, decisao, failurePlan: { getTagRef: ['timeout', 'timeout'] } });
+  assert.equal(limpa.mutations, 0, 'a arapuca armada mediu escrita numa execução só de leitura');
+  assert.equal(assertNoMutation(limpa), 0);
+
+  // Segunda execução: a armadilha é armada de fato. O efeito REGISTRA e nunca
+  // age — o que se prova é que a recusa é a do invariante, e não a da família de
+  // falha. Uma execução que falha não pode esconder um efeito colateral atrás
+  // do próprio erro: o erro da família é o que o operador leria, e ele diria
+  // "o remoto está indeterminado" em vez de "algo foi escrito".
+  const armada = makeArmedFakeClient(base, { getTagRef: ['timeout', 'timeout'] });
+  armada.trap('criarReleaseRemota', ['v0.1.1']);
+  assert.equal(armada.mutations, 1, 'a armadilha armada não produziu contagem medida');
+  await assert.rejects(
+    () => chamarCostura({ client: armada, decisao, failurePlan: { getTagRef: ['timeout', 'timeout'] } }),
+    (erro) =>
+      erro instanceof Error &&
+      /contador de mutações medido = 1/.test(erro.message) &&
+      /Nenhuma decisão prossegue/.test(erro.message) &&
+      /criarReleaseRemota/.test(erro.message) &&
+      !/Falha de transporte/.test(erro.message),
+    'a execução que falha com efeito colateral recuou com a família de falha em vez da recusa do invariante',
+  );
+  // E pela MESMA porta na CLI, para que a recusa chegue ao operador como recusa
+  // de invariante e não como motivo de família.
+  const mod = await cli();
+  const pelaCli = makeArmedFakeClient(base, { getTagRef: ['timeout', 'timeout', 'timeout'] });
+  pelaCli.trap('publicarReleaseRemota', ['v0.1.1']);
+  await assert.rejects(
+    () =>
+      mod.decide({
+        client: pelaCli,
+        version: base.version,
+        expectedSha: base.expectedSha,
+        ci: base.ci,
+        failurePlan: { getTagRef: ['timeout', 'timeout', 'timeout'] },
+      }),
+    (erro) =>
+      erro instanceof Error &&
+      /contador de mutações medido = 1/.test(erro.message) &&
+      /publicarReleaseRemota/.test(erro.message) &&
+      !/Falha de transporte/.test(erro.message),
+    'a CLI aceitou uma execução que falha com efeito colateral medido',
+  );
+});
+
+it('a reconciliação repetida da mesma evidência é deepamente igual e não propõe escrita (OPS-02)', async () => {
+  // LIMITE REGISTRADO, e ele é do tamanho desta prova: o determinismo medido
+  // aqui é o determinismo DENTRO DE UM PROCESSO, sobre evidence congelada e
+  // sem relógio. A arbitragem entre dois processos que fecham a mesma release
+  // ao mesmo tempo é REC-05 da Fase 11, e esta suíte NUNCA pode ser citada
+  // como garantia de bloqueio — ela não mede nada entre processos, e dizer o
+  // contrário seria um relatório de garantia que ninguém mediu.
+  const cenarios = [
+    { rotulo: 'evidência concorrente congelada', montar: () => clienteDeEstado(fixture('concurrent')), plano: undefined },
+    {
+      rotulo: 'evidência de falha congelada',
+      montar: () => fixture('reference'),
+      plano: { getTagRef: ['timeout', 'timeout', 'timeout'] },
+    },
+  ];
+  for (const { rotulo, montar, plano } of cenarios) {
+    const { decisao: base } = await decisaoDeProducao(montar());
+    const primeira = await chamarCostura({
+      client: makeFakeClient(montar(), plano),
+      decisao: base,
+      failurePlan: plano,
+    });
+    // A segunda vez, a partir de um CLONE PROFUNDO das entradas: se a costura
+    // mutasse o que recebeu, ou dependesse da identidade do objeto, a segunda
+    // decisão sairia diferente — e uma reconciliação cuja segunda rodada
+    // diverge da primeira não é idempotente.
+    const segunda = await chamarCostura({
+      client: makeFakeClient(montar(), plano),
+      decisao: clonarEntradas(base),
+      failurePlan: plano,
+    });
+    assert.deepEqual(segunda, primeira, `${rotulo}: a reconciliação repetida divergiu`);
+    assert.deepEqual(segunda.reads, primeira.reads, `${rotulo}: a sequência de releitura divergiu entre as duas rodadas`);
+    assert.equal(primeira.writeProposed, false, `${rotulo}: a primeira rodada propôs escrita`);
+    assert.equal(segunda.writeProposed, false, `${rotulo}: a segunda rodada propôs escrita`);
+    assert.equal(primeira.writeAction, null);
+    assert.equal(segunda.writeAction, null);
+    semApplyLiberado(segunda);
+  }
+});
+
+it('a lista de marcadores do fixture concorrente não chega à evidência de produção, e a costura não a inventa', async () => {
+  const mod = await cli();
+  const estado = fixture('concurrent');
+  assert.equal(estado.closeMarkers.length, 2, 'o fixture concorrente deixou de declarar dois marcadores em andamento');
+  const snapshot = clienteDeEstado(estado);
+  const { decisao } = await decisaoDeProducao(snapshot);
+  // O caminho de produção classifica MISSING, e não CONCURRENT: o construtor
+  // exportado de evidência não recebe `closeMarkers` e o produz vazio, e
+  // nenhuma das cinco leituras devolve um marcador. A costura não inventa um —
+  // ela recebe a classificação como DADO e a repassa intacta.
+  assert.deepEqual(decisao.evidence.closeMarkers, [], 'a evidência de produção recebeu marcadores que o cliente não devolveu');
+  assert.equal(decisao.classification.code, 'MISSING');
+  assert.notEqual(decisao.classification.code, 'CONCURRENT');
+  const custura = await chamarCostura({ client: makeFakeClient(snapshot), decisao });
+  assert.equal(custura.classification.code, 'MISSING');
+  assert.equal(custura.family, null, 'a ausência de marcadores virou família de falha de leitura');
+  assert.equal(custura.writeProposed, false);
+  // E a suíte não contorna isso chamando o classificador com uma evidência
+  // montada à mão: ela reporta o que o caminho de produção produz.
+  const fonte = fonteDoModulo('failure.test.js');
+  assert.doesNotMatch(
+    fonte,
+    /from '\.\/classify\.js'/,
+    'a suíte importa o classificador para produzir uma decisão que a produção deveria ter computado',
+  );
+  void mod;
+});
+
+it('um 404 é ausência e é a única família que prova ausência', async () => {
+  // O 404 não é uma das seis falhas roteirizadas — a arapuca programável não
+  // tem desfecho para ele. Ele vem do ESTADO congelado: a referência da tag de
+  // `fixtures/missing.json` responde 404 no caminho do cliente, e é esse
+  // envelope que a costura normaliza. Nenhuma outra família pode virar
+  // ausência, e é por isso que a prova usa um envelope real em vez de um
+  // literal montado aqui.
+  const mod = await cli();
+  const snapshot = clienteDeEstado(fixture('missing'));
+  assert.equal(snapshot.release.ok, false);
+  assert.equal(snapshot.release.status, 404);
+  const { decisao } = await decisaoDeProducao(snapshot);
+  const client = makeFakeClient(snapshot, { getReleaseByTag: [] });
+  const custura = await chamarCostura({ client, decisao, failurePlan: { getReleaseByTag: [] } });
+  assert.equal(custura.family, 'MISSING', 'o 404 não normalizou para a família de ausência');
+  assert.match(custura.reason, /não existe no remoto/);
+  assert.equal(custura.reason.includes('não ausente'), false, 'a ausência PROVADA foi descrita como estado desconhecido');
+  assert.equal(custura.recovered, false);
+  assert.equal(custura.writeProposed, false);
+  const plano = mod.buildClosePlan({
+    version: decisao.version,
+    expectedSha: decisao.expectedSha,
+    snapshot,
+    eligibility: decisao.eligibility,
+    classificacao: decisao.classification,
+    evidence: decisao.evidence,
+    mutations: decisao.mutations,
+    reconciliation: custura,
+  });
+  assert.equal(plano.applyLiberado, false);
+  assert.match(plano.bloqueio, /reconciliação recusada \(MISSING\)/);
+});
+
+it('uma recusa da costura bloqueia o plano mesmo quando a elegibilidade sobreviveu', async () => {
+  const mod = await cli();
+  const base = fixture('reference');
+  // A elegibilidade sobrevive porque a TENTATIVA que a produziu rodou sobre um
+  // cliente limpo: a recusa vem de uma releitura que falhou depois, sobre outro
+  // cliente. Sem este caso, a regra de bloqueio da costura pareceria funcionar
+  // apenas porque a elegibilidade também ficou falsa — e uma leitura
+  // indeterminada que não bloqueia o apply é o defeito inteiro que o bloqueio
+  // existe para impedir.
+  const { decisao } = await decisaoDeProducao(base);
+  assert.equal(decisao.eligibility.eligible, true, 'o baseline de referência não é elegível');
+  const client = makeFakeClient(base, { listMilestones: ['timeout', 'timeout'] });
+  const custura = await chamarCostura({ client, decisao, failurePlan: { listMilestones: ['timeout', 'timeout'] } });
+  assert.equal(custura.family, 'TRANSPORT');
+  assert.equal(decisao.eligibility.eligible, true, 'a elegibilidade não deveria mudar: a costura não a recalcula');
+  const plano = mod.buildClosePlan({
+    version: decisao.version,
+    expectedSha: decisao.expectedSha,
+    snapshot: base,
+    eligibility: decisao.eligibility,
+    classificacao: decisao.classification,
+    evidence: decisao.evidence,
+    mutations: decisao.mutations,
+    reconciliation: custura,
+  });
+  assert.equal(plano.applyLiberado, false, 'uma leitura indeterminada liberou o apply com a elegibilidade intacta');
+  assert.match(plano.bloqueio, /^reconciliação recusada \(TRANSPORT\): /);
+  // E o par continua independente: `writeProposed` é falso, e o plano é
+  // bloqueado; o no-op concluído é o caso oposto, com `applyLiberado` verdadeiro
+  // e `writeProposed` falso. Nenhum dos dois é derivado do outro.
+  assert.equal(custura.writeProposed, false);
+  assert.equal(custura.writeAction, null);
+  semApplyLiberado(custura);
+});
