@@ -393,3 +393,11 @@ None. This plan adds no placeholder value, no disconnected data source and no sk
 ---
 *Phase: 09-release-close-contract-fixtures*
 *Completed: 2026-09-25*
+
+## Self-Check: PASSED
+
+- All 3 declared `files_modified` exist on disk: `tools/release-close/reconcile.js`, `tools/release-close/release-close.js`, `tools/release-close/failure.test.js`
+- All 6 task commits present on `main`: `ada6d9c`, `17a5e04`, `f7a6b0a`, `43078ae`, `cc63e45`, `2f7e12c`
+- Every task acceptance_criteria re-run: task 1 (9 source/behavior clauses) via `failure.test.js` grupo 1, task 2 (7 source clauses + 3 behavior clauses) via grupo 2 plus the live CLI probes, task 3 (14 clauses) via grupo 3 plus the 23-mutation probe
+- Plan-level verification re-run end to end: `node --test tools/release-close/failure.test.js` 28/28; `node --test tools/release-close/` 214/214 twice; `verify --json` / `plan` / `plan --json` / `--help` exit 0; `apply --yes </dev/null` exit 1; backend 131/131; frontend build exit 0
+- `commits: 6` measured from the persisted ledger (`git rev-list --count e455566a..HEAD`), not narrated; the metadata commit is the seventh and is not counted there
