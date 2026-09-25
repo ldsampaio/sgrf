@@ -13,7 +13,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { classifySnapshot } from './classify.js';
+import { classifySnapshot, CLASSIFY_CODES, CLASSIFY_CI_FAMILIES } from './classify.js';
 import { makeFakeClient } from './fake-client.js';
 
 const fixture = (name) =>
@@ -120,25 +120,12 @@ const JOBS_CANONICOS = ['backend', 'frontend'];
 
 const clonar = (valor) => JSON.parse(JSON.stringify(valor));
 
-// Bloco CI canônico derivado do fixture congelado (D-08): o SHA alvo vem do
-// expectedSha que missing.json já carrega e as execuções vêm do runs que ele
-// já carrega. Nenhum SHA nem identificador de execução é retyped no teste.
+// Bloco CI canônico: o ÚNICO bloco verde do repositório é o objeto `ci`
+// congelado em fixtures/missing.json, e todos os casos negativos saem de um
+// clone profundo dele. Nenhum SHA nem identificador de execução é retyped no
+// teste (D-08), e nenhuma segunda construção desse bloco existe aqui.
 function blocoCanonic(base = fixture('missing')) {
-  const alvo = base.expectedSha;
-  return {
-    event: 'push',
-    targetSha: alvo,
-    requiredRunIds: [...base.runs],
-    records: base.runs.flatMap((runId) =>
-      JOBS_CANONICOS.map((job) => ({
-        runId,
-        job,
-        headSha: alvo,
-        status: 'completed',
-        conclusion: 'success',
-      })),
-    ),
-  };
+  return clonar(base.ci);
 }
 
 // Evidência plana mínima no contrato de cinco chaves, com o bloco `ci` que o
@@ -247,9 +234,19 @@ const FAMILIAS_CI = [
     montar: (c) => comRegistro(c, 0, { headSha: 'a'.repeat(40) }),
   },
   {
-    nome: 'ci.targetSha diferente do SHA do alvo',
+    // Evidência INTEIRAMENTE consistente sobre outro commit: cada registro
+    // concorda com `ci.targetSha`, então só a comparação entre o bloco e o
+    // SHA do alvo pedido consegue reprovar esta linha. É o caso que o CLI
+    // produz com um override de `--sha`.
+    nome: 'evidência de CI consistente sobre outro commit',
     ciCode: 'CI-WRONG-SHA',
-    montar: (c) => ({ ...c, targetSha: 'b'.repeat(40) }),
+    montar: (c) => {
+      const outro = 'b'.repeat(40);
+      const clonado = clonar(c);
+      clonado.targetSha = outro;
+      for (const registro of clonado.records) registro.headSha = outro;
+      return clonado;
+    },
   },
   {
     nome: 'execução fora das duas identidades obrigatórias',
@@ -494,4 +491,147 @@ it('milestone aberta com issue aberta é PARTIAL sem outcome', () => {
   const decisao = classifySnapshot(evidencia(base, { milestones: [aberta] }));
   assert.equal(decisao.code, 'PARTIAL');
   assert.equal(decisao.outcome, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// Matriz exata por fixture, prova do bloco CI congelado e garantia de
+// determinismo (task 3 — nenhum arquivo de produção nem fixture muda aqui).
+// ---------------------------------------------------------------------------
+
+// Uma linha por fixture de evidência plana, com a superfície exata que a
+// decisão deve carregar. `reference` NÃO é uma linha: ele é formato de cliente
+// e a cobertura dele, a partir deste arquivo, é o TypeError acima.
+const TABELA_EVIDENCIA = [
+  { nome: 'missing', code: 'MISSING', validates: true, releases: 0, milestones: 0 },
+  { nome: 'partial', code: 'PARTIAL', validates: true, releases: 1, milestones: 0 },
+  { nome: 'duplicate', code: 'DUPLICATE', validates: true, releases: 2, milestones: 0 },
+  { nome: 'conflicting', code: 'CONFLICTING', validates: false, releases: 2, milestones: 0 },
+  { nome: 'failed', code: 'FAILED', validates: true, releases: 0, milestones: 0 },
+  { nome: 'concurrent', code: 'CONCURRENT', validates: true, releases: 0, milestones: 0 },
+  {
+    nome: 'complete',
+    code: 'MISSING',
+    outcome: 'COMPLETE_NOOP',
+    validates: true,
+    releases: 1,
+    milestones: 1,
+  },
+  {
+    nome: 'unrelated',
+    code: 'MISSING',
+    validates: true,
+    releases: 0,
+    milestones: 0,
+    unrelatedReleases: 2,
+    unrelatedMilestones: 1,
+  },
+];
+
+it('matriz por fixture de evidência plana: cada linha carrega a decisão exata declarada', () => {
+  const falhas = [];
+  for (const linha of TABELA_EVIDENCIA) {
+    const decisao = classifySnapshot(fixture(linha.nome));
+    const esperado = [
+      ['code', linha.code],
+      ['outcome', linha.outcome],
+      ['targetShaValidates', linha.validates],
+      ['releases.length', linha.releases],
+      ['milestones.length', linha.milestones],
+      ['unrelatedReleases.length', linha.unrelatedReleases ?? 0],
+      ['unrelatedMilestones.length', linha.unrelatedMilestones ?? 0],
+      ['eligible', false],
+      ['writeAction', null],
+    ];
+    for (const [campo, valor] of esperado) {
+      const obtido = campo.includes('.')
+        ? campo.split('.').reduce((obj, chave) => obj[chave], decisao)
+        : decisao[campo];
+      if (obtido !== valor) {
+        falhas.push(`${linha.nome}: ${campo} = ${JSON.stringify(obtido)} (esperado ${JSON.stringify(valor)})`);
+      }
+    }
+    if (typeof decisao.reason !== 'string' || decisao.reason.length === 0) {
+      falhas.push(`${linha.nome}: motivo PT-BR vazio`);
+    }
+  }
+  assert.deepEqual(falhas, [], `fixtures fora do contrato:\n${falhas.join('\n')}`);
+});
+
+it('o alvo concluído e o alvo sem nada se distinguem só pelo campo outcome', () => {
+  const completo = classifySnapshot(fixture('complete'));
+  const semNada = classifySnapshot(fixture('unrelated'));
+  assert.equal(completo.code, semNada.code);
+  assert.equal(completo.eligible, semNada.eligible);
+  assert.equal(completo.writeAction, semNada.writeAction);
+  assert.equal(completo.outcome, 'COMPLETE_NOOP');
+  assert.equal(semNada.outcome, undefined);
+  // E nenhum consumidor pode ler a retenção como o sinal: o que separa os dois
+  // alvos é o outcome, não o volume de evidência.
+  assert.notDeepEqual(completo.releases, semNada.releases);
+});
+
+it('o bloco CI congelado cobre os dois jobs nas duas execuções no SHA alvo exato', () => {
+  const base = fixture('missing');
+  const canonico = base.ci;
+  assert.equal(canonico.event, 'push');
+  assert.equal(canonico.targetSha, base.expectedSha);
+  assert.deepEqual(canonico.requiredRunIds, base.runs);
+  assert.equal(canonico.records.length, 4);
+  for (const runId of canonico.requiredRunIds) {
+    for (const job of JOBS_CANONICOS) {
+      const combinacao = canonico.records.filter((r) => r.runId === runId && r.job === job);
+      assert.equal(combinacao.length, 1, `faltou exatamente um registro ${job} da execução ${runId}`);
+      assert.equal(combinacao[0].headSha, base.expectedSha);
+      assert.equal(combinacao[0].status, 'completed');
+      assert.equal(combinacao[0].conclusion, 'success');
+    }
+  }
+  // O bloco congelado é o único do repositório e ele não bloqueia.
+  const decisao = classifySnapshot(base);
+  assert.equal(decisao.code, 'MISSING');
+  assert.equal(decisao.ciCode, null);
+});
+
+it('toda família de CI negativa força o bloqueio e nenhum estado novo entra pelo caminho da CI', () => {
+  const negados = FAMILIAS_CI.map((familia) =>
+    classifySnapshot(evidenciaComCi(familia.montar(blocoCanonic()))),
+  );
+  assert.equal(negados.length, FAMILIAS_CI.length);
+  for (const decisao of negados) {
+    assert.equal(decisao.code, 'FAILED', 'uma evidência negativa deixou de bloquear');
+    assert.ok(
+      CLASSIFY_CODES.includes(decisao.code),
+      `código de estado fora dos seis: ${decisao.code}`,
+    );
+    assert.ok(CLASSIFY_CI_FAMILIES.includes(decisao.ciCode), `família fora do contrato: ${decisao.ciCode}`);
+  }
+  // As onze famílias declaradas estão todas cobertas por alguma linha.
+  const cobertas = new Set(negados.map((decisao) => decisao.ciCode));
+  assert.deepEqual([...CLASSIFY_CI_FAMILIES].sort(), [...cobertas].sort());
+});
+
+it('a classificação repetida do fixture concorrente é byte-idêntica e não propõe escrita', () => {
+  // Limite declarado: a determinismo dentro de UM processo é provado aqui. A
+  // arbitragem entre processos (REC-05, trava real de workstation) chega na
+  // Fase 11 e NÃO é provada por esta suíte — nunca a cite como garantia de
+  // travamento.
+  const primeira = classifySnapshot(fixture('concurrent'));
+  const segunda = classifySnapshot(clonar(fixture('concurrent')));
+  assert.equal(primeira.code, 'CONCURRENT');
+  assert.deepEqual(segunda, primeira);
+  assert.equal(primeira.writeAction, null);
+  assert.equal(segunda.writeAction, null);
+});
+
+it('decisões de evidências diferentes no mesmo processo não compartilham estado', () => {
+  const completo = classifySnapshot(fixture('complete'));
+  const alheio = classifySnapshot(fixture('unrelated'));
+  const repetido = classifySnapshot(fixture('complete'));
+  // A segunda classificação do mesmo fixture continua igual depois que outra
+  // decisão passou pelo mesmo módulo: nenhum estado mutável escapes entre
+  // decisões.
+  assert.deepEqual(repetido, completo);
+  assert.equal(alheio.code, 'MISSING');
+  assert.equal(alheio.outcome, undefined);
+  assert.equal(completo.outcome, 'COMPLETE_NOOP');
 });
