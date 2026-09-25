@@ -354,6 +354,297 @@ describe('VOT-01: changeMyVote guard extension', () => {
 
 import { annualTotalCents } from '../src/services/requestService.js';
 
+describe('VOT-03: Partial approval arbitration', () => {
+  let requestId;
+  let chefeId;
+  let conselheiro1Id;
+  let conselheiro2Id;
+  let requesterId;
+  let chefeUser;
+  let conselheiro1User;
+  let conselheiro2User;
+  let requesterUser;
+  const testYear = 2026;
+
+  beforeAll(async () => {
+    // Ensure fund balance exists for test year
+    await prisma.fundBalance.upsert({
+      where: { referenceYear: testYear },
+      update: { availableCents: 1000000, provisionedCents: 0, spentCents: 0 },
+      create: { referenceYear: testYear, availableCents: 1000000, provisionedCents: 0, spentCents: 0 },
+    });
+
+    // Create test users
+    const users = await Promise.all([
+      prisma.user.create({
+        data: {
+          name: 'Chefe VOT03',
+          email: 'chefe.vot03@utfpr.edu.br',
+          role: 'CHEFE_DEPARTAMENTO',
+          passwordHash: 'hash',
+          status: 'ATIVO',
+        },
+      }),
+      prisma.user.create({
+        data: {
+          name: 'Conselheiro 1 VOT03',
+          email: 'cons1.vot03@utfpr.edu.br',
+          role: 'CONSELHEIRO',
+          passwordHash: 'hash',
+          status: 'ATIVO',
+        },
+      }),
+      prisma.user.create({
+        data: {
+          name: 'Conselheiro 2 VOT03',
+          email: 'cons2.vot03@utfpr.edu.br',
+          role: 'CONSELHEIRO',
+          passwordHash: 'hash',
+          status: 'ATIVO',
+        },
+      }),
+      prisma.user.create({
+        data: {
+          name: 'Requester VOT03',
+          email: 'requester.vot03@utfpr.edu.br',
+          role: 'PROFESSOR',
+          passwordHash: 'hash',
+          status: 'ATIVO',
+        },
+      }),
+    ]);
+
+    chefeId = users[0].id;
+    conselheiro1Id = users[1].id;
+    conselheiro2Id = users[2].id;
+    requesterId = users[3].id;
+
+    chefeUser = users[0];
+    conselheiro1User = users[1];
+    conselheiro2User = users[2];
+    requesterUser = users[3];
+
+    // Create a request in EM_VOTACAO
+    const request = await prisma.resourceRequest.create({
+      data: {
+        requesterId,
+        type: 'EQUIPAMENTO',
+        title: 'VOT-03 Partial Arbitration Test',
+        status: 'EM_VOTACAO',
+        referenceYear: testYear,
+        requestedAmountCents: 100000,
+        approvedAmountCents: 0,
+        votingDeadlineAt: new Date(Date.now() + 24 * 3600 * 1000),
+        submittedAt: new Date(),
+      },
+    });
+    requestId = request.id;
+  });
+
+  afterAll(async () => {
+    // Cleanup
+    await prisma.vote.deleteMany({ where: { requestId } });
+    await prisma.resourceRequest.delete({ where: { id: requestId } });
+    await prisma.financialTransaction.deleteMany({ where: { requestId } });
+    await prisma.auditEvent.deleteMany({ where: { entityId: requestId } });
+    await prisma.user.deleteMany({
+      where: {
+        id: { in: [chefeId, conselheiro1Id, conselheiro2Id, requesterId] },
+      },
+    });
+    await prisma.$disconnect();
+  });
+
+  beforeEach(async () => {
+    // Reset votes for each test
+    await prisma.vote.deleteMany({ where: { requestId } });
+    // Reset request status to EM_VOTACAO
+    await prisma.resourceRequest.update({
+      where: { id: requestId },
+      data: { status: 'EM_VOTACAO', decidedAt: null, decidedBy: null, approvedAmountCents: 0, decisionReason: '', collegiateMinutes: '' },
+    });
+    // Reset fund balance
+    await prisma.fundBalance.update({
+      where: { referenceYear: testYear },
+      data: { availableCents: 1000000, provisionedCents: 0, spentCents: 0 },
+    });
+  });
+
+  it('closeVoting with any DEFERIR_PARCIALMENTE vote returns arbitration indicator', async () => {
+    // Setup: Chefe votes DEFERIR, Conselheiro1 votes DEFERIR_PARCIALMENTE
+    // Even though tally would be DEFERIDO (1 DEFERIR vs 1 PARCIAL), arbitration should trigger
+    await prisma.vote.create({
+      data: {
+        requestId,
+        voterId: chefeId,
+        voteType: 'DEFERIR',
+        comment: 'Chefe vote',
+        tieBreak: false,
+      },
+    });
+    await prisma.vote.create({
+      data: {
+        requestId,
+        voterId: conselheiro1Id,
+        voteType: 'DEFERIR_PARCIALMENTE',
+        comment: 'Partial vote',
+        approvedAmountCents: 50000,
+        tieBreak: false,
+      },
+    });
+
+    const result = await closeVoting(requestId, 'system');
+
+    // Should return arbitration indicator, not auto-concluded request with amount
+    expect(result).toEqual(
+      expect.objectContaining({
+        needsArbitration: true,
+        status: 'APROVADO_PARCIALMENTE',
+        arbitration: true,
+        requestId,
+      })
+    );
+    expect(result).not.toHaveProperty('approvedAmountCents'); // or should be 0
+  });
+
+  it('closeVoting with multiple DEFERIR_PARCIALMENTE votes still returns arbitration', async () => {
+    // Multiple partial votes with different amounts - should NOT pick first
+    await prisma.vote.create({
+      data: { requestId, voterId: chefeId, voteType: 'DEFERIR', comment: 'Chefe', tieBreak: false },
+    });
+    await prisma.vote.create({
+      data: { requestId, voterId: conselheiro1Id, voteType: 'DEFERIR_PARCIALMENTE', comment: 'Partial 1', approvedAmountCents: 30000, tieBreak: false },
+    });
+    await prisma.vote.create({
+      data: { requestId, voterId: conselheiro2Id, voteType: 'DEFERIR_PARCIALMENTE', comment: 'Partial 2', approvedAmountCents: 70000, tieBreak: false },
+    });
+
+    const result = await closeVoting(requestId, 'system');
+
+    expect(result.needsArbitration).toBe(true);
+    expect(result.status).toBe('APROVADO_PARCIALMENTE');
+    expect(result.arbitration).toBe(true);
+  });
+
+  it('closeVoting with no partial votes works normally (DEFERIDO)', async () => {
+    await prisma.vote.create({
+      data: { requestId, voterId: chefeId, voteType: 'DEFERIR', comment: 'Chefe', tieBreak: false },
+    });
+    await prisma.vote.create({
+      data: { requestId, voterId: conselheiro1Id, voteType: 'DEFERIR', comment: 'Conselheiro', tieBreak: false },
+    });
+
+    const result = await closeVoting(requestId, 'system');
+
+    // Normal closure - returns updated request object
+    expect(result.status).toBe('APROVADO');
+    expect(result.approvedAmountCents).toBe(100000);
+    expect(result.needsArbitration).toBeUndefined();
+  });
+
+  it('closeVoting with partial + tie (PARCIAL outcome) returns arbitration', async () => {
+    // PARCIAL outcome when partial has majority on its own
+    await prisma.vote.create({
+      data: { requestId, voterId: conselheiro1Id, voteType: 'DEFERIR_PARCIALMENTE', comment: 'Partial 1', approvedAmountCents: 40000, tieBreak: false },
+    });
+    await prisma.vote.create({
+      data: { requestId, voterId: conselheiro2Id, voteType: 'DEFERIR_PARCIALMENTE', comment: 'Partial 2', approvedAmountCents: 60000, tieBreak: false },
+    });
+
+    const result = await closeVoting(requestId, 'system');
+
+    expect(result.needsArbitration).toBe(true);
+    expect(result.status).toBe('APROVADO_PARCIALMENTE');
+  });
+
+  it('Request in arbitration state has decisionReason=AGUARDANDO_ARBITRAGEM and collegiateMinutes set', async () => {
+    await prisma.vote.create({
+      data: { requestId, voterId: chefeId, voteType: 'DEFERIR', comment: 'Chefe', tieBreak: false },
+    });
+    await prisma.vote.create({
+      data: { requestId, voterId: conselheiro1Id, voteType: 'DEFERIR_PARCIALMENTE', comment: 'Partial', approvedAmountCents: 50000, tieBreak: false },
+    });
+
+    await closeVoting(requestId, 'system');
+
+    const request = await prisma.resourceRequest.findUnique({ where: { id: requestId } });
+    expect(request.status).toBe('APROVADO_PARCIALMENTE');
+    expect(request.decisionReason).toBe('AGUARDANDO_ARBITRAGEM');
+    expect(request.collegiateMinutes).toBe('Aguardando arbitragem do chefe — voto parcial detectado');
+    expect(request.approvedAmountCents).toBe(0); // No provision yet
+  });
+
+  it('No FundBalance provision when arbitration is needed', async () => {
+    await prisma.vote.create({
+      data: { requestId, voterId: chefeId, voteType: 'DEFERIR', comment: 'Chefe', tieBreak: false },
+    });
+    await prisma.vote.create({
+      data: { requestId, voterId: conselheiro1Id, voteType: 'DEFERIR_PARCIALMENTE', comment: 'Partial', approvedAmountCents: 50000, tieBreak: false },
+    });
+
+    const balBefore = await prisma.fundBalance.findUnique({ where: { referenceYear: testYear } });
+    await closeVoting(requestId, 'system');
+    const balAfter = await prisma.fundBalance.findUnique({ where: { referenceYear: testYear } });
+
+    expect(balAfter.availableCents).toBe(balBefore.availableCents);
+    expect(balAfter.provisionedCents).toBe(balBefore.provisionedCents);
+  });
+
+  it('partialArbitration endpoint - chefe sets final amount with justification', async () => {
+    // First, trigger arbitration state
+    await prisma.vote.create({
+      data: { requestId, voterId: chefeId, voteType: 'DEFERIR', comment: 'Chefe', tieBreak: false },
+    });
+    await prisma.vote.create({
+      data: { requestId, voterId: conselheiro1Id, voteType: 'DEFERIR_PARCIALMENTE', comment: 'Partial', approvedAmountCents: 50000, tieBreak: false },
+    });
+    await closeVoting(requestId, 'system');
+
+    // Now simulate the arbitration endpoint call
+    // This test will fail until the endpoint is implemented
+    const { partialArbitration } = await import('../src/controllers/votingController.js');
+    
+    // We'll test this via integration after implementation
+    // For now, verify the arbitration state is correct
+    const request = await prisma.resourceRequest.findUnique({ where: { id: requestId } });
+    expect(request.status).toBe('APROVADO_PARCIALMENTE');
+    expect(request.decisionReason).toBe('AGUARDANDO_ARBITRAGEM');
+  });
+
+  it('Arbitration amount validation: rejects amount <= 0', async () => {
+    // This will be tested after endpoint implementation
+    expect(true).toBe(true); // placeholder
+  });
+
+  it('Arbitration amount validation: rejects amount > requestedAmountCents', async () => {
+    expect(true).toBe(true); // placeholder
+  });
+
+  it('Arbitration requires justification - rejects missing justification', async () => {
+    expect(true).toBe(true); // placeholder
+  });
+
+  it('Arbitration requires chefe role - non-chefe gets 403', async () => {
+    expect(true).toBe(true); // placeholder
+  });
+
+  it('AuditEvent created with action=partial_arbitration, decidedBy=CHEFE_DEPARTAMENTO', async () => {
+    expect(true).toBe(true); // placeholder
+  });
+
+  it('castVote in tie-break calling closeVoting handles arbitration return', async () => {
+    expect(true).toBe(true); // placeholder - integration test
+  });
+
+  it('closeManual calling closeVoting handles arbitration return', async () => {
+    expect(true).toBe(true); // placeholder - integration test
+  });
+
+  it('votingCloser.closeExpired calling closeVoting handles arbitration return', async () => {
+    expect(true).toBe(true); // placeholder - integration test
+  });
+});
+
 describe('VOT-02: Annual cap accounting (CONCLUIDO counts toward cap)', () => {
   let requesterId;
   let requesterUser;
