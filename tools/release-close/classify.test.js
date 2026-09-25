@@ -415,7 +415,10 @@ it('duas releases de duas outras versões ficam fora da decisão do alvo e do mo
   assert.equal(decisao.code, 'MISSING');
   assert.equal(decisao.outcome, undefined);
   assert.deepEqual(decisao.releases, []);
-  assert.deepEqual(decisao.unrelatedReleases.map((r) => r.tagName), ['v0.1.0', 'v0.1.1-anterior']);
+  // Retenção ordenada por identificador, então a ordem observada é a dos ids
+  // congelados, não a das tags.
+  assert.deepEqual(decisao.unrelatedReleases.map((r) => r.id), [9001, 9003]);
+  assert.deepEqual(decisao.unrelatedReleases.map((r) => r.tagName), ['v0.1.1-anterior', 'v0.1.0']);
   assert.equal(decisao.reason.includes('v0.1.0'), false);
   assert.equal(decisao.reason.includes('v0.1.1-anterior'), false);
   assert.equal(decisao.reason.includes('conflit'), false);
@@ -448,12 +451,17 @@ it('duas milestones da versão pedida são ambas retidas e o alvo continua em ab
 });
 
 it('uma milestone de outra versão fica fora da decisão do alvo', () => {
+  // A milestone do alvo está aberta, então o no-op não cabe; a milestone
+  // alheia não pode entrar na partição nem aparecer entre as retidas.
   const base = fixture('complete');
-  const alheia = { ...clonar(base.milestones[0]), title: tagAlheia(base, '-anterior') };
-  const decisao = classifySnapshot(
-    evidencia(base, { milestones: [clonar(base.milestones[0]), alheia] }),
-  );
-  assert.equal(decisao.code, 'MISSING');
+  const alheia = {
+    ...clonar(base.milestones[0]),
+    number: base.milestones[0].number + 1,
+    title: tagAlheia(base, '-anterior'),
+  };
+  const aberta = { ...clonar(base.milestones[0]), state: 'open', openIssues: 1 };
+  const decisao = classifySnapshot(evidencia(base, { milestones: [aberta, alheia] }));
+  assert.equal(decisao.code, 'PARTIAL');
   assert.equal(decisao.outcome, undefined);
   assert.deepEqual(decisao.milestones.map((m) => m.number), [base.milestones[0].number]);
   assert.deepEqual(decisao.unrelatedMilestones.map((m) => m.number), [

@@ -88,8 +88,16 @@ function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function decided(code, reason, ciCode = null) {
-  return { eligible: false, code, reason, ciCode, writeAction: null };
+function decided(code, reason, { ciCode = null, evidence, outcome } = {}) {
+  return {
+    eligible: false,
+    code,
+    reason,
+    ciCode,
+    ...evidence,
+    ...(outcome === undefined ? {} : { outcome }),
+    writeAction: null,
+  };
 }
 
 function bloqueio(ciCode, reason) {
@@ -308,16 +316,104 @@ function registrosValidos(lista) {
   return lista.filter(isRecord);
 }
 
-function releaseKey(release) {
-  return `${release.tagName ?? ''}@${release.targetSha ?? release.sha ?? ''}`;
+// --- Escopo de alvo: partição, comparação, validação (nessa ordem) ----------
+//
+// Um Release entra na partição da versão pedida exatamente quando `tagName` é
+// byte-idêntico a `target.version`. É a ÚNICA regra de pertinência: ela nunca
+// consulta `expectedSha` nem `targetSha`. Particionar primeiro é o que mantém
+// na decisão um registro da MESMA versão com SHA divergente — o registro que um
+// pré-filtro apagaria e que é justamente o sinal de conflito.
+function retidoRelease(release) {
+  return {
+    id: release.id ?? null,
+    tagName: release.tagName ?? null,
+    draft: release.draft === true,
+    targetSha: release.targetSha ?? null,
+  };
+}
+
+function retidoMilestone(milestone) {
+  return {
+    number: milestone.number ?? null,
+    title: milestone.title ?? null,
+    state: milestone.state ?? null,
+    openIssues: Number.isInteger(milestone.openIssues) ? milestone.openIssues : 0,
+  };
+}
+
+function ordenar(chave) {
+  return (a, b) => {
+    const esq = String(a[chave]);
+    const dir = String(b[chave]);
+    if (esq < dir) return -1;
+    if (esq > dir) return 1;
+    return 0;
+  };
+}
+
+// Uma milestone entra na partição quando o título ou o rótulo NOMEIA a versão
+// pedida, por igualdade de bytes. Igualdade e não busca parcial: uma milestone
+// cujo título apenas contém a versão é fail-closed, reportado como alheia em
+// vez de adotada.
+function milestoneDoAlvo(milestone, version) {
+  return milestone.title === version || milestone.label === version;
+}
+
+// `targetShaValidates` é uma entrada de decisão separada, consultada DEPOIS que
+// a decisão foi alcançada. Uma partição vazia valida vacuamente (todo registro
+// de um conjunto vazio satisfaz a propriedade) e é isso que a torna verdadeira
+// sem que nenhum registro tenha sido inventado: o no-op tem a sua própria
+// guarda, que exige exatamente um registro na partição.
+function evidenciaPorAlvo(snapshot) {
+  const { version, expectedSha } = snapshot.target;
+  const releases = registrosValidos(snapshot.releases);
+  const milestones = registrosValidos(snapshot.milestones);
+
+  const daParticao = releases.filter((release) => release.tagName === version);
+  const alheias = releases.filter((release) => release.tagName !== version);
+  const milestonesDaParticao = milestones.filter((milestone) => milestoneDoAlvo(milestone, version));
+  const milestonesAlheias = milestones.filter((milestone) => !milestoneDoAlvo(milestone, version));
+
+  return {
+    daParticao,
+    milestonesDaParticao,
+    targetShaValidates: daParticao.every((release) => release.targetSha === expectedSha),
+    evidence: {
+      targetShaValidates: daParticao.every((release) => release.targetSha === expectedSha),
+      releases: daParticao.map(retidoRelease).sort(ordenar('id')),
+      milestones: milestonesDaParticao.map(retidoMilestone).sort(ordenar('number')),
+      unrelatedReleases: alheias.map(retidoRelease).sort(ordenar('id')),
+      unrelatedMilestones: milestonesAlheias.map(retidoMilestone).sort(ordenar('number')),
+    },
+  };
+}
+
+// Valores de `targetSha` materialmente distintos dentro da partição. Um
+// registro que omite `targetSha` conta como o seu próprio valor distinto, e
+// não como coringa: dois registros sem alvo são duas afirmações diferentes.
+function alvosDistintos(particao) {
+  return new Set(
+    particao.map((release) =>
+      release.targetSha === undefined ? `\u0000sem-targetSha:${release.id ?? ''}` : release.targetSha,
+    ),
+  );
+}
+
+function milestoneConcluida(milestone) {
+  return milestone.state === 'closed' && milestone.openIssues === 0;
 }
 
 export function classifySnapshot(snapshot) {
   assertContract(snapshot);
 
+  // A partição é calculada uma vez e viaja em TODA decisão, inclusive nas
+  // bloqueadas por CI: a retenção de evidência não depende de a CI liberar.
+  const alvo = evidenciaPorAlvo(snapshot);
+  const evidencia = alvo.evidence;
+
   const bloqueioCi = avaliarCi(snapshot.ci, snapshot.target.expectedSha);
   if (bloqueioCi !== null) {
-    return decided('FAILED', bloqueioCi.reason, bloqueioCi.ciCode);
+    return decided('FAILED', bloqueioCi.reason, { ciCode: bloqueioCi.ciCode, evidence: evidencia });
   }
 
   const vermelhas = execucoesVermelhas(snapshot);
@@ -325,6 +421,7 @@ export function classifySnapshot(snapshot) {
     return decided(
       'FAILED',
       `Execução(ões) ${vermelhas.join(', ')} declarada(s) vermelha(s) na evidência congelada: o fechamento está bloqueado até o sinal verde.`,
+      { evidence: evidencia },
     );
   }
 
@@ -333,41 +430,84 @@ export function classifySnapshot(snapshot) {
     return decided(
       'CONCURRENT',
       `Fechamento concorrente: ${inFlight.length} marcadores de fechamento em andamento; operador único deve arbitrar antes de prosseguir.`,
+      { evidence: evidencia },
     );
   }
 
-  const releases = registrosValidos(snapshot.releases);
-  if (releases.length >= 2) {
-    const keys = new Set(releases.map(releaseKey));
-    if (keys.size === 1) {
+  // Comparação DENTRO da partição. A partição nunca é montada a partir de
+  // igualdade de SHA alvo, então a ambiguidade é reportada e nunca resolvida
+  // por escolha de um registro.
+  const particao = alvo.daParticao;
+  if (particao.length >= 2) {
+    const distintos = alvosDistintos(particao);
+    if (distintos.size === 1) {
       return decided(
         'DUPLICATE',
-        `Release duplicada: ${releases.length} releases idênticas da mesma tag (${releases[0].tagName ?? 'sem tag'}); nenhuma foi removida ou adotada por esta classificação.`,
+        `Release duplicada: ${particao.length} releases idênticas da versão pedida ${snapshot.target.version} (${[...distintos][0]}); nenhuma foi removida ou adotada por esta classificação.`,
+        { evidence: evidencia },
       );
     }
     return decided(
       'CONFLICTING',
-      `Releases conflitantes da mesma tag com alvos materialmente diferentes (${[...keys].join(' vs ')}); a ambiguidade nunca é resolvida com escrita por esta classificação.`,
+      `Releases conflitantes da versão pedida ${snapshot.target.version} com alvos materialmente diferentes (${[...distintos].join(' vs ')}); a ambiguidade nunca é resolvida com escrita por esta classificação.`,
+      { evidence: evidencia },
     );
   }
 
-  const milestones = registrosValidos(snapshot.milestones);
-  if (releases.length === 1 && releases[0].draft === true) {
+  const milestones = alvo.milestonesDaParticao;
+
+  // No-op completado: release publicada da versão pedida, alvo validado, e
+  // exatamente uma milestone da versão pedida fechada sem issue aberta. O par
+  // exato é `code MISSING` + `outcome COMPLETE_NOOP` — MISSING é o estado
+  // terminal não bloqueante da taxonomia, e o `outcome` diz que o alvo JÁ
+  // estava fechado. Nenhum sétimo código de estado existe: COMPLETE_NOOP mora
+  // em `outcome`, nunca em `code`.
+  if (
+    particao.length === 1 &&
+    particao[0].draft !== true &&
+    alvo.targetShaValidates &&
+    milestones.length === 1 &&
+    milestoneConcluida(milestones[0])
+  ) {
     return decided(
-      'PARTIAL',
-      `Fechamento parcial: release de rascunho (${releases[0].tagName ?? 'sem tag'}) presente sem fechamento completo.`,
+      'MISSING',
+      `Fechamento já concluído: a Release ${snapshot.target.version} está publicada no alvo validado e a Milestone ${milestones[0].number ?? 'da versão pedida'} está fechada sem issue aberta; esta execução é um no-op e não há trabalho a fazer.`,
+      { evidence: evidencia, outcome: 'COMPLETE_NOOP' },
     );
   }
-  if (releases.length >= 1 || milestones.length >= 1) {
+
+  // A divergência de SHA alvo tem um único poder sobre o código de estado: ela
+  // impede o no-op. O código vira PARTIAL e o motivo nomeia a divergência, porque
+  // o alvo que o operador pediu para fechar não é o alvo que a evidência
+  // descreve.
+  if (particao.length === 1 && !alvo.targetShaValidates) {
     return decided(
       'PARTIAL',
-      'Fechamento parcial: evidência de release ou milestone presente sem fechamento completo.',
+      `Fechamento parcial: a release da versão pedida ${snapshot.target.version} aponta para o alvo ${String(particao[0].targetSha)} e o alvo pedido é ${snapshot.target.expectedSha}; a divergência impede tratar o alvo como concluído.`,
+      { evidence: evidencia },
+    );
+  }
+
+  if (particao.length === 1 && particao[0].draft === true) {
+    return decided(
+      'PARTIAL',
+      `Fechamento parcial: release de rascunho (${particao[0].tagName ?? 'sem tag'}) presente sem fechamento completo.`,
+      { evidence: evidencia },
+    );
+  }
+
+  if (particao.length >= 1 || milestones.length >= 1) {
+    return decided(
+      'PARTIAL',
+      'Fechamento parcial: evidência de release ou milestone da versão pedida presente sem fechamento completo.',
+      { evidence: evidencia },
     );
   }
 
   return decided(
     'MISSING',
-    'Fechamento ausente: nenhuma release e nenhuma milestone na evidência sobre o baseline elegível.',
+    `Fechamento ausente: nenhuma release e nenhuma milestone da versão pedida ${snapshot.target.version} na evidência sobre o baseline elegível.`,
+    { evidence: evidencia },
   );
 }
 
