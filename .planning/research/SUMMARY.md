@@ -1,227 +1,264 @@
 # Project Research Summary
 
-**Project:** SGRF/SGRD — production-hardening milestone (bug-fix + security, no new features)
-**Domain:** Internal financial-management web app — funding-request approval with five-role authorization, council voting with deadlines/tie-breaks, integer-cent ledger with annual limits, audit trail, CSV/PDF exports (Express 4 + Prisma 5 + Vue 3 MVP)
-**Researched:** 2026-09-23
-**Confidence:** MEDIUM-HIGH (in-repo evidence HIGH; external corroboration MEDIUM — websearch unavailable this run, first-party docs fetched directly)
+**Project:** SGRF/SGRD — v0.1.2 GitHub Release Reliability
+**Domain:** Brownfield GitHub Release and Milestone publication reliability for a UTFPR-internal financial-management system
+**Researched:** 2026-09-25
+**Confidence:** MEDIUM-HIGH (repository and live-remote evidence HIGH; GitHub API edge behavior MEDIUM because no publication write was performed)
 
 ## Executive Summary
 
-This is a brownfield hardening milestone, not a greenfield build: an existing UTFPR-internal MVP (Node 22 / Express 4 / Prisma 5 / PostgreSQL 16 backend + Vue 3 SPA, two independent npm packages, single Docker image + compose) must be made production-safe. Experts build this class of system around three pillars research confirms are missing: a centralized deny-by-default authorization matrix with tested allow+deny cells (OWASP A01), scheduled/background machinery that reaches terminal states (voting auto-close, email-queue drain), and money-path correctness enforced by the database (conditional atomic updates inside `$transaction` — no raw SQL, per the project's danger-zone rule). The recommended approach is deliberately conservative: stay on Express 4.22.3, Prisma 5.22, PostgreSQL 16 (defer majors to dedicated phases), clear the audit trail (vitest 5, Vite 8, nodemailer 10, remove dead `uuid`), and land a minimal two-job CI gate first — CONCERNS names missing CI as the reason these bugs shipped.
+SGRF/SGRD is an existing Node 22/Express/Prisma/PostgreSQL backend with a Vue 3/Vite frontend; v0.1.2 does **not** add product behavior, change either npm package, or alter the application acceptance commands. Its business outcome is to recover the missing GitHub Release and GitHub Milestone for the already-valid `v0.1.1` tag, then make future milestone publication an explicit, auditable, operator-invoked operation. The research consistently models GitHub as the authority: a local tag, local planning file, successful command exit, or either GitHub object alone is not completion proof.
 
-The roadmap implied by research is 8 phases in strict dependency order: **CI baseline → docs/14 rules decisions → deploy/env contract → authorization layer → session refresh → state-machine & money rules → background jobs → reports/audit + auth polish**. Two ordering constraints are load-bearing: rules decisions must precede any rule-dependent code (partial-approval, cancellation), and the voting tie-break fix must precede scheduling `closeExpired()` — otherwise the job automates the wedge (Pitfall 6). The authorization layer must land with allow-side tests, not just 403 assertions, or legitimate flows (conselheiros reading requests under vote, `/auth/refresh` itself) break silently.
+The recommended implementation is one checked-in `scripts/github-release-close.mjs` Node 22 ESM reconciler, with built-in `fetch`, `node:test`, and no new npm dependency. The operator authenticates with the existing `gh` credential; the script uses GitHub REST reads/writes, exact remote ref and Checks evidence, reviewed notes/record inputs, and a single state machine. A hosted GitHub Actions publisher is explicitly deferred: if added later, it must be a thin wrapper around this same script, not a second implementation and not a new automatic release trigger. The existing `.github/workflows/ci.yml` remains the regression gate and is read, not replaced.
 
-Key risks: (1) over-restricting authorization in the deny-by-default pass — mitigate with a full actor-resource-action matrix from `docs/06` covering ALLOW + DENY per route × 5 roles via supertest; (2) a "race fix" that doesn't serialize — `READ COMMITTED` + read-check-decrement is the existing TOCTOU bug; use conditional `updateMany({ availableCents: { gte } })` as the serialization point, `tx.*` only, and annual reads inside the transaction; (3) refresh-interceptor storms — single-flight promise + per-request `_retry` flag, generous rate limits on `/auth/refresh`; (4) secret fail-fast and secure-cookie changes breaking dev or silently failing over HTTP (localhost Secure exception hides it) — gate strictly on `NODE_ENV=production`, verify login via `http://<LAN-IP>`; (5) flaky Postgres CI eroding the gate — land CI on the existing 17 unit tests with no DB first, add the service container only with integration tests and an explicit `pg_isready` wait.
+The principal risks are identity and race risks: confusing a tag object with its peeled commit, selecting the wrong or late CI run, trusting a dirty local checkout, mutating an existing publication on retry, and treating Release and Milestone writes as atomic. The roadmap therefore puts the contract and fixture tests first, then read-only verification, then guarded idempotent apply, then a CI/concurrency rehearsal, and only then the operator-confirmed live v0.1.1 recovery. Every transition is read-after-write, every preflight failure is `mutations: 0`, and the valid `v0.1.1` tag is never created, moved, deleted, or force-updated.
 
 ## Key Findings
 
+### Resolved Cross-Research Decisions
+
+The research files use a few deliberately different phrasings. The following resolutions are the downstream roadmap contract:
+
+| Question | Resolution for v0.1.2 | Reason and source alignment |
+|---|---|---|
+| **Operator surface: checked-in Node script or Actions workflow** | **Use the checked-in Node 22 CLI as the only publication surface.** Keep `ci.yml` unchanged. A `workflow_dispatch` wrapper is a later option only, and must invoke the same script and contract. | STACK and ARCHITECTURE both reject a second publisher and new CI authority; FEATURES/PITFALLS describe a workflow only as a possible future explicit surface. The milestone requires an operator boundary, not a new automatic release workflow. |
+| **Exact-SHA CI selection** | For a new close, require the latest successful `backend` and `frontend` jobs from the existing `ci.yml` for **both** the protected `main` push run and the version-tag push run, all bound to the same full target SHA and expected Actions app/check suite. Require a stable final fence; absent, pending, late, failed, skipped, neutral, wrong-app, or contradictory evidence blocks. | This resolves STACK/FEATURES shorthand about “one coherent target-SHA run” against ARCHITECTURE’s explicit two-run late-run barrier. The observed v0.1.1 baseline has both runs green, so it is eligible immediately. A green run on another SHA never qualifies. |
+| **Historical target-SHA evidence** | Normal `apply` requires remote `main` = peeled tag = supplied full expected SHA. An explicit `historical`/`resume` mode may audit a pinned historical target after `main` advances, but it must use the recorded target-SHA CI/tag/Release/Milestone evidence and label the result historical. It is not a generic old-commit bypass. Any historical mutation requires proof of a reviewed prior partial attempt; a missing-object recovery with current-main divergence is not authorized. | STACK, FEATURES, ARCHITECTURE, and PITFALLS all distinguish current-close equality from later historical audit. The mode must not silently replace the historical SHA with local `HEAD` or today’s `main`. |
+| **Milestone identity** | The GitHub Milestone title to create/close is exactly **`v0.1.1`**, the historical release identity. The current GSD milestone **v0.1.2** is the automation/reliability milestone; do not create a GitHub Milestone titled `v0.1.2` as a substitute. Discover all `state=all` pages, require one exact-title candidate, then retain and operate on its stable Milestone `number`. | PROJECT.md separates the current v0.1.2 goal from the missing v0.1.1 publication. GitHub Milestone titles are not documented as unique, so title is a discovery key and number is the durable identity. |
+| **Release/Milestone write order** | Use Release draft → readback → publish/readback, then Milestone open → readback → close/readback, then final combined readback. | ARCHITECTURE and PITFALLS make the two-step open/close sequence canonical for recoverability. STACK/FEATURES allow a direct closed create as an API optimization, but it is not the safer default for this milestone. |
+| **Tag and signature policy** | Require an existing annotated tag and exact peeled commit. The current commit is GitHub-verified; the tag object is unsigned. Record those layers separately and do not reject or rewrite `v0.1.1` merely because the tag object lacks a signature. | The project explicitly preserves the valid tag. PITFALLS requires distinguishing commit verification from tag-object verification; no new tag-signature policy belongs in v0.1.2. |
+
 ### Recommended Stack
 
-([STACK.md](STACK.md)) Everything version-sensitive was verified against the npm registry and official migration guides on 2026-09-23 — HIGH confidence. The strategy is "patch hard, don't migrate": clear 1 critical / 2 high / 4 moderate backend + 1 high / 1 moderate frontend advisories without touching Express 5 or Prisma 7, whose breaking changes (route wildcards, async error semantics; mandatory driver adapters + `prisma.config.ts`) are pure regression risk with no audit driver this milestone.
+([STACK.md](STACK.md)) The brownfield fit is intentionally a small operations tool, not a service or application feature. The root-level script avoids a second package/workspace and runs with the same Node 22 runtime already used by the two packages and Actions. Direct REST calls expose status codes, pagination, structured fields, and readback behavior without parsing `gh` output or adding a release SDK.
 
 **Core technologies:**
-- **Node 22 LTS (≥22.12)** — vitest 5 + Vite 7/8 floor; Docker already pins 22, CI must match or builds drift
-- **Express 4.22.3 (stay on 4.x)** — current security-patched `latest-4`; Express 5 touches all 8 route files for zero gain
-- **Prisma 5.22.0 (defer Prisma 7)** — audit-clean; v7 forces driver adapters = a dedicated migration phase
-- **PostgreSQL 16** — supported to ~2028; money-as-cents + UUID behavior identical on 18; no advisory forces the jump
-- **Vue 3.5 / vue-router 4.6 / Pinia 4.0** — already current and audit-clean; verification stays `npm run build`
-- **helmet 8.3.0** — drop-in for bare `helmet()` defaults; HSTS 365d (meaningful only once HTTPS exists)
-- **express-rate-limit 8.7.0** — v8 fixes the IPv6-subnet keying bypass; extend limiting to all auth mutation routes
-- **Caddy 2 (`caddy:2-alpine`)** — auto-HTTPS in a 3-line Caddyfile, no Docker-socket access; resolves the secure-cookie/HTTPS requirement (compose wiring Conf: MEDIUM)
-- **nodemailer 10.0.10** — clears the HIGH advisory; API-compatible with current usage; zero runtime risk while `SMTP_ENABLED=false`
-- **node-cron 4.6.0** — `noOverlap` + timezone for `processQueue()`/`closeExpired()` — **⚠ conflicts with ARCHITECTURE.md, which recommends plain `setInterval` in `jobs/scheduler.js` and rejects node-cron; resolve during planning (see Gaps)**
-- **vitest 5.0.1 + Vite 8.3.0** — clears the repo's only CRITICAL advisory (≤4.1.10 chain) and the frontend HIGH (vite ≤6.4.2); vitest 5 peer-depends on vite — pin `vite@^8.3.0` explicitly; fallback `^7.3.6`
-- **supertest 7.3.0** — already in devDeps, never imported; the tool for the authorization allow+deny matrix
-- **GitHub Actions** (`checkout@v7` + `setup-node@v7`, Node 22) — two jobs, `working-directory` per package, `cache-dependency-path` mandatory in a two-package repo, dummy `DATABASE_URL` at job level (**ARCHITECTURE.md shows v4 — STACK.md's registry-verified v7 wins**)
-- **REMOVE `uuid`** — zero usages + moderate advisory; use `crypto.randomUUID()` (uuid 14.x is ESM-only and would break the CJS backend)
-- **Keep as-is:** argon2 0.41.1 (do NOT swap for bcrypt), jsonwebtoken 9.0.3, zod 3.25.76 (zod 4 renames core APIs), pino 9.14.0, multer 2.4.0 (optional)
+- **Node.js 22 ESM** — one local operator CLI, JSON validation, built-in `fetch`, and deterministic `node:test` fixtures; no root package or workspace.
+- **GitHub REST API** — authoritative reads and guarded writes for repository, refs, annotated tags, commits, Check Runs, workflow runs/jobs, branch protection, Releases, and Milestones; pin explicit API headers.
+- **GitHub CLI (`gh`, tested locally at 2.101.0)** — operator authentication, credential access, manual inspection/recovery, and a familiar audit surface; do not make it an npm dependency or use it to parse every API response.
+- **Existing Git and `.github/workflows/ci.yml`** — local safety diagnostics and the established `backend`/`frontend` regression gate; neither is publication authority.
+- **Reviewed notes and Milestone record files/stdin** — factual content inputs, hashed for invocation evidence; not a second state store.
+
+No new package, workspace, database migration, Express route, Vue component, Docker integration, CI test/build command, or hosted service is warranted. The likely new surface is `scripts/github-release-close.mjs`, `scripts/github-release-close.test.mjs`, an operator runbook (the research proposes `docs/17-github-release-close.md`), and small AGENTS/README links. An optional local evidence/lock directory may be ignored; it is supplemental and never authoritative.
 
 ### Expected Features
 
-([FEATURES.md](FEATURES.md)) Categorization is anchored in in-repo evidence (`PROJECT.md` Active requirements, `docs/03|06|07|11|13|14`, evidence-backed `CONCERNS.md` at b3837b7) — HIGH for the table; MEDIUM overall (external corroboration limited).
+([FEATURES.md](FEATURES.md)) The required product behavior is a fail-closed reconciler, not a pair of one-shot `create` commands. The following are the P1 acceptance seams:
 
-**Must have (table stakes — production blockers, all map to Active requirements):**
-- Endpoint authorization matrix enforced server-side (cancel, message remove, getOne/list scoping, listVotes, settings transactions, force-password-reset, reports voting) — any `ALUNO` can cancel others' requests today
-- Silent session refresh (401 → refresh once → single-flight retry) — system is unusable past 15 min today
-- `mustChangePassword` enforced server-side (403 + allowlist) + router guard — forced-change guarantee is currently void
-- Tie-break convergence (`AGUARDANDO_DESEMPATE` always resolves) + voting auto-close scheduled (`closeExpired()` every 5 min) — decisions must reach terminal state
-- Annual-limit accounting includes `CONCLUIDO` — direct money-leak (cycle spend → re-approve under cap)
-- Partial-approval rule + cancellation-after-approval rule decided (docs/14), documented in `docs/03`, implemented deliberately with tests
-- Email queue actually drains (`processQueue()` scheduled) + give-up admin alert + honest `smtpConfigured` — invites/resets are dead today
-- Export auditing (all formats, before streaming) + CSV formula-injection neutralization
-- Auth hardening: rate-limit all auth mutation routes, uniform 401 on login failure (keep distinct lockout 423), explicit `trust proxy`
-- Secrets fail fast in production (no `dev-*-secret-change-me` fallbacks — forgeable JWTs today)
-- Secure-cookie / HTTPS story resolved (deployment blocker — silent login failure on non-localhost)
-- Minimal CI: `npx vitest run` + `npm run build` on every push — the gate everything else depends on staying fixed
+**Must have (table stakes):**
+- **`verify` is read-only and zero-mutation** — independently report repository, tag, target, CI, Release, and Milestone invariants; an incomplete result explicitly says `mutations=0`.
+- **Repository/auth and permission preflight** — pin `ldsampaio/sgrf`/GitHub host, verify active credentials and endpoint permissions, and distinguish 401/403/404 permission failures from absent objects.
+- **Existing annotated-tag guard** — resolve `refs/tags/v0.1.1` to the tag object and peeled commit; never let Release creation auto-create or alter a tag.
+- **Exact `main`/tag SHA guard** — for a new close, compare full SHAs immediately before mutation; `strict:false` is recorded but does not replace equality.
+- **Canonical exact-SHA CI gate** — select by full `head_sha`, workflow path, event/ref, attempt, app/check-suite identity, and exact `success` conclusions for both required jobs; ignore the combined status endpoint and superseded wrong-SHA runs.
+- **Release reconciliation** — paginate all visible Releases including drafts; create from the existing tag or adopt an exact published Release; publish only an owned matching draft; conflict on duplicates or material differences.
+- **Milestone reconciliation** — paginate `state=all`, require exactly one exact-title match, use the stable number, verify the factual record and no open issues, and close only after Release publication.
+- **Explicit plan/apply path** — `plan` displays actions; `apply` requires reviewed content and an explicit confirmation; writes are ordered and separated.
+- **Idempotent recovery** — read natural keys before every retry, adopt exact results, and report `PARTIAL_STATE`/`PARTIAL_OR_UNCERTAIN` rather than duplicating or deleting.
+- **Final remote evidence** — fresh GitHub readback of tag, target, CI run/job/check evidence, Release ID/URL, Milestone number/URL, timestamps, and action result; never log credentials.
 
-**Should have (differentiators, P2 — outside committed scope unless requirements say otherwise):**
-- supertest authorization regression matrix (recurrence gate — do opportunistically as each authz fix lands)
-- Finance invariant reconciliation test (`sum(FinancialTransaction)` vs `FundBalance`)
-- Remaining `docs/14` decisions (quorum, vista-limit doc-vs-`@@unique` conflict) — flag: may deserve its own phase
-- One-time reset token + `EmailQueue.body` purge; job overlap guard/telemetry; error-handler stack hardening
-- nodemailer ≥10 explicitly before `SMTP_ENABLED=true`
+**Should have (differentiators, after P1 correctness):**
+- immutable plan preview with content hashes and ownership marker;
+- time-of-check/time-of-use ref/CI fence before each transition;
+- secret-free machine-readable result plus human recovery summary;
+- state-aware next-action output (`rerun-safe`, `repair-draft`, `manual-release-conflict`, `reconcile-open-milestone`);
+- explicit historical audit/resume mode that separates close-time proof from current `main`.
 
-**Defer (v2+ / anti-features — do NOT start this milestone):**
-- Refresh rotation + revocation (`tokenVersion`) — own milestone after silent refresh ships
-- Audit-trail read API/UI + retention policy — explicitly Out of Scope
-- CSRF tokens (accepted risk per `docs/11`, revisit on subdomains), TypeScript/ESLint (AGENTS.md forbids), frontend E2E, MFA/OIDC (institutional decision), pagination/horizontal scaling (no volume), broad refactors (balance-service extraction, JSON columns — excluded by Key Decision)
+**Defer or reject in v0.1.2:**
+- a hosted `workflow_dispatch` publisher or any automatic publication on push/merge/tag;
+- Immutable Releases, attestations, assets, generated notes, and due dates not supplied by an operator;
+- delete/recreate/force/retag rollback;
+- a service, daemon, webhook, queue, second state file, or extra npm dependency.
 
 ### Architecture Approach
 
-([ARCHITECTURE.md](ARCHITECTURE.md)) The system stays a layered modular monolith — single Docker image (Express serves API + built SPA) + compose Postgres; every hardening item is an in-layer overlay, no new services. Five patterns carry the milestone: a route-level `PERMISSIONS` map + `requirePermission` (fail-closed, transcribed from `docs/06`, row-level ownership stays in controllers); an in-process scheduler in `jobs/scheduler.js` called only from `server.js` (never `app.js` — timers would leak into tests); a single-flight 401 refresh interceptor on the shared axios instance in `services/api.js` (never imports the router — import cycle); conditional atomic `updateMany` balance updates inside `$transaction` without raw SQL across all 5 money-write sites; and a two-job CI with per-package `working-directory`. Direction stays strict: middleware → route gates → controller row checks → service rules → Prisma; jobs reuse `closeVoting`/`processQueue`, never reimplement.
+([ARCHITECTURE.md](ARCHITECTURE.md)) The publication layer is a single local orchestration state machine outside both application packages. It uses `observe → decide → one guarded transition → observe again`; a fresh GitHub snapshot reconstructs progress after a crash or timeout. The process is sequential and single-writer by design because Release and Milestone mutations cannot be parallelized without weakening the ordering invariant.
 
 **Major components:**
-1. `middlewares/permissions.js` (new) — static PERMISSIONS map + `requirePermission(action)`; 403 on undeclared action
-2. `middlewares/auth.js` (edit) — `authJwt` + `mustChangePassword` 403 gate with explicit allowlist (login/refresh/logout/change-password/me/health)
-3. `jobs/scheduler.js` (new) — re-entrancy-guarded loops for email drain (60s) + voting close (5min); wired from `server.js` only
-4. `services/api.js` interceptor (edit) — single-flight refresh + one retry; `window.location.assign('/login')` on refresh failure
-5. Money-path fixes in place — conditional `updateMany` + reads-inside-tx at `requestController.submit`, `votingService.closeVoting`, `votingController.collegiateDecision`, `financeController.markSpent/reverseProvision`, `settingsController.patchBalance` (the last also currently writes two ops with **no transaction**)
-6. `.github/workflows/ci.yml` (new) — backend: npm ci → prisma generate → vitest; frontend: npm ci → build
-7. Shared visibility helper — one scope function reused by `requestController.list/getOne` AND `reports.scopeFilter` (encoded twice today)
+1. **`scripts/github-release-close.mjs` operator CLI** — parse `verify`, `plan`, `apply`, and explicit `historical`/`resume`; validate version/repository/SHA/content; coordinate preflight, lock, CI fence, mutations, and output.
+2. **Internal `GitHubClient`** — built-in `fetch` with pinned API version/Accept/User-Agent headers, pagination, rate-limit handling, structured HTTP errors, and in-memory auth from `GH_TOKEN`/`GITHUB_TOKEN` or `gh auth token`.
+3. **Pure preflight/reconciliation functions** — classify refs, protection, CI evidence, Release/Milestone inventories, content markers, and conflicts without network I/O; feed deterministic fixture tests.
+4. **Audit and local lock helpers** — redacted operation UUID/JSONL evidence and an advisory repository/version lock; neither is a remote source of truth or a distributed lock.
+5. **GitHub remote objects** — own the tag, target, CI evidence, Release, and Milestone state; every decision and completion claim is based on their fresh readback.
 
-**Anti-patterns to avoid:** per-endpoint `if (role …)` patches in controllers (the failure that shipped); `setInterval` in `app.js`; per-view 401 handling or router import in `api.js`; `$queryRaw` `SELECT … FOR UPDATE` (raw SQL forbidden) or check-then-decrement; workspace tooling / invented lint-typecheck commands in CI.
+The canonical flow is:
+
+```text
+validate inputs + acquire apply lock
+  → read repository/refs/policy/CI/Release/Milestone snapshot
+  → wait for canonical main+tag CI runs and a stable fingerprint
+  → revalidate refs/CI immediately before the first write
+  → Release: create draft → readback → publish → readback
+  → revalidate refs/CI
+  → Milestone: create open → readback → close by number → readback
+  → final tag/ref/CI/Release/Milestone readback
+  → emit secret-free result/evidence
+```
+
+The tool has no intentional `git tag`, Git ref POST/PATCH/DELETE, tag rename, or force path. It rechecks the tag around Release creation because GitHub’s Release endpoint can create a missing tag when the request races with a disappearing ref. A partial result is a recoverable state, not an invitation to roll back history.
 
 ### Critical Pitfalls
 
-([PITFALLS.md](PITFALLS.md)) Top 5 of 12:
+([PITFALLS.md](PITFALLS.md)) The most important failure modes and required controls are:
 
-1. **Authorization over-restriction (P1)** — deny-by-default in one pass breaks documented-legitimate access (conselheiro opening a request under vote, `/auth/refresh` caught by a too-high guard, empty lists in `Council.vue`). *Avoid:* full actor-resource-action matrix from `docs/06` with ALLOW + DENY cell per fixed route × 5 roles via supertest; enumerate non-browser callers (jobs, seeds); use `reports.scopeFilter` as the scoping model; watch for 403 spikes.
-2. **`mustChangePassword` lockout loop (P2)** — blanket 403 in `authJwt` also blocks `change-password`/`me`/`refresh` → hard lock. *Avoid:* deny list with explicit documented allowlist, distinguishable `PASSWORD_CHANGE_REQUIRED` code, backend + frontend guard landing together, temp-password full-loop test.
-3. **Refresh interceptor storms (P3)** — N parallel 401s → refresh stampede → 429 mass logout; infinite retry loops. *Avoid:* per-request `_retry` flag, single-flight shared promise, never retry the refresh itself, generous limits on `/auth/refresh`, manual protocol (drop TTL to 10s, verify exactly one refresh per expiry) since there are zero frontend tests.
-4. **Prisma race "fix" that doesn't serialize (P5)** — wrapping read-check-decrement in `$transaction` changes nothing under READ COMMITTED; SERIALIZABLE without retry → 500s on 40001/40P01; root `prisma.*` inside a tx callback silently escapes the transaction. *Avoid:* conditional `updateMany` `gte` guard as the serialization point, `tx.*` only, annual read inside tx (+ Serializable + retry as belt-and-suspenders), reconciliation + `Promise.all` concurrency tests. Note: `version` column increments but is never checked anywhere.
-5. **State-machine fixes regress under a 17-test suite (P4)** — no test executes `closeVoting`/`canVote`/`castVote`/`annualTotalCents`; six statuses guarded by scattered `status ===` checks across ≥5 files. *Avoid:* CI first, characterization-test-then-flip per `docs/03` decisions, `grep` every touched status across `backend/src`, `docs/12-testes.md` as the test backlog.
-
-*Also noted:* job overlap/double-run + broken `votingCloser.js` requires (P6), secure cookie over HTTP invisible on localhost (P7), `trust proxy` global-lockout vs spoofable buckets (P8), secrets fail-fast breaking dev/CI if it checks presence instead of values (P9), flaky Postgres CI → tolerated retries (P10), nodemailer green-but-unverified until SMTP enables (P11), `docs/14` decisions re-guessed in code (P12).
+1. **Tag object mistaken for commit, or automatic tag creation** — `git rev-parse v0.1.1` may return the annotated tag object, and `gh release create` may create a tag from the default branch. **Avoid:** strict full-SHA input, remote ref → tag object → commit dereference, `--verify-tag` semantics in any one-off recovery, and a no-ref-write code path.
+2. **Wrong, stale, or late CI evidence** — a red PR/release-branch run can coexist with green target runs, while a tag push creates a second run after the main run. **Avoid:** never use list order, “latest branch run,” PR synthetic SHAs, or `/commits/{sha}/status`; require the canonical exact-SHA main+tag run set, app/suite/job identity, latest attempt, and a settled final fence.
+3. **Local or remote drift / TOCTOU** — this checkout is ahead of `origin/main` and dirty; another push can move `main` after preflight. **Avoid:** remote GitHub equality as proof, clean `main` only as an apply hygiene check, pinned expected SHA, local lock, and ref/CI revalidation before each mutation.
+4. **Non-idempotent retries and partial writes** — a lost response can mean the server committed a POST, and Release/Milestone are separate endpoints. **Avoid:** paginated natural-key inventory, readback after timeout/409/422/5xx, bounded GET backoff, no blind mutation retry, and explicit partial-state exit.
+5. **Milestone title/state/pagination confusion** — default open-only listing misses closed objects, titles are not a documented unique key, and `open_issues`/`closed_issues` are not closure proof. **Avoid:** `state=all` + complete pagination, exact-title uniqueness check, stable number persistence, no close-by-title, and no invented due date.
+6. **Permission and shell-safety errors** — the CI token has read-only permissions, a 403/404 can masquerade as absence, and interpolated titles/notes can execute shell text. **Avoid:** explicit endpoint permission matrix, existing operator credential, no dummy write probe, strict version/SHA validation, `execFile`/argument-safe calls, structured API bodies, and secret-free logs.
+7. **Concurrent operators, cancellation, and rate limits** — local locks do not protect separate hosts; repeated POSTs and uncapped polling can duplicate objects or trigger secondary limits. **Avoid:** one documented surface, natural-key conflict handling, serialized mutations, `Retry-After`, bounded request budget, and explicit stale-lock handling.
 
 ## Implications for Roadmap
 
-Based on research, suggested phase structure (merges PITFALLS' Phases A–H with ARCHITECTURE's Build Order 1–8 — the two agree on ordering rationale):
+The roadmap must treat the live recovery as an operator-confirmed outcome, not as permission to bypass the safety contract. The “P1–P4” labels in PITFALLS are business/control priorities, not a license to mutate before the implementation gates. The safest concrete order is the ARCHITECTURE build order below.
 
-### Phase 1: CI Baseline
-**Rationale:** CONCERNS names missing CI as *the* reason these bugs shipped; a gate that lands last gates nothing. Pure additive, zero code risk — existing 17 tests + build must be green twice before anything moves.
-**Delivers:** `.github/workflows/ci.yml` — two jobs, per-package `working-directory`, Node 22, `cache-dependency-path`, dummy `DATABASE_URL` at job level; `npx prisma generate` before vitest; no DB service yet, no lint/typecheck.
-**Addresses:** FEATURES "Minimal CI" (P1); STACK CI workflow; ARCHITECTURE Pattern 5.
-**Avoids:** Pitfall 10 (flaky DB CI) — v1 has zero flake surface; no `migrate dev`, no retry-suppression.
-**Research flags:** LOW — standard pattern, skip research-phase. Prove the gate red on a deliberate break.
+### Requirement Implications
 
-### Phase 2: Rules Decisions (`docs/14` close-out)
-**Rationale:** Partial-approval and cancellation-after-approval are untestable without decided rules; every rule-dependent phase queues behind this. Can run in parallel with Phase 1.
-**Delivers:** Decided + documented items in `docs/03`/`docs/14` (partial-approval aggregation rule, cancellation-after-approval, ideally quorum/vista-limit) with date + rationale.
-**Addresses:** FEATURES "Partial-approval rule", "Cancellation rule", "Remaining docs/14 decisions".
-**Avoids:** Pitfall 12 (decisions re-guessed in code) — one commit updates doc + code + test together.
-**Research flags:** MEDIUM — mostly product/council decisions, not technical research; flag the scope question of whether quorum/vista decisions belong in this milestone or their own phase.
+These are downstream requirement seams, not new product scope:
 
-### Phase 3: Deploy & Environment Contract (secrets, trust proxy, cookie/HTTPS)
-**Rationale:** One environment contract (`env.js` + `app.js` + `tokens.js` + compose) — splitting it invites the inconsistent story Pitfall G warns about. Foundational and independent; land early so later auth work tests against it.
-**Delivers:** Production fail-fast on *values* not just presence (`dev-*`, `change-me`, empty temp password) gated strictly on `NODE_ENV=production`; `trust proxy` env-driven hop count, default off; `COOKIE_SECURE` env (or Caddy TLS front per STACK's compose topology); CI dummy `JWT_*` env.
-**Addresses:** FEATURES "Secrets fail fast", "Secure-cookie/HTTPS story", trust-proxy precondition for auth rate limits.
-**Avoids:** Pitfalls 7 (localhost Secure exception hides the bug — verify via `http://<LAN-IP>`), 8 (never bare `true`), 9 (`start-dev.sh` flow must stay untouched).
-**Uses:** helmet 8, express-rate-limit 8, Caddy 2 topology (STACK), `app.set('trust proxy', 1)` behind Caddy only.
-**Research flags:** MEDIUM — topology decision (Caddy vs direct-publish) is a product/ops call; Caddy compose wiring not yet executed.
+- **Identity and preflight requirement** — cover TS-01 through TS-04: exact repository, auth, annotated tag, peeled target, remote `main`, protection, and exact-SHA CI; every failure must produce stable reason codes and zero mutations.
+- **Operator contract requirement** — cover TS-05, TS-08, and D-01: `verify`/`plan` are read-only; `apply` requires reviewed content, a displayed plan, and explicit confirmation; historical mode is separately labeled and constrained.
+- **Release requirement** — cover TS-06, TS-10, and TS-12: discover all exact-tag Releases including drafts, preserve the tag, publish only the desired object, and prove final `draft=false`/`published_at`/tag readback.
+- **Milestone requirement** — cover TS-07 and TS-08: create/read back an exact-title `v0.1.1` Milestone only after Release publication, close by number, require the factual record and `closed_at`, and never use v0.1.2 as the remote title.
+- **Recovery/idempotency requirement** — cover TS-09, TS-11, and D-04: all partial, duplicate, timeout, 409/422/429, and concurrent states are safe to rerun or explicitly conflict; no blind POST, delete, or retag path exists.
+- **Evidence requirement** — cover TS-10 and D-03: stdout JSON and optional JSONL evidence include IDs, URLs, SHAs, run/job/check IDs, action result, and timestamps but never tokens or headers.
+- **Safety/hardening requirement** — cover TS-01, TS-04, TS-12 plus PITFALLS controls: endpoint permissions, input/shell safety, exact ref/CI fence, branch protection readback, and no application/CI contract changes.
 
-### Phase 4: Authorization Hardening
-**Rationale:** `middlewares/permissions.js` map *before* its tests (tests encode the map, not the current scattered behavior); then fix the 6 unprotected endpoints + shared scope helper; `mustChangePassword` joins here (same file, `authJwt`). Must precede session refresh — the interceptor replays against endpoints whose 401/403 semantics this phase defines.
-**Delivers:** `PERMISSIONS` map transcribed from `docs/06` + `requirePermission` wired across requests/messages/settings/reports routes; ownership fixes (cancel, remove, getOne/list, listVotes, force-password-reset + `canManageUsers`); `mustChangePassword` 403 with allowlist + router-guard branch filled; supertest ALLOW+DENY matrix.
-**Addresses:** FEATURES "Authorization matrix" (P1), "mustChangePassword" (P1), supertest matrix (P2, opportunistic).
-**Avoids:** Pitfalls 1 (over-restriction — DoD is the full allow+deny matrix vs `docs/06`, not "holes closed") and 2 (lockout loop — full temp-password e2e loop).
-**Implements:** ARCHITECTURE Pattern 1; shared visibility helper reused by controller + `reports.scopeFilter`.
-**Research flags:** MEDIUM — supertest needs a DB-story spike (mock Prisma vs test Postgres); that decision changes whether the CI workflow gains a postgres service container.
+### Phase 1: Contract, Inputs, and Pure State Machine
+**Rationale:** The failure modes are identity, ambiguity, and state-machine defects. A stable command, reason-code, content, marker, and fixture contract must exist before any code can make a remote write. This is the “P1” engineering foundation, not permission to publish.
 
-### Phase 5: Session Refresh (frontend)
-**Rationale:** Independent of backend (`POST /auth/refresh` already works); pairs with Phase 4's `PASSWORD_CHANGE_REQUIRED` semantics.
-**Delivers:** Single-flight 401 interceptor in `services/api.js` (`_retry` flag, one shared refresh promise, `window.location.assign('/login')` on refresh failure — no router import); uniform-401 prerequisite handled; manual verification protocol as DoD (exactly one refresh per expiry with shortened TTL, one bounce on dead cookie).
-**Addresses:** FEATURES "Session refresh interceptor" (P1).
-**Avoids:** Pitfall 3 (storms/infinite loops) and the import-cycle anti-pattern.
-**Research flags:** LOW — pattern well-documented; single-flight specifics are community wisdom (MEDIUM) but the manual protocol validates it.
+**Delivers:** `verify`/`plan`/`apply` contracts; strict repository/version/full-SHA validation; reviewed notes/record schema; deterministic ownership marker/content hash; stable result schema and exit/reason-code taxonomy; pure Release/Milestone/CI/ref classifiers; `scripts/github-release-close.test.mjs` fixture matrix; initial runbook contract.
 
-### Phase 6: State Machine & Money Rules
-**Rationale:** After Phase 2 decisions, gated by Phase 1 CI. All balance/annual fixes share one pattern and should land as one reviewable change; tie-break must land here *before* Phase 7 schedules `closeExpired()`.
-**Delivers:** Tie-break convergence (decide mechanism: chefe `changeMyVote` in `AGUARDANDO_DESEMPATE` vs exclude chefe's regular vote — grep every `status ===` first); `annualTotalCents` += `CONCLUIDO`; partial-approval + cancellation-with-justification + audited reversal; conditional `updateMany` balance guards at all 5 money sites + wrap `settingsController.patchBalance`'s two ops in one `$transaction`; characterization→flip tests, `Promise.all` concurrency test, finance reconciliation test.
-**Addresses:** FEATURES "Tie-break convergence", "Annual-limit CONCLUIDO", "Partial-approval", "Cancellation-after-approval" (all P1); reconciliation test (P2).
-**Avoids:** Pitfalls 4 (regressions under 17 tests — test count must grow in this phase) and 5 (race that doesn't serialize — no raw SQL, `tx.*` only).
-**Uses:** Prisma 5 `$transaction` + conditional `updateMany`; `docs/12-testes.md` as test backlog.
-**Research flags:** HIGH — **needs `--research-phase`**: Prisma 5-version-specific isolation options (fetched docs were ORM 8) + `P2034`/40001 retry semantics; DB-backed test scope decision; PROJECT.md bucket ambiguity on whether TOCTOU is in-scope (research says it must be — "funds cannot leak").
+**Addresses:** TS-05, TS-08, TS-11; D-01; anti-features for generated notes, arbitrary branches, and destructive rollback.
 
-### Phase 7: Background Jobs (scheduler + voting auto-close + email queue)
-**Rationale:** After Phase 6 so `closeExpired()` runs the corrected state machine (tie-break inside auto-close); one phase for both jobs — they share one scheduler/guard design (splitting duplicates Pitfall 6). Job tests need the Phase 1 gate.
-**Delivers:** Fix `votingCloser.js` broken requires (`./` → `../`) first; `jobs/scheduler.js` with re-entrancy guard + `clearInterval` on SIGTERM, wired from `server.js` only; DB-as-arbiter claim (`updateMany` status claim / `PENDING → PROCESSING` before send); email give-up admin alert path; `smtpConfigured` honesty; nodemailer 10 upgrade in its own commit + stub-`sendMail` queue state test.
-**Addresses:** FEATURES "Email queue drains", "Voting auto-close scheduled", "smtpConfigured" (P1); nodemailer + job telemetry (P2).
-**Avoids:** Pitfalls 6 (overlap/double-run/timers-in-tests) and 11 (upgrade unverifiable while SMTP off — stub test + `transporter.verify()` before enable).
-**Uses:** **Resolve the scheduler conflict:** STACK recommends node-cron 4 (`noOverlap`, timezone), ARCHITECTURE recommends plain `setInterval` and rejects node-cron — decide explicitly in planning (research leans `setInterval`: two fixed-period jobs, zero deps, no calendar needs).
-**Research flags:** LOW — standard patterns; only the `docs/14` admin-alert channel is an open product decision.
+**Avoids:** Pitfalls 1, 2, 12, 15, and 16 through no-I/O fixtures, strict parsing, and an explicit ban on tag/ref/delete paths.
 
-### Phase 8: Reports/Audit Hardening + Auth Polish
-**Rationale:** Independent, low-risk, last before final verification — everything it touches (routes, rate limits) was defined by earlier phases.
-**Delivers:** Audit-before-stream for CSV/JSON/PDF (currently PDF only), CSV formula-injection neutralization (`=+-@\t\r\n` prefix-strip per OWASP), rate limits on all auth mutation routes (generous on `/refresh`, tight on `/forgot-password`), uniform login 401 while preserving lockout 423 + `PASSWORD_CHANGE_REQUIRED` distinction, distinct audit action for forced password reset.
-**Addresses:** FEATURES "Export audit + CSV neutralization", "Auth hardening" (P1).
-**Avoids:** Security-table mistakes (audit after headers sent; dropping lockout signaling; `invite_resent` lying about forced resets).
-**Research flags:** LOW — well-documented patterns; fold into Phases 4/6 where routes are already touched if convenient.
+**Research flag:** LOW for the contract itself; use standard Node test patterns. Do not add live mutation tests.
+
+### Phase 2: Read-Only Client and Exact-SHA Preflight
+**Rationale:** The current v0.1.1 state is known to be incomplete, but the first executable command must prove exactly what is remote. This phase proves the canonical target and CI contract before any apply path can be reached.
+
+**Delivers:** `GitHubClient` with built-in `fetch`, pinned headers, pagination, auth handoff, and structured errors; repository/branch-protection/ref/tag/commit reads; exact main+tag Actions run/job/check selection; commit-vs-tag signature recording; Release/Milestone inventories; read-only `verify` and `plan`; a live v0.1.1 read-only baseline report.
+
+**Addresses:** TS-01 through TS-05, TS-10, D-05; `REPO_MISMATCH`, `TAG_*`, `REF_MISMATCH`, `PROTECTION_DRIFT`, `CI_NOT_READY`, and `CI_SOURCE_MISMATCH`.
+
+**Avoids:** Pitfalls 3, 4, 6, 7, 8, 9, and the wrong-repository/local-HEAD/legacy-status traps.
+
+**Verification:** The read-only result must show tag object `0a68d6f0c55e7be07d13a0bbc4ed36d4af772630`, peeled/expected/main SHA `10c62ac85fd3ab275b8926c89f5f34ba4116e2cf`, the two green target-SHA push runs (`36095855139` and `36095872529`), and missing Release/Milestone with `mutations:0`.
+
+**Research flag:** HIGH — run `/gsd-plan-phase --research-phase 2` to pin the API-version/header contract, deterministic selection among reruns/check suites, branch-protection permissions, and historical evidence semantics. This is the most research-sensitive phase.
+
+### Phase 3: Guarded Apply, Idempotency, and Evidence
+**Rationale:** Once the read-only preflight is trustworthy, implement the smallest restartable mutation state machine. The state machine must prove recovery from an uncertain response before any live recovery is attempted.
+
+**Delivers:** `apply` with explicit confirmation; draft Release create/readback/publish/readback; Milestone open/create/readback/close-by-number/readback; content marker ownership checks; local repository/version lock; final secret-free JSON/JSONL evidence; bounded GET/rate-limit handling; readback-first handling of timeout/409/422/5xx; historical/resume guardrails; complete mocked partial-state and duplicate/concurrency tests.
+
+**Addresses:** TS-06 through TS-12; D-01 through D-04; all P1 recovery scenarios and the P2 historical evidence seam.
+
+**Avoids:** Pitfalls 10–14, 16, and 17: draft/prerelease conflation, duplicate Release creation, Milestone ambiguity, cross-object atomicity assumptions, concurrent invocation, destructive rollback, and blind retries.
+
+**Verification:** Fake-client/disposable-repository tests cover both missing objects, Release-only partial, draft Release, open/closed Milestone, page-two objects, duplicate titles, lost POST response, 403/404 permission, main advance, malicious input, and two simultaneous invocations. No test mutates `ldsampaio/sgrf`.
+
+**Research flag:** MEDIUM-HIGH — rehearse lost-response and concurrent-write behavior with a high-fidelity mock or disposable repository. The endpoint existence is known; the exact safe serialization behavior is the unresolved implementation question.
+
+### Phase 4: CI Fence, TOCTOU Protection, and Operator Runbook
+**Rationale:** A green preflight snapshot is not enough because tag-push CI can appear late and `main` can move between calls. This phase closes the race before the live v0.1.1 apply.
+
+**Delivers:** Bounded wait for both canonical target-SHA runs; stable fingerprint/settle interval; immediate ref/CI revalidation before every transition; explicit late-run failure and `main` divergence behavior; exit-code/recovery matrix; permission checklist; AGENTS.md/README links; finalized `docs/17-github-release-close.md`; optional evidence archive instructions.
+
+**Addresses:** TS-04, TS-08, TS-10, D-02, D-05; exact run IDs/attempts, workflow/app/suite identity, and final readback.
+
+**Avoids:** Pitfalls 5, 6, 7, 8, 9, and 14; no hosted workflow, automatic publication, or unbounded polling is introduced.
+
+**Verification:** A delayed tag run resets the fence; a late failure blocks; a stable green main+tag tuple permits only the next guarded step; a simulated main advance produces a pre-write abort; historical mode is read-only unless a prior partial state is proven.
+
+**Research flag:** MEDIUM — validate the proposed settle/timeout policy and GitHub event timing against the repository’s actual Actions behavior. Do not re-open the already-decided question of adding a workflow in v0.1.2.
+
+### Phase 5: Operator-Confirmed Live v0.1.1 Recovery
+**Rationale:** This is the business-critical P1 outcome, but it must occur only after Phases 1–4. The current remote baseline already satisfies the identity/CI conditions, so the operator can proceed without a tag rewrite or CI rerun.
+
+**Delivers:** A fresh read-only `verify` and reviewed `plan`; explicit human-approved Release notes and Milestone completion record; one clean `main` checkout at the expected tool revision; `apply --yes`; ordered remote writes; final GitHub readback and archived secret-free evidence. Expected initial actions are `create-draft-release`, `publish-release`, `create-open-milestone`, `close-milestone`; if a prior partial state exists, actions become `adopt`/`repair` and must not duplicate objects.
+
+**Addresses:** The active PROJECT requirements to publish `v0.1.1`, close the exact-title GitHub `v0.1.1` Milestone, and verify tag/Release/Milestone/CI. It also demonstrates TS-09 and TS-12 recovery-forward behavior.
+
+**Avoids:** Every critical pitfall, especially accidental tag creation, wrong-SHA CI selection, blind retry, Milestone close-before-Release, and local-planning-state confusion.
+
+**Verification:** Fresh remote reads show the preserved annotated tag and commit, exact successful main+tag CI run/job/check evidence, one published Release with stable ID/URL, and one closed `v0.1.1` Milestone with stable number/URL, `closed_at`, factual record, and no open issues. The local planning files and command exit are only supporting evidence.
+
+**Research flag:** LOW for external research; this phase needs a human operator review and a live read-only preflight, not another ecosystem study.
+
+### Phase 6: Closeout and Future Policy Decision (Deferred)
+**Rationale:** Do not make speculative hardening a prerequisite for the v0.1.1 recovery. Once the close is complete, record evidence and decide separately whether future milestones need a tag ruleset, Immutable Releases, attestations/assets, distributed operator locking, or a thin hosted wrapper.
+
+**Delivers:** Evidence archive/requirements evidence; explicit future-policy decision record. No change to the v0.1.1 tag, historical notes, application code, or current CI contract.
+
+**Research flag:** Only if activated later; confirm repository-owner permissions and policy compatibility before enabling any future protection or workflow.
 
 ### Phase Ordering Rationale
 
-- **CI first:** the regression gate must exist before behavior changes; cheap and independent.
-- **Decisions before rule-dependent code:** partial-approval/cancellation/tie-break cannot be test-written without decided rules (Pitfall 12).
-- **Env contract before auth expansion:** rate-limit keying, audit IPs, and cookie `secure` all depend on knowing the proxy topology (Pitfalls 7/8).
-- **Authorization before session refresh:** interceptor replays against endpoints whose 401/403 semantics the permission layer just defined; P2's whitelist must exist before frontend routing trusts the codes.
-- **Tie-break fix before scheduler:** scheduling `closeExpired()` first automates the wedge — the one ordering constraint that silently reintroduces a "fixed" bug.
-- **Jobs once, env contract once:** both dead jobs share one scheduler design; secrets/cookies/proxy are one environment contract — splitting either duplicates the pitfall.
-- **Reports/auth polish last:** independent, touches routes hardened by Phase 4.
+- **Contract before mutation:** the first live write must be preceded by a versioned state contract, stable failure semantics, and fixtures; otherwise an ambiguous response is indistinguishable from a failed write.
+- **Read-only client before apply:** the observed baseline proves why remote truth matters: the local tree is ahead/dirty, the combined status endpoint is misleading, and the Release/Milestone are absent remotely.
+- **Apply before live recovery:** partial-state and timeout behavior cannot be safely inferred from a happy-path `gh release create`.
+- **CI fence before recovery:** both target-SHA push runs and the late-run race are load-bearing; a single green main run is insufficient under the resolved architecture contract.
+- **Live recovery after rehearsal:** the milestone’s business goal is urgent, but fail-closed means the operator action is gated by all safety seams.
+- **Future hardening last:** tag rules, immutable releases, assets, distributed locks, and a hosted wrapper are not substitutes for the tested local reconciler and are not v0.1.2 acceptance scope.
 
 ### Research Flags
 
-Needs deeper research (`/gsd-plan-phase --research-phase <N>`):
-- **Phase 6 (State machine & money rules):** Prisma 5-specific isolation/retry semantics (fetched docs were ORM 8); DB-backed test strategy; TOCTOU scope-vs-PROJECT.md-bucket ambiguity — the single most research-hungry phase.
-- **Phase 4 (Authorization):** supertest DB story spike (mock Prisma vs test Postgres) — changes the CI workflow shape.
-- **Phase 3 (Deploy contract):** Caddy compose wiring + topology decision — re-verify express-rate-limit `max` vs `limit` naming at upgrade time.
+**Phases likely needing deeper research during planning (`/gsd-plan-phase --research-phase N`):**
+- **Phase 2:** GitHub API version/header pinning; exact check-suite/run/attempt selection; branch-protection read permissions; historical target-SHA evidence.
+- **Phase 3:** lost-response and duplicate-write behavior; local versus multi-host concurrency; marker ownership and content-change conflicts.
+- **Phase 4:** late tag-run timing, settle-window policy, and final-fence race rehearsal.
+- **Phase 6 only if activated:** tag ruleset/immutable-release eligibility and any future hosted workflow permissions.
 
-Standard patterns (skip research-phase):
-- **Phase 1 (CI):** fully specified workflow in STACK.md.
-- **Phase 5 (Session refresh):** code sketch in ARCHITECTURE.md; validated by manual protocol.
-- **Phase 7 (Background jobs):** standard `setInterval` wrapper; only a product decision (admin-alert channel) open.
-- **Phase 8 (Reports/auth polish):** OWASP guidance fetched and mapped to exact files.
+**Phases with standard patterns (skip broad research-phase):**
+- **Phase 1:** pure state-machine fixtures, command parsing, and reason-code tables are local engineering; no ecosystem research is needed.
+- **Phase 5:** the live recovery procedure is specified by the preflight/plan/apply contract; use operator review and readback, not new product research.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Every version, engine range, and peer dependency verified against npm registry + official migration guides on 2026-09-23; effort/behavior claims tagged MEDIUM inline; Context7 unavailable (official docs used as fallback) |
-| Features | HIGH (table) / MEDIUM (overall) | Categorization anchored in in-repo Active requirements + evidence-backed CONCERNS; external corroboration limited — websearch unavailable, OWASP/Express fetched directly (seam tiers webfetch as LOW) |
-| Architecture | HIGH (placement) / MEDIUM (external patterns) | Placement decisions derived from direct codebase reads; Prisma concurrency / axios interceptor / CI digests are MEDIUM (cross-checked in-repo) |
-| Pitfalls | MEDIUM | Grounded in direct code reads + first-party docs (nodemailer, prisma.io, MDN, OWASP, express-rate-limit); timer-overlap and single-flight specifics rest on community wisdom, marked inline; Prisma page documents ORM 8 not v5 |
+| **Stack** | MEDIUM-HIGH | Node 22, existing `gh`, REST, and repository fit are directly verified; the script has not yet been implemented, and GitHub’s rendered API-version guidance is not fully uniform. |
+| **Features** | HIGH for SGRF requirements / MEDIUM overall | Active requirements and current remote baseline are direct evidence. GitHub title uniqueness, atomicity, and eventual-consistency behavior are not fully documented and are treated conservatively. |
+| **Architecture** | HIGH for brownfield placement and state ordering / MEDIUM for CI races | Repository integration and baseline are direct; the two-run late-CI fence, marker ownership, and API edge behavior need implementation rehearsal. |
+| **Pitfalls** | MEDIUM-HIGH | The major failure modes are corroborated by first-party docs and the incident-shaped repository evidence; no destructive publication was executed to prove every edge case. |
 
-**Overall confidence:** MEDIUM-HIGH — in-repo evidence is exceptionally strong (every claim traceable to code or `docs/`); the residual risk is external-pattern claims (Prisma 5 isolation syntax, GitHub Actions readiness, single-flight refresh) that were cross-checked but not executed.
+**Overall confidence:** MEDIUM-HIGH
 
 ### Gaps to Address
 
-- **Scheduler technology conflict:** STACK.md recommends node-cron 4; ARCHITECTURE.md explicitly rejects it for `setInterval`. Resolve as an explicit decision during Phase 7 planning — do not let both land in PLAN.md.
-- **CI action versions:** STACK (registry-verified) says `checkout@v7`/`setup-node@v7`; ARCHITECTURE code block shows v4. Use v7; treat the ARCHITECTURE snippet as illustrative.
-- **Prisma 5 isolation syntax:** fetched docs cover ORM 8 — Phase 6 must confirm `$transaction({ isolationLevel })` option names + `P2034` behavior against Prisma **v5** docs before relying on Serializable.
-- **TOCTOU scope ambiguity:** PROJECT.md's bucket language may classify the race fix as out-of-scope; research argues it contradicts Core Value "funds cannot leak" — orchestrator must decide explicitly, not silently.
-- **DB-backed test strategy:** unsolved across phases 4 and 6 — mock Prisma vs test Postgres changes CI (service container + `pg_isready` wait + `migrate deploy`); needs a spike in Phase 4.
-- **Remaining `docs/14` decisions (quorum, vista-limit):** milestone commits only to partial-approval/cancellation/email — flag for requirements definition; may deserve its own phase (FEATURES marks this P2 but "before declaring council workflow production-complete").
-- **External verification limits:** websearch unavailable this run — generic Node/CI/axios claims are LOW externally; timer-overlap practices MEDIUM with no first-party source; validate at implementation.
-- **Caddy compose wiring:** documented but not executed — Phase 3 includes the first real run; dev plain-HTTP shape must remain unaffected.
+- **API version/header discrepancy:** STACK recommends the current `2026-03-10` header, while PITFALLS’ reproducible links use `2022-11-28` and note that `gh` defaults differ. Choose one supported/pinned version in the client and test the exact response fields; do not mix implicit versions.
+- **Canonical CI selection rehearsal:** the resolved policy requires both latest successful `main` and tag push runs, but late-run timing, rerun attempts, duplicate check suites, and settle duration still need a fixture and a read-only live rehearsal. Do not relax to “any green run.”
+- **Credential/permission boundary:** branch-protection reads may require Administration permission, and GitHub’s fine-grained Checks API guidance is not fully aligned across documentation. Smoke-test the existing `gh` credential and any future replacement; never use CI’s read-only token for publication.
+- **Historical/resume proof format:** define what constitutes a reviewed prior partial attempt, how the close-time SHA/run IDs are recorded, and when historical mode is read-only versus allowed to continue. It must not become an arbitrary old-commit publish switch.
+- **Ownership marker/content review:** settle the canonical serialization of reviewed notes/record and the marker/hash format, then make content changes produce a conflict rather than an overwrite. Do not invent due dates, generated notes, or deployment claims.
+- **Concurrency scope:** a local lock protects one workstation only. The current one-operator recovery is sufficient; if multiple hosts become real, design an external lock/queue before claiming serialized publication.
+- **Late/API consistency behavior:** GitHub does not promise cross-object atomicity, milestone-title uniqueness, or a general idempotency key. Keep read-after-write and bounded polling; verify any assumption that affects a mutation in a disposable repository or mock.
+- **Unsigned tag object:** the project’s explicit preservation decision is stronger than a new signature requirement. Record commit verification and tag-object verification separately; do not make the existing tag ineligible for recovery.
 
 ## Sources
 
-### Primary (HIGH confidence)
-- In-repo: `.planning/PROJECT.md`, `AGENTS.md`, `docs/03|06|07|11|12|13|14`, `.planning/codebase/CONCERNS.md` + `ARCHITECTURE.md` (b3837b7), direct reads of `app.js`, `server.js`, `env.js`, `tokens.js`, `auth.js`, `votingService.js`, `requestService.js`, `emailService.js`, `votingCloser.js`, all routes/controllers, `frontend/src/{services/api.js,router/index.js}`, `compose.yaml`, `Dockerfile`, both `package.json`/lockfiles
-- npm registry queries + `npm audit` (2026-09-23) — versions, engines, peers, advisory counts
-- expressjs.com Express 5 migration guide; nodemailer CHANGELOG v7→v10; MDN `Set-Cookie` (localhost Secure exception); OWASP Authorization / Authorization Regression Testing / Authentication / Forgot Password / JWT / Secrets / Logging cheat sheets + CSV Injection page; express-rate-limit official docs; supertest README; node-cron v4 docs; helmet v8 release notes; Vite/vitest migration guides; Node release schedule; PostgreSQL lifecycle pages; GitHub Actions docs; Caddy reverse-proxy quick start; prisma.io transactions docs
+### Primary (HIGH confidence for repository facts)
+- `.planning/PROJECT.md` — v0.1.2 goal, active requirements, operator boundary, v0.1.1 target SHA, tag-preservation decision, and remote-truth rule.
+- `AGENTS.md` and `.github/workflows/ci.yml` — existing Node/Postgres/CI contracts, `backend`/`frontend` jobs, branch-protection context, and verification commands.
+- Read-only GitHub API/CLI evidence for `ldsampaio/sgrf` on 2026-09-25: remote `main`, annotated tag object and peeled commit, verified/unsigned signature layers, missing v0.1.1 Release, absent Milestones, exact target-SHA runs/jobs, branch protection, and the historical red run on another SHA.
+- The four detailed research artifacts: [STACK.md](STACK.md), [FEATURES.md](FEATURES.md), [ARCHITECTURE.md](ARCHITECTURE.md), and [PITFALLS.md](PITFALLS.md).
 
-### Secondary (MEDIUM confidence)
-- Prisma concurrency digests (context7) — conditional `updateMany` pattern, corroborated by CONCERNS
-- Prisma 5 isolation syntax — page documents ORM 8, re-verify for v5 (Phase 6 flag)
-- GitHub Actions service containers "no readiness wait" — negative claim verified against current page, not explicit
-- express-rate-limit v8 keying / `max` vs `limit` — changelog read, not executed
-- axios single-flight refresh pattern, GitHub Actions two-package CI, job scheduling digests (brave) — LOW tier cross-checked against in-repo evidence
+### Secondary (MEDIUM confidence; first-party platform documentation cross-checked)
+- [GitHub REST Releases](https://docs.github.com/en/rest/releases/releases) — existing-tag behavior, draft/published fields, target semantics, and permissions.
+- [GitHub REST Milestones](https://docs.github.com/en/rest/issues/milestones) — `state=all`, pagination, stable number, create/update/readback.
+- [GitHub REST refs and tags](https://docs.github.com/en/rest/git/refs) / [Git tags](https://docs.github.com/en/rest/git/tags) — annotated-tag dereferencing and commit identity.
+- [GitHub Check Runs](https://docs.github.com/en/rest/checks/runs), [Actions workflow runs](https://docs.github.com/en/rest/actions/workflow-runs), and [protected branches](https://docs.github.com/en/rest/branches/branch-protection) — exact-SHA evidence, app/check-suite identity, and protection semantics.
+- [`gh release create`](https://cli.github.com/manual/gh_release_create), [`gh release view`](https://cli.github.com/manual/gh_release_view), [`gh api`](https://cli.github.com/manual/gh_api), and [`gh auth`](https://cli.github.com/manual/gh_auth) — tag auto-creation guard, machine-readable readback, and operator auth.
+- GitHub Actions permissions, script-injection, event-trigger, and concurrency guidance — used only to justify deferring a hosted publisher and controlling future surfaces.
+- Git `rev-parse`/tag verification documentation — used to distinguish tag-object and peeled-commit identity.
 
-### Tertiary (LOW confidence — needs validation)
-- Timer overlap / `setInterval` best practices — community wisdom, no first-party source fetched
-- Generic Node/CI/axios pattern claims — websearch unavailable this run; marked inline in FEATURES/PITFALLS
-- Caddy compose specifics (`SITE_ADDRESS`, volume wiring) — behavior HIGH, compose wiring unexecuted
-- Frontend interceptor behavior — zero frontend tests exist (`npm test` fails by design); verification is `npm run build` + the manual TTL protocol
+### Tertiary (LOW confidence / validation required)
+- No tertiary source is used as a decision authority. The remaining low-confidence items are implementation-level behavior (API eventual consistency, exact late-run timing, multi-host locking, and the chosen settle interval); they are explicitly listed in Gaps to Address.
 
 ---
-*Research completed: 2026-09-23*
+
+*Research completed: 2026-09-25*
 *Ready for roadmap: yes*

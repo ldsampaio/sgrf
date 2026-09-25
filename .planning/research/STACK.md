@@ -1,234 +1,366 @@
 # Stack Research
 
-**Domain:** Production hardening of an existing Express 4 + Prisma 5 + Vue 3 MVP (bug-fix/security milestone — no new features)
-**Researched:** 2026-09-23
-**Confidence:** HIGH — every version, engine range, and peer dependency below was verified today against the npm registry and official migration guides, not training data. Behavioral/migration-effort claims are tagged MEDIUM inline where docs were read but the change was not yet executed.
+**Domain:** Reliable, operator-invoked GitHub Release and Milestone publication for SGRF v0.1.2
+**Project:** SGRF/SGRD (`ldsampaio/sgrf`)
+**Researched:** 2026-09-25
+**Confidence:** MEDIUM-HIGH. GitHub behavior was checked against current first-party documentation and read-only live API/CLI evidence; the research seam classifies the verified web provider as MEDIUM. Repository-specific facts are HIGH because they were read directly from this checkout and GitHub.
+
+## Decision
+
+Add **one checked-in Node.js 22 ESM reconciler** at `scripts/github-release-close.mjs`, with built-in `fetch`, `node:test`, and no npm dependency. Use the GitHub CLI as the operator's authentication/recovery surface ([`gh auth status`](https://cli.github.com/manual/gh_auth_status), [`gh auth token`](https://cli.github.com/manual/gh_auth_token), and the existing `gh` credential), and use the GitHub REST API as the only remote source of truth.
+
+Do **not** add a release workflow, release action, Octokit, `semantic-release`, Changesets, a second state file, or a new root package. The existing `.github/workflows/ci.yml` remains the regression gate. If a hosted `workflow_dispatch` wrapper is wanted later, it must call this same script rather than reimplementing publication logic.
+
+This is deliberately a tooling-only addition. Express, Prisma, PostgreSQL, Vue, Vite, the two npm packages, and the backend/frontend verification commands do not change.
+
+This is a stack recommendation, not an executed publication. No GitHub object was mutated during research; the Node client, fixture tests, and one live read-only `verify` pass are implementation-phase acceptance work.
+
+## Repository Fit and Current Baseline
+
+| Observation | Consequence for the stack |
+|-------------|-----------------------------|
+| The repo is brownfield: Node 22, Ubuntu-hosted Actions, two independent npm packages, and no root workspace | A root-level `scripts/` tool is appropriate; do not add a workspace or alter either `package.json`. |
+| `gh` 2.101.0 is installed locally (released 2026-09-15) and GitHub documents it as preinstalled on hosted runners | Use `gh` for local auth and manual recovery; do not package it as an npm dependency. |
+| The current local operator credential has `repo` and `workflow` scopes | The existing `gh` login is sufficient for the normal release/milestone path; tokens must never be printed or committed. |
+| `main` is `10c62ac85fd3ab275b8926c89f5f34ba4116e2cf`; annotated `v0.1.1` resolves `refs/tags/v0.1.1` → tag object `0a68d6f0c55e7be07d13a0bbc4ed36d4af772630` → that commit | The tool must dereference the tag object. It must not infer the target from `release.target_commitish`. |
+| `v0.1.1` Release is absent; no `v0.1.1` Milestone exists; the latest `v0.1.0` Release does exist | The first apply must inventory by exact tag/title, create only missing objects, and never assume the first/latest object is the target. |
+| Target-SHA `backend` and `frontend` check runs and CI workflow runs are successful; required contexts are app-bound to GitHub Actions, with `strict:false` and admin enforcement enabled | Gate on exact-SHA check runs/jobs, not on the branch name or the latest run. `strict:false` is not a reason to skip the explicit main/tag equality guard. |
+| The combined commit-status endpoint is empty/pending for this SHA even though the Actions check runs are green | Do not use `/commits/{sha}/status` as the release gate. Read Check Runs and the target workflow's jobs. |
+| The research checkout is currently ahead of `origin/main` and has an uncommitted planning-state file | The remote checks remain authoritative, but an apply must additionally require a clean checkout on `main` at the expected SHA. Use a clean clone/worktree for the real publication. |
 
 ## Recommended Stack
 
 ### Core Technologies
 
 | Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Node.js | 22 LTS (≥22.12; Docker `node:22-bookworm-slim`) | Backend runtime + CI runtime | vitest 5 and Vite 7/8 both require Node ≥22.12; the Dockerfile already pins 22, so CI must match it or builds drift. Maintenance LTS until 2027-04-30 — comfortably past this milestone. **Conf: HIGH** (npm `engines` + Node release schedule) |
-| Express | 4.22.3 — **stay on 4.x** | HTTP framework | 4.22.3 is the current, security-patched `latest-4` release. Express 5 (5.2.1) changes route wildcards, removes `req.param`/`res.send(status)`, and reworks async error propagation across all 8 route files — pure regression risk with zero audit driver this milestone. **Conf: HIGH** |
-| Prisma + @prisma/client | 5.22.0 — **upgrade deferred** | ORM | Audit-clean. Prisma 7 (7.10.0) *forces* driver adapters (`@prisma/adapter-pg`), a `prisma.config.ts`, a new generator with explicit output, and rewritten env loading — a dedicated migration phase, not a hardening bump. **Conf: HIGH** on versions; **MEDIUM** on how long 5.x keeps receiving patches (support window not verified) |
-| PostgreSQL | 16 (`postgres:16-alpine`) | Database | PG 16 is supported through ~2028-11; money-as-cents integers and UUID strings behave identically on 18. No advisory forces an upgrade; a major DB jump adds dump/restore risk to a milestone already touching voting/ledger bugs. **Conf: HIGH** on lifecycle, **MEDIUM** on exact EOL date |
-| Vue 3 + vue-router + Pinia | 3.5.42 / 4.6.4 / 4.0.3 | SPA stack | Already on current majors and audit-clean — no change; frontend verification stays `npm run build`. **Conf: HIGH** |
-| helmet | 8.3.0 | Security headers | v8 is a drop-in for the bare `helmet()` defaults used in `app.js`; raises default HSTS `max-age` from 180 to 365 days (only meaningful once HTTPS exists — see Deploy Topology) and requires Node ≥18. **Conf: HIGH** (release notes) |
-| express-rate-limit | 8.7.0 | Auth throttling | Current code only limits login (`max: 20`/15 min); the milestone extends limiting to all auth mutation routes. v8 fixes an IPv6-subnet bypass in IP keying — the exact class of bug this milestone exists to close. **Conf: HIGH** on version; **MEDIUM** on v8 keying/`max` vs `limit` behavior — verify at upgrade time |
-| Caddy 2 | `caddy:2-alpine` | TLS-terminating reverse proxy | Automatic Let's Encrypt issuance *and renewal* in a 3-line Caddyfile, no Docker-socket access (Traefik's attack surface) and no renew cron (nginx+certbot's moving part). Directly resolves the "secure-cookie/HTTPS story" requirement. **Conf: HIGH** (official docs); **MEDIUM** (compose wiring not yet executed) |
+|------------|---------|---------|------------------|
+| Node.js | Existing Node 22 runtime | ESM release-close CLI, JSON/state validation, REST client, and tests | Already present in both packages and CI; built-in `fetch` and `node:test` cover this tool without a dependency or root workspace. It is more reliable than embedding multiline JSON and HTTP-status logic in Bash. |
+| GitHub CLI (`gh`) | 2.101.0 is the current tested local version; do not pin a local package | Operator authentication, `gh auth status`/`gh auth token`, one-off readback, and recovery | GitHub's current manual documents the required commands and hosted runners already provide `gh`. It avoids a second credential store and gives the operator a familiar audit trail. |
+| GitHub REST API | Pin the client headers to `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2026-03-10` (the version shown in the current docs), and a non-secret `User-Agent` | Release, Milestone, ref, annotated-tag, commit, Check Run, workflow-run, job, and branch-protection reads/writes | The API exposes the exact fields and permissions needed. Direct `fetch` gives the reconciler HTTP status codes, pagination, and structured JSON without shelling out for every request. |
+| Git | Existing Git 2.x | Local clean-checkout/branch/SHA safety check and human recovery commands | Local Git is useful evidence, but the script must compare the remote `main` and peeled tag SHAs; it must never use local refs as publication proof or mutate the tag. |
+| GitHub Actions `ci.yml` | Existing workflow; jobs `backend` and `frontend` | Required CI evidence for the target SHA | This is already the project's regression gate. The release tool reads its Check Runs/jobs; it must not add publication to the normal push/PR path. |
 
-### Supporting Libraries
+### Supporting Libraries and Tools
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| nodemailer | 10.0.10 | SMTP transport for the email queue | Always — it clears the **high** advisory (≤9.1.0). v10's only breaking change is Node ≥20 plus built-in TS types/dual ESM+CJS build; `createTransport({host, port, secure, auth})` is unchanged, so `require('nodemailer')` in the CommonJS backend keeps working. With `SMTP_ENABLED=false` default the bump is zero-runtime-risk. **Conf: HIGH** (v9/v10 release notes); **MEDIUM** (send path untested until SMTP is enabled) |
-| node-cron | 4.6.0 | Schedules the email-queue drain and voting auto-close | Always — both jobs are dead this milestone (`processQueue()` never scheduled; `closeExpired()` has a `system-cron` actor string but nothing runs it). Calendar expressions + `timezone` + `noOverlap: true` prevent the drift and double-runs you'd hand-roll with `setInterval`; zero dependencies. Node ≥20 (4.x). **Conf: MEDIUM** (v4 options read from docs, not executed) |
-| supertest | 7.3.0 (already in devDeps, **never imported**) | HTTP route tests | Use it for every auth/authorization fix: `request(app)` binds an ephemeral port with no listening server, and `request.agent(app)` persists the httpOnly cookie jar — exactly what's needed to regression-test login → refresh → protected-route flows against `createApp()`. **Conf: HIGH** (README); **MEDIUM** (first suite not yet written) |
-| argon2 | 0.41.1 (keep) | Password hashing | Current, audit-clean, memory-hard — the right choice for institutional credentials. Do not "simplify" to bcrypt. **Conf: HIGH** |
-| jsonwebtoken | 9.0.3 (keep) | Cookie JWT (15m/7d) | Audit-clean on the current major; swapping to `jose` touches every auth path for zero security gain this milestone. **Conf: HIGH** |
-| zod | 3.25.76 (keep) | Request/batch validation | Audit-clean; zod 4 (4.6.5) renames core APIs (`z.string().email()` → `z.email()`, error customization) across every validator — defer with the other excluded refactors. **Conf: HIGH** (audit); **MEDIUM** (4.x API scope) |
-| pino + pino-http | 9.14.0 / 10.5.0 (keep) | Structured logs + audit trail | Current majors, audit-clean; run `npm update` for patches only — pino 10 / pino-http 11 majors buy nothing here. **Conf: HIGH** |
-| multer | 2.4.0 (optional bump) | CSV batch user import | Only used in `userBatchController.js` (memoryStorage, 1 MB cap). v2 keeps the `.single()` middleware API and removes the legacy callback style; audit doesn't flag 1.4.5-lts.2, so this is hygiene, not urgent — retest = one CSV upload. **Conf: MEDIUM** |
-| uuid | **REMOVE entirely** | — | Zero usages in `backend/src` (grep-verified) *and* it carries a moderate advisory (<11.1.1). If an ID is ever needed, use Node 22's built-in `crypto.randomUUID()` — uuid 14.x is ESM-only and would break the `"type": "commonjs"` backend. **Conf: HIGH** |
+There are **no new npm libraries**. Use only Node built-ins (`fetch`, `URL`, `crypto` if needed for a plan digest, `child_process` for `gh auth`, and `node:test`) plus the operator's installed Git and GitHub CLI.
 
-### Development Tools
+| Tool | Purpose | When to Use |
+|------|---------|-------------|
+| `gh auth status --hostname github.com --active` | Prove that an active account is usable before any API call | Every local `verify`, `plan`, and `apply`; fail before writes if auth is unhealthy. |
+| `gh auth token --hostname github.com` | Supply a token to the Node client when `GH_TOKEN`/`GITHUB_TOKEN` is not already set | Capture in memory/environment only; never echo, log, or write it. |
+| `gh api` | Manual readback and emergency inspection | Recovery and operator diagnosis; the canonical script may use direct `fetch`, but both must target the same repository and API contract. |
+| `gh run list --commit <sha> --workflow ci.yml` and `gh run view --json jobs` | Human-readable exact-SHA evidence | Manual verification and troubleshooting; scripted gate should query the equivalent REST endpoints. |
+| `git status --porcelain`, `git branch --show-current`, `git rev-parse HEAD` | Local apply safety | `apply` only; `verify` should remain usable from a clean or dirty audit checkout because it is remote-only. |
+| `node --test scripts/github-release-close.test.mjs` | Fixture tests for reconciliation and failure semantics | Implementation/phase verification; it is not a replacement for the existing backend/frontend CI commands. |
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| vitest | 5.0.1 — backend test runner | Clears the repo's only **critical** advisory (the ≤4.1.10 chain: `vite-node`, `@vitest/mocker`, bundled old vite/esbuild). v5 makes `vite` a **peer dependency** (`^6.4.0 ‖ ^7 ‖ ^8`) and needs Node ≥22.12 — pin `vite@^8.3.0` explicitly in backend devDeps instead of letting npm hoist a surprise. Breaking defaults to check: `clearMocks` now defaults `true`, and unawaited async assertions fail — the 17 existing tests may need small assertion tweaks. **Conf: HIGH** (peers/engines via registry); **MEDIUM** (test-compat impact) |
-| Vite | 8.3.0 (frontend) — fallbacks 7.3.6 → 6.4.3 | SPA build | The installed 5.4.21 sits under the **high** advisory (vite ≤6.4.2, incl. esbuild dev-server issues). v8 swaps esbuild/Rollup for Rolldown/Oxc — a real behavior change; `@vitejs/plugin-vue@6.0.9` peers already accept `vite ^5‖^6‖^7‖^8`, so no plugin bump is needed. If `npm run build` breaks, fall back to 7.3.6 (classic pipeline, still advisory-free); 6.4.3 is the minimum patched release if forced to stay near current. **Conf: HIGH** (versions/peers); **MEDIUM** (v8 build behavior on this SPA) |
-| GitHub Actions | `actions/checkout@v7` + `actions/setup-node@v7`, `node-version: 22`, `cache: npm` | CI | No `.github/workflows` exists today. Both actions are current majors (node24 runtime). In a two-package repo you **must** pass `cache-dependency-path` per job or the cache key is wrong. Backend job: `npm ci` → `npx prisma generate` → `npx vitest run`. Frontend job: `npm ci` → `npm run build`. See workflow below. **Conf: HIGH** |
-| CI job env | dummy `DATABASE_URL` at **job level** | CI correctness | CI has no `backend/.env`; tests import `votingService` → `config/db` → `new PrismaClient()`. Prisma connects lazily (no test queries the DB — grep-verified), but the generated client and env resolution still need a syntactically valid `DATABASE_URL`. Set a throwaway one at job level; `prisma generate` does not open a connection. **Conf: MEDIUM** |
+`jq` and raw `curl` are not required dependencies. If a Bash implementation is chosen later, use `gh --jq` rather than assuming a separately installed `jq`; keep `curl` out of the canonical path so token/header handling stays in one client.
 
-## Installation
+## Installation and Operator Setup
+
+There is no package installation and no lockfile change.
 
 ```bash
-# Backend — clears 1 critical, 2 high, 4 moderate advisories (npm audit, 2026-09-23)
-cd backend
-npm rm uuid                                # dead dependency + moderate advisory
-npm install nodemailer@^10.0.10            # high advisory ≤9.1.0; API-compatible, Node ≥20
-npm install helmet@^8.3.0 express-rate-limit@^8.7.0
-npm install node-cron@^4.6.0               # schedule processQueue() + closeExpired() from server.js
-npm install -D vitest@^5.0.1 vite@^8.3.0 supertest@^7.3.0
-# ^ vitest 5 peer-depends on vite ≥6.4 — pin it explicitly; supertest is installed but unused, start importing it
-npm update                                  # jsonwebtoken/zod/pino/pdfkit → latest patch-in-range
+# Existing runtime checks
+node --version                 # Node 22
+git --version                  # existing Git toolchain
+gh --version                   # 2.101.0 was verified locally
 
-# Frontend — clears 1 high + 1 moderate advisory
-cd ../frontend
-npm install -D vite@^8.3.0                 # if the build breaks: vite@^7.3.6, then vite@^6.4.3
+# One-time operator authentication, if needed
+gh auth login --hostname github.com --git-protocol https --web
+gh auth status --hostname github.com --active
 
-# Verify (the only two commands that exist, per AGENTS.md)
-cd ../backend && npx vitest run
-cd ../frontend && npm run build
+# Optional noninteractive form for the Node client; do not print this value
+GH_TOKEN="$(gh auth token --hostname github.com)" \
+  node scripts/github-release-close.mjs verify ...
 ```
 
-## CI Workflow (minimal)
+The script should accept `GH_TOKEN` first, then `GITHUB_TOKEN`, and only then call `gh auth token` if neither is present. It must never persist a token or include one in an evidence record. GitHub documents fine-grained PATs as preferable for new credentials, but its general PAT guidance still lists a Checks API limitation while the Check Runs endpoint reference lists `Checks: read`; therefore, the already-authenticated `gh` OAuth credential is the safest current operator path. Smoke-test any future fine-grained PAT against the exact check-runs endpoint before making it a release dependency.
 
-Mandated by PROJECT.md: "backend `npx vitest run` + frontend `npm run build` on every push". Nothing else — no lint, no typecheck, no coverage gates (explicitly Out of Scope).
+For the current v0.1.1 recovery, the reviewed notes and Milestone completion record are content inputs (files or standard input), not a second state store. The existing annotated tag message may be used as factual source material, but generated notes are not the default.
 
-```yaml
-# .github/workflows/ci.yml
-name: CI
-on: push                        # "every push" per milestone scope; add pull_request if branches diverge
-jobs:
-  backend:
-    runs-on: ubuntu-latest
-    env:                         # CI has no backend/.env — tests construct PrismaClient via votingService
-      DATABASE_URL: postgresql://user:pass@localhost:5432/sgrd   # dummy: generate/tests never connect
-    defaults: { run: { working-directory: backend } }
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: backend/package-lock.json   # required in a two-package repo
-      - run: npm ci
-      - run: npx prisma generate    # generated client is not committed; no postinstall script exists
-      - run: npx vitest run
-  frontend:
-    runs-on: ubuntu-latest
-    defaults: { run: { working-directory: frontend } }
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run build
+## Proposed Repository Shape and Integration Points
+
+```text
+scripts/
+├── github-release-close.mjs       # CLI, API client, reconciler, evidence output
+└── github-release-close.test.mjs  # node:test fixtures; no network in unit tests
+.github/workflows/ci.yml           # unchanged regression gate
+AGENTS.md                          # add the operator command/auth prerequisites
+docs/                              # add release-close recovery/runbook documentation
 ```
 
-Why this shape: tests are pure unit tests (17 assertions over `calcAmount`/`tally`/batch validation — grep confirms no test queries Postgres), so **no `postgres` service container is needed**. If a future test touches the DB, add a `services: db: image: postgres:16-alpine` block — matching compose, not upgrading to 18.
+No `backend/package.json`, `frontend/package.json`, workspace, database migration, application route, or CI test/build command changes are needed. The documentation should describe the command and recovery policy; GitHub API/CLI readback, not a GSD file or a local manifest, remains authoritative.
 
-## Deploy Topology: TLS & Reverse Proxy
+The script should be split internally into pure reconciliation functions and a small `GitHubClient` interface. Unit tests can feed the pure functions synthetic Release/Milestone/check-run inventories; integration verification performs read-only calls against the real repository. Do not make live mutation tests part of normal CI.
 
-The "secure-cookie/HTTPS story" requirement resolves with one box in front, not code changes:
+## Command and Data Contract
 
-```yaml
-# compose.yaml — add alongside app + db:
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports: ["80:80", "443:443"]
-    environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:-:443}     # e.g. sgrd.example.edu.br:443 → auto ACME cert
-      UPSTREAM: app:3000
-    volumes:
-      - caddy_data:/data                      # certs persist + auto-renew
-      - caddy_config:/config
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-    depends_on: [app]
+### Modes
+
+Use explicit modes so a human can audit before mutating:
+
+```bash
+node scripts/github-release-close.mjs verify \
+  --repo ldsampaio/sgrf --version v0.1.1 \
+  --expected-sha 10c62ac85fd3ab275b8926c89f5f34ba4116e2cf
+
+node scripts/github-release-close.mjs plan \
+  --repo ldsampaio/sgrf --version v0.1.1 \
+  --expected-sha 10c62ac85fd3ab275b8926c89f5f34ba4116e2cf \
+  --notes-file /path/to/reviewed-release-notes.md \
+  --milestone-description-file /path/to/reviewed-milestone-record.md
+
+node scripts/github-release-close.mjs apply \
+  --repo ldsampaio/sgrf --version v0.1.1 \
+  --expected-sha 10c62ac85fd3ab275b8926c89f5f34ba4116e2cf \
+  --notes-file /path/to/reviewed-release-notes.md \
+  --milestone-description-file /path/to/reviewed-milestone-record.md \
+  --yes
 ```
 
-```
-# deploy/Caddyfile
-{$SITE_ADDRESS} {
-  reverse_proxy {$UPSTREAM}
+`verify` and `plan` must perform zero mutations. `apply` must refuse to run unless the same preflight passes, the plan is shown, and the operator supplies an explicit confirmation. A `--historical`/`--resume` mode may audit an already-started close when current `main` has advanced; it may finish only when the Release already exists or the operator supplies evidence of a prior partial attempt, and it must record that mode rather than pretend that a new close-time SHA is the historical proof.
+
+### Inputs
+
+| Input | Required | Contract |
+|-------|----------|----------|
+| `--repo` | Yes | Exact `owner/repo`; compare it to `GET /repos/{owner}/{repo}` before any write. |
+| `--version` | Yes | Strict version such as `v0.1.1`; do not accept an arbitrary branch name. |
+| `--expected-sha` | Yes | Full 40-character commit SHA supplied by the operator or close record. Never infer it from a moving local `HEAD`. |
+| `--base-ref` | Defaults to `main` | Remote ref to compare during a new close; the current repository contract is `main`. |
+| `--required-check` | Repeatable; defaults to `backend,frontend` | Names must match the protected contexts and the actual job names in `.github/workflows/ci.yml`. |
+| `--notes-file` | Yes for apply; optional for verify | Reviewed factual Release body. The file is an input artifact, not a remote-state cache. |
+| `--milestone-description-file` | Yes for apply; optional for verify | Concise completion record naming the version, target SHA, Release URL, CI evidence, and factual accomplishments. Leave `due_on` null unless the operator explicitly supplies a real date. |
+| `--prerelease` | Optional, default `false` | Make the desired Release flag explicit rather than inheriting CLI defaults. |
+| `--latest` | Optional/explicit | Do not make “latest” part of v0.1.2 completion unless the product decision is recorded. |
+| `--historical` | Optional | For audit/resume only; current-main divergence is informational, but tag/CI/Release/Milestone evidence must remain coherent. |
+
+### Outputs and exit behavior
+
+Human-readable progress and stable reason codes go to stderr. A single secret-free JSON result goes to stdout so an operator can redirect it to a temporary evidence file or CI log:
+
+```json
+{
+  "schemaVersion": 1,
+  "mode": "apply",
+  "status": "COMPLETE",
+  "repository": "ldsampaio/sgrf",
+  "version": "v0.1.1",
+  "expectedSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
+  "observed": {
+    "mainSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
+    "tagObjectSha": "0a68d6f0c55e7be07d13a0bbc4ed36d4af772630",
+    "peeledCommitSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf"
+  },
+  "ci": [
+    { "name": "backend", "conclusion": "success", "url": "..." },
+    { "name": "frontend", "conclusion": "success", "url": "..." }
+  ],
+  "release": { "id": 0, "url": "...", "draft": false, "prerelease": false, "immutable": false, "tagName": "v0.1.1" },
+  "milestone": { "number": 0, "state": "closed", "url": "...", "closedAt": "..." },
+  "actions": ["create-release", "create-milestone(closed)"],
+  "mutations": 2
 }
 ```
 
-Wiring rules once Caddy exists:
-1. **Stop publishing `APP_PORT` publicly** — bind it to `127.0.0.1` or drop the `ports` mapping; only Caddy owns 80/443.
-2. **`app.set('trust proxy', 1)`** in `app.js` (one hop = Caddy) — without it express-rate-limit v7+ raises `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`, and `AuditEvent` IPs record the proxy, not the client. Leave it **off** in dev where nothing sets `X-Forwarded-For`. **Conf: MEDIUM** (well-documented behavior, not re-executed today).
-3. `FRONTEND_URL=https://…`, `secure` cookies on, CORS origin matching — the axios `withCredentials` flow then works same-origin and cross-origin.
-4. No-domain/LAN deploy: Caddy `tls internal` gives real TLS on a private network; plain-HTTP dev is unaffected (browsers ignore HSTS over http, so helmet 8's 365-day header is harmless).
+The exact schema can evolve, but it must include the repository, version, expected/observed SHAs, selected run/job IDs and URLs, Release ID/URL, Milestone number/URL, timestamps, action names, and `mutations`. It must not contain tokens, cookies, authorization headers, or unredacted local environment data. `verify`, preflight blocks, and conflicts must report `mutations: 0`.
 
-**Scheduling wiring:** in `server.js`, `cron.schedule('* * * * *', …, { noOverlap: true, timezone: 'America/Sao_Paulo' })` calling `processQueue()` and `closeExpired()` — but **first fix `src/jobs/votingCloser.js`'s broken requires** (`./config/db` and `./config/logger` are one directory off from `src/jobs/`; should be `../config/db`, `../config/logger`, `../services/votingService`). Confirmed broken in code read today; the `require.main === module` CLI block should stay for manual runs. **Conf: HIGH** (requires read directly).
+Suggested exit categories are: `0` complete/no-op, non-zero blocked precondition, non-zero conflict, non-zero partial/uncertain after a write, and non-zero auth/transport failure. Keep the stable reason codes (`TAG_TARGET_MISMATCH`, `CI_NOT_READY`, `RELEASE_CONFLICT`, `MILESTONE_AMBIGUOUS`, `PARTIAL_STATE`, and so on) independent of prose.
+
+## Reconciliation and Idempotency Model
+
+The documented GitHub REST surface has no cross-object transaction or idempotency key spanning Release and Milestone. The correct model is **read-before-write, minimal mutation, read-after-write, and forward recovery**.
+
+### Release
+
+1. Inventory every page of `GET /repos/{owner}/{repo}/releases?per_page=100&page=N`, including drafts visible to the authenticated operator, and filter for exact `tag_name`. The documented get-by-tag endpoint returns a published Release and is not sufficient for draft discovery.
+2. Zero matches: create a published Release with the existing tag, explicit `name`/`body`, `draft:false`, and `prerelease:false`. Send `target_commitish` only as a convenience; GitHub documents that it is ignored when the tag already exists, so the independent ref check remains the commit proof.
+3. One matching draft with the declared content and flags: update that Release by its stable ID to publish it, then read it back. This is the only automatic repair of an existing Release state.
+4. One matching published Release: adopt it as a no-op only when title/tag, body, draft/prerelease state, and independently resolved tag commit match the declared result.
+5. More than one match, a materially different published object, or an immutable object that cannot satisfy the required state: stop with a conflict. Never overwrite notes or delete a Release to force convergence.
+
+[`gh release create`](https://cli.github.com/manual/gh_release_create) `v0.1.1 --verify-tag` is safe for the one-off creation path because the flag prevents automatic tag creation, but it is not the future reconciler. Do not use `--fail-on-no-commits` as the idempotency mechanism: GitHub documents that it can reject a release when there are no new commits, which can block recovery of a missing Release for an already-valid tag. Do not use `--clobber`; it deletes existing assets before uploading.
+
+### Milestone
+
+1. List all pages with `state=all` and filter by exact title. GitHub identifies a Milestone by number and does not document title uniqueness, so exact-title ambiguity is a hard stop.
+2. Zero matches: after Release readback succeeds, create the Milestone with the reviewed description and `state=closed` (or create open and immediately close only if the API/client contract requires the two-step form). Read it back by number.
+3. One exact open match with the correct description and `open_issues=0`: PATCH that number to `state=closed`, then read it back. Retain the number; do not create a replacement.
+4. One exact closed match with the expected record: adopt as a no-op.
+5. A closed/open object with different content, or duplicate exact titles: conflict. Do not select the newest or first object.
+
+### API Mutation Map
+
+| Intent | Endpoint | Normal use |
+|--------|----------|------------|
+| Create a published Release | `POST /repos/{owner}/{repo}/releases` with `tag_name`, `name`, `body`, `draft=false`, `prerelease` | Only after the existing-tag/ref/CI preflight. |
+| Publish/repair an expected draft | `PATCH /repos/{owner}/{repo}/releases/{release_id}` with the declared fields and `draft=false` | Only for one exact matching draft; never a published-content overwrite. |
+| Create a closed Milestone | `POST /repos/{owner}/{repo}/milestones` with `title`, `description`, `state=closed` | Only after Release readback succeeds. |
+| Close an expected open Milestone | `PATCH /repos/{owner}/{repo}/milestones/{milestone_number}` with `state=closed` | Retain the number and require the declared record/no open issues. |
+
+There is no endpoint that atomically commits the Release and Milestone pair. The ordered calls plus fresh GETs are intentional.
+
+### Ambiguous writes and partial state
+
+A timeout, connection reset, `422`, `429`, or `5xx` from a POST/PATCH is not proof that the write failed. Honor `Retry-After` for bounded GET/rate-limit backoff, but before any write retry:
+
+1. Re-read Releases by tag/list and Milestones by exact title.
+2. If the expected object exists, adopt it and continue from the next ordered step.
+3. If it is absent, report the original API failure or retry only with a bounded backoff.
+4. If it exists but differs, stop with a conflict.
+
+If Release publication succeeds and Milestone closure fails, leave the Release in place and report `PARTIAL_STATE` with the safe next action. A rerun must adopt the Release and continue. There is no safe automatic rollback across tag, Release, and Milestone; never delete, recreate, force-move, or retag `v0.1.1` as compensation.
+
+## Preflight and Readback Implementation
+
+| Order | API/read | Required assertion | Failure behavior |
+|------:|---------|-------------------|------------------|
+| 1 | `gh auth status` plus `GET /repos/{owner}/{repo}` and the credential's available scope/permission metadata | Active account can read the exact repository; default branch is `main`; the declared credential is eligible for the later write operations | `AUTH_REQUIRED`/`REPO_MISMATCH`/permission failure; no writes. `gh auth status` proves authentication, not every endpoint's write scope; do not mistake a successful read for write authorization. |
+| 2 | Local `git status`, branch, and HEAD (apply only) | Clean checkout, branch `main`, and local HEAD equals `expected-sha` | `LOCAL_DIRTY`/`LOCAL_REF_MISMATCH`; no writes. Remote verification remains usable without this check. |
+| 3 | `GET /repos/{owner}/{repo}/git/ref/heads/main` | Remote branch object resolves to the full expected commit | `REF_MISMATCH`; no writes. Revalidate immediately before each mutation. |
+| 4 | `GET /repos/{owner}/{repo}/git/ref/tags/{version}`, then follow `GET /repos/{owner}/{repo}/git/tags/{tag_object_sha}` while `object.type=tag` (bounded depth) | Exactly one expected ref; annotated object; final object type `commit`; peeled SHA equals expected | `TAG_MISSING`, `TAG_NOT_ANNOTATED`, `TAG_TARGET_MISMATCH`, or a tag-object cycle/non-commit target; no tag write. |
+| 5 | `GET /repos/{owner}/{repo}/commits/{sha}/check-runs?check_name=...&filter=latest` and `GET /repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha={sha}` plus `/actions/runs/{run_id}/jobs` | `backend` and `frontend` are completed with conclusion exactly `success`, on the full target SHA, from the protected GitHub Actions app, in one coherent target-SHA CI run | `CI_NOT_READY` or `CI_SOURCE_MISMATCH`; no writes. Do not scan latest branch runs. |
+| 6 | `GET /repos/{owner}/{repo}/branches/main/protection` and `/branches/main/protection/required_status_checks` | Required contexts include `backend` and `frontend`; `enforce_admins=true`; `strict=false` is recorded, not changed | `PROTECTION_DRIFT`; no writes. This read requires a credential that can read branch protection. |
+| 7 | `GET /repos/{owner}/{repo}/releases?per_page=100&page=N`, `GET /repos/{owner}/{repo}/milestones?state=all&per_page=100&page=N`, and stable-ID GETs | No ambiguous or materially conflicting object; classify `create`, `adopt`, `repair-draft`, `close`, or `no-op` | `RELEASE_CONFLICT`, `RELEASE_AMBIGUOUS`, `MILESTONE_CONFLICT`, or `MILESTONE_AMBIGUOUS`; no automatic overwrite. |
+| 8 | Ordered mutations with revalidation | Release is read back before Milestone mutation; each write response is followed by a fresh GET | `PARTIAL_STATE`/`PARTIAL_OR_UNCERTAIN`; never blindly retry or clean up. |
+| 9 | Final tag, check, Release, and Milestone GETs | Fresh remote evidence proves the requested state | `COMPLETE` only when all applicable invariants pass. |
+
+The [Checks API](https://docs.github.com/en/rest/checks/runs) and [workflow-runs API](https://docs.github.com/en/rest/actions/workflow-runs) are the right CI evidence sources. The combined commit-status endpoint is useful diagnostics but is not a sufficient Actions gate: the live repository currently returns `pending` with zero legacy statuses while the exact-SHA `backend` and `frontend` Check Runs are successful. A recovery/audit mode may allow current `main` to differ after the close-time SHA, but it must still verify the historical tag, CI, Release, and Milestone and label the result `historical`.
+
+## Permissions and Token Boundaries
+
+| Operation | Minimum permission | Local `gh` path | Future Actions wrapper |
+|-----------|--------------------|----------------|-----------------------|
+| Read repository, refs, commits, tags | Repository **Contents: read** | Existing `gh` account | `contents: read` |
+| Read Check Runs | Repository **Checks: read** (or the credential's equivalent) | Existing `gh` OAuth token; validate any fine-grained PAT | `checks: read` |
+| Read workflow runs/jobs | Repository **Actions: read** | Existing `gh` token | `actions: read` |
+| Read branch protection | Repository **Administration: read** where the endpoint permits it | Use the operator PAT/OAuth credential; do not silently skip drift | `GITHUB_TOKEN` is not a dependable substitute for this repository-policy read; use a PAT/GitHub App or pass an explicitly reviewed policy fixture if a wrapper is ever approved |
+| Create/update Release | Repository **Contents: write** | `repo`/OAuth scope is sufficient for this repository | `contents: write` |
+| Create/update Milestone | Repository **Issues: write** (GitHub also documents Pull requests: write as an alternative) | `repo` scope covers the repository's issue/milestone surface | `issues: write` |
+| Release whose target changes `.github/workflows` | **Workflows: write** in addition to Contents: write; classic PAT/OAuth needs `workflow` | Current local token has `workflow` | `GITHUB_TOKEN` cannot be authorized for this documented edge; use a PAT or GitHub App or block the target |
+
+The script should not issue a test POST/PATCH merely to prove permissions. `gh auth status` plus documented token scopes/permission metadata is the safe preflight; if the first required write returns `401`/`403`, stop, read back, and report the permission failure rather than retrying. A future non-human credential should be repository-scoped (fine-grained PAT or GitHub App) rather than a broad personal token.
+
+A future workflow should declare least privilege at job level, for example:
+
+```yaml
+permissions:
+  contents: write
+  issues: write
+  checks: read
+  actions: read
+```
+
+That block is illustrative only; **do not add this workflow in v0.1.2**. `GITHUB_TOKEN` is repository-scoped, job-scoped, and does not trigger most events caused by its own writes. GitHub documents `workflow_dispatch` and `repository_dispatch` as exceptions, but a release wrapper should still be manually invoked and should not trigger another CI/release loop. The workflow file must be on the default branch for `workflow_dispatch` to be available, and manual runs require repository write access.
+
+Use `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}` only inside a future workflow. Never put a PAT, `gh auth token` output, or API response containing credentials in the repository, command history documentation, or evidence JSON. GitHub recommends fine-grained PATs for new credentials, but the current general PAT documentation and Check Runs endpoint documentation disagree about fine-grained Checks API support; keep the existing `gh` OAuth path as the tested baseline and smoke-test any replacement.
+
+## Why This Is the Brownfield Fit
+
+- **Small surface:** the app already has a reliable CI contract with two named jobs; publication should consume that contract, not introduce a second build/test system.
+- **No new authority:** the script runs outside the Express process, does not change deployment, and cannot accidentally deploy application code.
+- **Operator-visible:** the same command can be run from a clean checkout, inspected in a terminal, and rerun after a partial failure.
+- **Testable without a live repository:** pure reconciliation functions can be fixture-tested with Node's built-in runner; live API calls are isolated behind one client.
+- **No second source of truth:** GitHub refs, Check Runs, Release, and Milestone are queried for every decision. Notes and evidence are inputs/outputs only.
+- **Recovery-forward:** a rerun discovers the Release/Milestone by stable remote identity and continues, which is safer than delete-and-recreate semantics.
+- **No application regression:** no changes to the backend/frontend packages, database, routes, build, or test commands.
 
 ## Alternatives Considered
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| Express 4.22.3 | Express 5.2.1 | New feature work *after* this milestone, or if a fix needs Express-5-only behavior — budget a full pass over route wildcards, `req.param` removal, and async error handling first |
-| Prisma 5.22.0 | Prisma 7.10.0 | A dedicated upgrade phase: driver adapters mandatory (`@prisma/adapter-pg`), `prisma.config.ts`, generator output path, manual env loading, changed pool defaults — orthogonal to bug fixing |
-| Vite 8.3.0 | Vite 7.3.6 / 6.4.3 | 7.3.6 if Rolldown/Oxc breaks the Vue build (same advisory fixed); 6.4.3 only if forced to remain on the 6.x line |
-| node-cron 4.6.0 | `setInterval` | A single fire-and-forget interval with no overlap risk — wrong here: drift, hand-rolled overlap guards, and no calendar/timezone semantics for two independent jobs |
-| node-cron (in-process) | host cron / `docker exec` crontab | Ops wants schedules visible outside the app (the `'system-cron'` actor string hints at this) — viable, but in-process is simpler for a single-container deploy |
-| Caddy | Traefik | Many services needing dynamic routing, and you accept granting it the Docker socket |
-| Caddy | nginx + certbot | Org already standardizes on nginx *and* has renewal automation wired |
-| express-rate-limit MemoryStore | `@rate-limit/redis` / `rate-limit-redis` | More than one app replica (in-memory counters diverge and reset per process) — single-container compose makes Redis pure overhead now |
-| nodemailer (self SMTP) | Managed API (Resend/SendGrid/SES) | Deliverability, DKIM, or bounce handling becomes a real problem; current requirement is the UTFPR SMTP relay |
-| PostgreSQL 16 | PostgreSQL 18 | Next scheduled DB upgrade window — requires dump/restore plus a migration-test pass |
-| supertest (route tests) | Playwright E2E | Only once a frontend test suite enters scope — explicitly Out of Scope this milestone |
+| Node 22 `.mjs` reconciler using built-in `fetch`; `gh` supplies auth | **Bash + `gh` wrapper** | Use only if the roadmap strongly prefers a shell-only operator experience. It is viable on Ubuntu, but HTTP status handling, multiline JSON, pagination, and deterministic unit tests are more fragile. Keep the same input/output contract if chosen. |
+| Node 22 `.mjs` reconciler using built-in `fetch`; `gh` supplies auth | **Direct ad hoc `gh release create` + `gh api` milestone commands** | Acceptable for a one-time v0.1.1 recovery after a read-only preflight, especially `gh release create --verify-tag`. It is not the future close path: it duplicates ordering, race handling, readback, and evidence logic on every invocation. |
+| Node reconciler run locally | **`workflow_dispatch` release workflow** | Consider later if the team needs a hosted audit trail or non-local operator access. The workflow should only invoke the same script, use `cancel-in-progress:false` for a version-specific concurrency group, and solve the `GITHUB_TOKEN`/branch-protection/workflow-file permission limits. It is not needed to recover the current release and would otherwise become a second implementation path. |
+| Built-in REST client | **Octokit or another GitHub SDK** | Do not add it for four REST resource families. It would add a dependency and version surface without removing the need for explicit ref/check/readback logic. |
+| Reviewed notes input | **`gh release create --generate-notes` or an unreviewed changelog generator** | Do not use for this factual milestone record. Generated notes can change with repository history and may obscure the exact completion claim. Use a reviewed file/stdin input; `--notes-from-tag` is an acceptable explicit source when the tag annotation is the intended record. |
+| Direct API reconciliation | **Marketplace release action, `softprops/action-gh-release`, `semantic-release`, Changesets** | Do not add. They introduce external action/code supply-chain dependencies and their own tag/changelog/version state model, which conflicts with the existing tag and the requirement not to create a second release-state authority. |
 
-## What NOT to Use
+## What NOT to Add or Do
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `uuid` (any version) | Dead dependency with a moderate advisory; 14.x is ESM-only and would break the CommonJS backend | Delete it — Node 22's `crypto.randomUUID()` if an ID is ever needed |
-| vitest 2.x | Carries the repo's only **critical** advisory (≤4.1.10 chain: vite-node, @vitest/mocker, old vite/esbuild) | `vitest@^5.0.1` + explicit `vite@^8.3.0` |
-| Vite 5.x | High advisory (≤6.4.2) incl. esbuild dev-server vulnerabilities; audit cannot be silenced on 5.x | `vite@^8.3.0` (fallback `^7.3.6`) |
-| nodemailer 6/9 | High advisory (≤9.1.0) | `nodemailer@^10.0.10` |
-| Express 5 *this milestone* | Breaking route/error semantics across all 8 route files — regression risk with no audit driver | Stay on 4.22.3 (patched, maintained `latest-4` line) |
-| Prisma 7 *this milestone* | Driver-adapter + config rewrite touches every query path while you're fixing money/vote bugs | Stay on 5.22; dedicated upgrade phase later |
-| bcrypt | Weaker than argon2 for equal cost; a swap means a rehash migration | argon2 0.41.1 (already correct) |
-| Redis + BullMQ/Agenda for the email queue | Extra container and infra for one queue drained in one process — contradicts the single-image deploy shape | In-process queue + node-cron schedule around the existing `processQueue()` |
-| ESLint/TypeScript/coverage gates in CI | Explicitly Out of Scope (PROJECT.md) — would fail the build on day one for pre-existing style debt | Gate only `vitest run` + `vite build`, exactly as mandated |
-| `setInterval` for `processQueue`/`closeExpired` | Drift, overlapping runs, no calendar semantics — and `closeExpired` currently isn't scheduled *at all* | node-cron 4 with `noOverlap: true` |
-| Trusting `X-Forwarded-For` without `trust proxy` | Wrong client IPs in the audit trail; express-rate-limit v7+ throws `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` behind Caddy | `app.set('trust proxy', 1)` — **only** when a proxy actually fronts the app **(Conf: MEDIUM)** |
-| Insecure `dev-*-secret-change-me` fallbacks in prod | `env.js` silently accepts dev secrets when `NODE_ENV=production` | Fail-fast refusal (an Active requirement) — an `env.js` change, not a library |
+| `gh release create` without `--verify-tag` | GitHub CLI can auto-create a tag from the default branch when the requested tag is absent. | Remote ref preflight plus `gh release create --verify-tag` or the Node API reconciler. |
+| `target_commitish` as the release's commit proof | GitHub documents that the field is unused when the tag already exists; a response may contain a branch name such as `main`. | Dereference `refs/tags/<version>` and compare the peeled commit SHA. |
+| `gh release upload --clobber` | It deletes existing assets before upload; a failed upload can lose the original. | No assets are needed for v0.1.1. If assets are added later, upload to a draft, verify each asset, then publish. |
+| Release deletion, tag deletion, force tag update, or `git push --force` | A valid version pointer is explicitly preserved; destructive recovery can break consumers and history. | Forward reconciliation and manual conflict review. |
+| Automatic publication on tag push, merge to `main`, or every CI success | It violates the explicit operator boundary and can publish unreviewed or wrong code. | `verify`/`plan`/`apply` with an explicit version and SHA. |
+| `pull_request_target` or an untrusted PR as a release trigger | It would expose a write-capable workflow context to code or input that has not passed the operator's publication boundary. | Manual dispatch or the local reconciler with an exact version/SHA. |
+| A local `.release-state.json`, GSD milestone file, or CI artifact as the source of truth | It can diverge from GitHub and cannot prove remote state after a crash/race. | Fresh GitHub API/CLI readback; emit an evidence snapshot only as an output. |
+| Automatic overwrite of a published Release or closed Milestone | It destroys user-authored history and can close/repair the wrong object. | Adopt exact matches; repair only an expected draft/open object; conflict otherwise. |
+| Blind retry after a timed-out/422/5xx write | The first request may have succeeded; retrying can duplicate a Milestone or create a second Release. | Read back by stable tag/title/number before retrying. |
+| `GET /commits/{sha}/status` as the only CI gate | This repository's Actions checks are not represented by legacy combined statuses. | Check Runs plus the target workflow run/jobs, filtered by full SHA. |
+| Broad workflow permissions or a PAT in repository secrets for convenience | A release job needs only narrow repository scopes; workflow-file changes have a special `GITHUB_TOKEN` limitation. | Local `gh` now; least-privilege job permissions or a GitHub App/PAT only if a hosted wrapper is approved. |
+| New npm dependencies, root workspace, or a release service | There is no application need and it increases supply-chain/maintenance surface. | Node built-ins + `gh` + REST. |
+| Immutable-release enablement in this milestone | It changes rollback/edit behavior and is not required for the missing v0.1.1 objects. | Revisit after the reconciler and recovery policy are proven. |
 
 ## Stack Patterns by Variant
 
-**If deploying behind Caddy/HTTPS (target production):**
-- Set `trust proxy` to `1`, `FRONTEND_URL=https://…`, and `secure` cookies; helmet 8's 365-day HSTS becomes active and correct.
-- Because: rate-limit keying, audit IPs, and the cookie `secure` flag all depend on knowing a proxy terminated TLS.
+**If recovering the missing v0.1.1 objects now:**
+- Run read-only `verify`/`plan` against the exact tag and SHA.
+- Apply from a clean `main` checkout with a reviewed notes file and Milestone record.
+- Expect `create-release` followed by `create/close-milestone`; do not touch the tag.
 
-**If plain-HTTP LAN/dev (current compose shape):**
-- Leave `trust proxy` **off**, keep `secure: false`, don't inject `X-Forwarded-For`.
-- Because: without a proxy, trusting forwarded headers lets any client spoof its IP into rate-limit keys and the audit trail.
+**If the Release exists but the Milestone does not:**
+- Reuse the same script and expected SHA; inventory/adopt the matching published Release.
+- Create/close only the Milestone, then perform the final combined readback.
+- If `main` has advanced, use the explicit historical/resume mode rather than inventing a new tag target.
 
-**If `SMTP_ENABLED=false` (the default):**
-- The nodemailer 6→10 bump is code-path-dead — verify only that `createTransport` still parses when SMTP is enabled.
-- Because: no runtime exposure now, but invites/resets must actually send once the queue drains.
+**If a write times out or returns 422:**
+- Do not rerun the POST blindly.
+- Re-read the Release by tag/list and Milestone by exact title; adopt, conflict, or report partial state.
 
-**If a single app replica (always true today):**
-- MemoryStore rate limiting, in-process email queue, node-cron inside `server.js`.
-- Because: no shared state is needed; horizontal scaling is explicitly out of scope.
+**If a later team wants an Actions button:**
+- Add a `workflow_dispatch` wrapper only after the local reconciler is tested.
+- Use the same Node script and contract, `GH_TOKEN`, `concurrency.group=release-close-${{ inputs.version }}`, and `cancel-in-progress:false`; do not duplicate release logic in YAML.
+- Keep it out of `push`/`pull_request`; the existing `ci.yml` remains the only automatic CI workflow.
 
-**If a second replica is ever added (out of scope now):**
-- `rate-limit-redis` + an external scheduler + a shared queue become mandatory together.
-- Because: per-process memory state silently diverges the moment two containers exist — revisit all three at once, not piecemeal.
+**If release assets are introduced later:**
+- Extend the same Release reconciliation with a draft → asset upload → asset readback → publish sequence.
+- Do not enable `--clobber` by default and do not claim atomic rollback.
 
 ## Version Compatibility
 
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| vitest@5.0.1 | vite `^6.4.0 ‖ ^7 ‖ ^8`, Node ≥22.12 | `vite` became a **peer dep** in v5 — pin `vite@^8.3.0` in backend devDeps; peers `@vitest/*` must all sit at 5.0.1 |
-| vite@8.3.0 | Node `^20.19 ‖ ≥22.12`; @vitejs/plugin-vue `^6.0.9` (peers `vite ^5‖^6‖^7‖^8`) | plugin-vue already at 6.0.9 — no change needed on either package |
-| nodemailer@10.0.10 | Node ≥20; CommonJS `require()` | Dual ESM+CJS build — safe in the `"type": "commonjs"` backend |
-| helmet@8.3.0 | Node ≥18, Express 4 | Drop-in for bare `helmet()` defaults |
-| express-rate-limit@8.7.0 | Node ≥16, Express 4/5 | Behind Caddy: set `trust proxy` or request-time validation throws; check `max` vs `limit` option naming on bump **(Conf: MEDIUM)** |
-| node-cron@4.6.0 | Node ≥20, CommonJS | Zero deps; `noOverlap` is a v4 task option |
-| multer@2.4.0 | Express 4, Node ≥10.16 | v2 drops callback-style handling — `.single()` middleware API unchanged |
-| Prisma@5.22.0 | PostgreSQL 16 | v7 is not drop-in: requires `@prisma/adapter-pg` + config rework |
-| actions/setup-node@v7 | `node-version: 22` | `cache: npm` **requires** `cache-dependency-path` in a two-package repo |
-| express@4.22.3 | everything above | No peer constraints (non-ESM package) |
+| Package/tool | Compatible with | Notes |
+|--------------|-----------------|-------|
+| Node.js `22.x` | `.mjs`, built-in `fetch`, `node:test` | Matches the existing backend/frontend and Actions runtime; no package installation. Keep the script independent of either package's CommonJS/ESM configuration. |
+| GitHub CLI `2.101.0` | `gh auth`, `gh api`, `gh release`, `gh run` | Current upstream release observed 2026-09-15 and installed locally. The script should check the required flags/help or fail with an upgrade message rather than assume every operator has this exact build. |
+| GitHub REST API `2026-03-10` | Node `fetch` client | Current docs use this version in examples. Set the header explicitly in the client; do not accidentally rely on a CLI default. The installed `gh` currently selected `2022-11-28` by default in a read-only header check, so mixing implicit versions is a maintenance hazard. |
+| GitHub-hosted `ubuntu-latest` runner | `gh` and the optional wrapper | GitHub documents `gh` as preinstalled. If the wrapper is added, use a minimal/sparse checkout for the script; no backend/frontend checkout, dependency install, or application build is needed. |
+| `.github/workflows/ci.yml` jobs `backend` and `frontend` | Exact-SHA Check Runs | These names and the app-bound required contexts are the script's default contract; changing them requires updating branch protection and the release preflight together. |
+
+## Roadmap Integration Points
+
+1. **Contract and fixtures:** define `verify`/`plan`/`apply`, stable reason codes, JSON evidence schema, and pure reconciliation fixtures. No remote writes.
+2. **Client and preflight:** add the Node 22 script/client, `gh` auth handling, repository/ref/tag/check/branch-protection reads, and read-only verification of the live v0.1.1 baseline.
+3. **Release recovery:** implement Release inventory/create-or-adopt/publish-readback with `--verify-tag` semantics and no tag mutation; publish the missing v0.1.1 object.
+4. **Milestone and recovery:** implement paginated exact-title Milestone reconciliation, close/readback, partial-state handling, and the final evidence manifest. Add the documented manual commands for conflicts.
+5. **Optional hosted wrapper:** only if requirements explicitly ask for a UI-dispatched run, add a `workflow_dispatch` wrapper around the tested script. Do not duplicate the state machine or change the existing required CI contexts.
 
 ## Sources
 
-- npm registry queries (`npm view`, 2026-09-23) — versions, dist-tags, `engines`, peerDeps for all packages above — **HIGH**
-- `npm audit` (backend + frontend, 2026-09-23) — 1 critical / 2 high / 4 moderate (backend), 1 high / 1 moderate (frontend) — **HIGH**
-- https://expressjs.com/en/guide/migrating-5 — Express 5 breaking-change list — **HIGH**
-- https://www.prisma.io/docs/orm/major-upgrades — Prisma 7 upgrade guide (driver adapters, prisma.config.ts, pool defaults) — **HIGH** for requirements, **MEDIUM** for effort estimate
-- https://github.com/nodemailer/nodemailer/releases (v9.0.0, v10.0.0) — Node ≥20, TS+dual build, otherwise compatible API — **HIGH**
-- https://vite.dev/guide/migration (v5→6, 6→7, 7→8 guides) — breaking changes, Node requirements, Rolldown/Oxc in v8 — **HIGH**
-- https://vitest.dev/guides/migration (5.0) — Vite peer dep, Node ≥22.12, clearMocks/async-assertion defaults — **HIGH**
-- https://github.com/helmetjs/helmet/releases (v8) — HSTS 365d default, Node ≥18 — **HIGH**
-- https://github.com/express-rate-limit/express-rate-limit (changelog: v7, v8.0.0) — IPv6 subnet bypass fix, `X-Forwarded-For` validation — **MEDIUM** (changelog read, not executed)
-- https://github.com/node-cron/node-cron (v4 docs) — `noOverlap`, timezone, zero deps — **MEDIUM**
-- https://github.com/ljharb/supertest (README) — `request(app)` ephemeral port, `request.agent` cookie persistence — **HIGH**
-- actions/checkout + actions/setup-node release pages — v7 is current, node24 runtime, automatic npm caching — **HIGH**
-- https://caddyserver.com/docs/quick-starts/reverse-proxy — auto-HTTPS, Caddyfile syntax — **HIGH** for behavior, **MEDIUM** for compose specifics
-- Node.js release schedule + PostgreSQL lifecycle pages — Node 22 EOL 2027-04-30, PG 16 ≈2028-11 — **HIGH / MEDIUM**
-- Local codebase reads (`package.json` ×2, lockfiles, `Dockerfile`, `compose.yaml`, `app.js`, `emailService.js`, `auth.routes.js`, `votingCloser.js`, `tests/`) — current versions and dead-dependency/require-breakage evidence — **HIGH**
+### Current first-party GitHub sources
 
-Context7 MCP was unavailable in this run; official docs + npm registry were used as the authoritative version source per the documentation-lookup fallback.
+- [GitHub CLI v2.101.0 release](https://github.com/cli/cli/releases/tag/v2.101.0) — current CLI release observed 2026-09-15.
+- [`gh release create`](https://cli.github.com/manual/gh_release_create), [`gh release edit`](https://cli.github.com/manual/gh_release_edit), [`gh release view`](https://cli.github.com/manual/gh_release_view), [`gh release upload`](https://cli.github.com/manual/gh_release_upload) — tag verification/auto-creation, notes, state, JSON fields, and asset overwrite behavior.
+- [`gh api`](https://cli.github.com/manual/gh_api), [`gh auth status`](https://cli.github.com/manual/gh_auth_status), [`gh auth token`](https://cli.github.com/manual/gh_auth_token), [`gh run list`](https://cli.github.com/manual/gh_run_list), [`gh run view`](https://cli.github.com/manual/gh_run_view) — authenticated API, auth, exact-commit run filters, and machine-readable evidence.
+- [REST Releases](https://docs.github.com/en/rest/releases/releases) — Release fields, `target_commitish` semantics, draft/published state, permissions, 422 behavior, and workflow-file permission caveat.
+- [REST Milestones](https://docs.github.com/en/rest/issues/milestones) — list/create/get/update, `open`/`closed`, descriptions, pagination, and permissions.
+- [REST Git references](https://docs.github.com/en/rest/git/refs), [REST Git tags](https://docs.github.com/en/rest/git/tags), and [REST commits](https://docs.github.com/en/rest/commits/commits) — annotated-tag dereferencing and ref resolution.
+- [REST Check Runs](https://docs.github.com/en/rest/checks/runs), [REST commit statuses](https://docs.github.com/en/rest/commits/statuses), and [protected branches](https://docs.github.com/en/rest/branches/branch-protection) — exact-SHA checks, conclusions, combined-status limitations, and required contexts.
+- [REST workflow runs](https://docs.github.com/en/rest/actions/workflow-runs) — filtering by `head_sha`, attempts, conclusions, and job URLs.
+- [Workflow syntax](https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions), [workflow triggers](https://docs.github.com/en/actions/reference/events-that-trigger-workflows), [manual workflow runs](https://docs.github.com/en/actions/managing-workflow-runs/manually-running-a-workflow), [GITHUB_TOKEN authentication](https://docs.github.com/en/actions/reference/authentication-in-a-workflow), [GITHUB_TOKEN concepts](https://docs.github.com/en/actions/concepts/security/github_token), and [concurrency](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/control-the-concurrency-of-workflows-and-jobs) — optional wrapper behavior, trigger security, and token limits.
+- [Managing Releases](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository) and [immutable Releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases) — draft/asset sequencing and rollback limitations.
+- [Managing personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) and [fine-grained token permissions](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens) — least privilege, token storage, and the documented Checks API compatibility caveat.
+
+### Repository evidence
+
+- `.planning/PROJECT.md`, `.github/workflows/ci.yml`, and `AGENTS.md` — v0.1.2 scope, exact CI job names, protected contexts, tag-preservation rule, and existing verification commands.
+- Read-only GitHub API/CLI evidence for `ldsampaio/sgrf` on 2026-09-25 — remote `main`, annotated tag/object/commit, absent v0.1.1 Release and Milestone, green target-SHA Actions checks/runs, branch-protection policy, and the combined-status/check-run contrast.
+
+Context7 was not available in this subagent environment; first-party GitHub documentation and live read-only API/CLI evidence were used instead. The web research seam cached the eight source digests under MEDIUM confidence; platform claims above are cross-checked against those official pages, while the current repository observations are direct evidence.
 
 ---
-*Stack research for: SGRF/SGRD production-hardening milestone*
-*Researched: 2026-09-23*
+
+*Stack research for: SGRF v0.1.2 GitHub Release Reliability*
+*Researched: 2026-09-25*
