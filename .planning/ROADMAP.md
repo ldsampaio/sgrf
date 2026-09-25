@@ -35,7 +35,11 @@ Phase numbering continues from the completed v0.1.1 milestone. Decimal phases ap
   2. Fixture-backed command runs prove that `verify` and `plan` perform no mutations, while `apply` refuses to proceed without reviewed Release/Milestone content, a displayed plan, and explicit operator confirmation.
   3. Deterministic `node:test` fixtures and mocked API scenarios classify missing, partial, duplicate, conflicting, failed, and concurrent states, and the tool exposes no ref-write or destructive tag path.
   4. The pure eligibility contract accepts an existing annotated tag only when its peeled commit equals both the full expected SHA and the observed remote `main`; any mismatch is reported without a write action.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 09-01-PLAN.md — Tracer slice: CLI skeleton, pure eligibility, client seam, reference fixture, proof suite
+- [ ] 09-02-PLAN.md — Six-state classifier, six fixtures, scripted fake sequences, gh stub, no-ref-write proof
+- [ ] 09-03-PLAN.md — Double-locked apply, plan display, mutations-zero and secret-hygiene proofs, coverage declaration
 
 ### Phase 10: Read-Only Exact-SHA Preflight
 **Goal**: An operator can establish the authoritative GitHub state for a pinned repository, version, and full target SHA without changing any remote object.
