@@ -26,15 +26,131 @@ import {
 const TOOL_DIR = new URL('./', import.meta.url);
 const CLI_PATH = new URL('./release-close.js', import.meta.url).pathname;
 
-const NOMES_FIXTURE = [
-  'reference',
-  'missing',
-  'partial',
-  'duplicate',
-  'conflicting',
-  'failed',
-  'concurrent',
+// Tabela de expectativa EXATA de cada cenário congelado. Um valor esperado lido
+// da saída observada seria uma tautologia, e uma tautologia não pega regressão:
+// os valores abaixo vêm da PRECEDÊNCIA documentada do classificador — FAILED →
+// CONCURRENT → CONFLICTING → DUPLICATE → no-op → PARTIAL → MISSING — e do
+// critério do no-op (release não-rascunho com alvo validado, exatamente uma
+// milestone da versão pedida fechada sem issue aberta).
+//
+// `forma` diz de onde vem o snapshot: 'plana' são fixtures de estado, que
+// descrevem releases e milestones como listas e precisam do adaptador de
+// cliente; 'cliente' são snapshots JÁ no formato que o cliente serve, usados
+// como estão. Nenhuma prova sniffa a forma de um fixture — a forma é declarada
+// aqui, uma vez, e é a forma que o arquivo tem.
+const CENARIOS_EXATOS = [
+  {
+    nome: 'duplicate',
+    forma: 'plana',
+    elegibilidade: 'ELIGIBLE',
+    classificacao: 'DUPLICATE',
+    retidos: [9001, 9002],
+    outcome: undefined,
+    revisado: false,
+  },
+  {
+    nome: 'conflicting',
+    forma: 'plana',
+    elegibilidade: 'ELIGIBLE',
+    classificacao: 'CONFLICTING',
+    retidos: [9001, 9003],
+    outcome: undefined,
+    revisado: false,
+  },
+  {
+    nome: 'partial',
+    forma: 'plana',
+    elegibilidade: 'ELIGIBLE',
+    classificacao: 'PARTIAL',
+    retidos: [9000],
+    outcome: undefined,
+    revisado: false,
+  },
+  {
+    nome: 'missing',
+    forma: 'plana',
+    elegibilidade: 'ELIGIBLE',
+    classificacao: 'MISSING',
+    retidos: [],
+    outcome: undefined,
+    revisado: false,
+  },
+  {
+    nome: 'unrelated',
+    forma: 'plana',
+    elegibilidade: 'ELIGIBLE',
+    classificacao: 'MISSING',
+    retidos: [],
+    outcome: undefined,
+    revisado: false,
+  },
+  {
+    nome: 'concurrent',
+    forma: 'plana',
+    elegibilidade: 'ELIGIBLE',
+    classificacao: 'MISSING',
+    retidos: [],
+    outcome: undefined,
+    revisado: false,
+  },
+  {
+    nome: 'failed',
+    forma: 'plana',
+    elegibilidade: 'ELIGIBLE',
+    classificacao: 'MISSING',
+    retidos: [],
+    outcome: undefined,
+    revisado: false,
+  },
+  {
+    // O no-op concluído: par exato MISSING + COMPLETE_NOOP, o mesmo literal que
+    // o plano 09-05 fixou e que o plano 09-07 provou alcançável pela costura de
+    // produção. Nenhum sétimo estado de taxonomia existe.
+    nome: 'complete',
+    forma: 'plana',
+    elegibilidade: 'ELIGIBLE',
+    classificacao: 'MISSING',
+    retidos: [9010],
+    outcome: 'COMPLETE_NOOP',
+    revisado: false,
+  },
+  {
+    // O baseline de referência é um snapshot de CLIENTE: 404 na release, lista
+    // de milestones vazia, e nenhum campo revisado. É o único que a CLI serve.
+    nome: 'reference',
+    forma: 'cliente',
+    elegibilidade: 'ELIGIBLE',
+    classificacao: 'MISSING',
+    retidos: [],
+    outcome: undefined,
+    revisado: false,
+  },
+  {
+    // O cenário revisado é também um snapshot de cliente, com a Release
+    // publicada e anotada e a Milestone fechada com o registro de conclusão. É
+    // o no-op concluído COM conteúdo revisado.
+    nome: 'reviewed',
+    forma: 'cliente',
+    elegibilidade: 'ELIGIBLE',
+    classificacao: 'MISSING',
+    retidos: [9010],
+    outcome: 'COMPLETE_NOOP',
+    revisado: true,
+  },
 ];
+
+// A lista de milestones que o cenário declara, seja ele plano ou de cliente.
+function fixtureMilestones(nome) {
+  const carregado = fixture(nome);
+  if (Array.isArray(carregado.milestones)) return carregado.milestones;
+  if (carregado.milestones && Array.isArray(carregado.milestones.data)) return carregado.milestones.data;
+  return [];
+}
+
+function snapshotDoCenario(cenario) {
+  const carregado = fixture(cenario.nome);
+  return cenario.forma === 'cliente' ? carregado : clientSnapshotFor(carregado);
+}
 
 // Ordem fixa da recuperação (D-15): rascunho, releitura, publicação,
 // releitura, abertura da milestone, releitura, fechamento, releitura final.
@@ -141,75 +257,63 @@ function sinkQueConta(eventos, rotulo) {
   };
 }
 
-function evidenceFromSnapshot(snapshot) {
-  if (!snapshot.milestones || !snapshot.milestones.ok) {
-    throw new TypeError('Snapshot de cliente inválido: milestones ausente.');
-  }
-  const milestones = snapshot.milestones.data;
-  const release = snapshot.release && snapshot.release.ok ? snapshot.release.data : null;
-  return {
-    target: { version: snapshot.version, expectedSha: snapshot.expectedSha },
-    ci: snapshot.ci,
-    releases: release ? [release] : [],
-    milestones: Array.isArray(milestones) ? [...milestones] : [],
-    closeMarkers: [],
-  };
-}
-
-// Discriminador de forma: o ÚNICO literal que separa as duas formas declaradas
-// nesta fase é `Array.isArray(snapshot.milestones)` — true é evidência plana de
-// classificação, false é snapshot de cliente cujo `milestones` é um envelope
-// `ok`. Nunca discrimine por `target` ou `ci`: o fixture de referência é
-// formato de cliente e carrega os dois blocos, então usá-los como marca de
-// evidência plana o rotearia pelo caminho errado.
+// Snapshot no formato do CLIENTE para um fixture de estado plano: as três
+// leituras de tag e de main são o baseline imutável (o mesmo v0.1.1 em todos os
+// estados) e só as cargas de release e milestone variam por estado.
 //
-// Temporário: a tarefa 3 do plano 09-08 apaga este helper e o `evidenceFromSnapshot`
-// junto, no lugar do construtor de cinco leituras de produção.
-function evidenciaDe(fixtureCarregado) {
-  return Array.isArray(fixtureCarregado.milestones)
-    ? fixtureCarregado
-    : evidenceFromSnapshot(fixtureCarregado);
-}
-
-// Snapshot no formato do cliente para um fixture de estado: as três leituras de
-// tag e main são o baseline imutável (o mesmo v0.1.1 em todos os estados) e
-// só as leituras de release e milestone variam por estado. Os campos migrados
-// `releases` e `milestones` são lidos das listas, nunca dos campos singulares
-// removidos.
+// A carga de release é retida INTEIRA, nunca o primeiro elemento: escolher o
+// primeiro é exatamente o defeito que fazia os fixtures de duplicata e de
+// conflito atravessarem a suíte verde enquanto exercitavam um estado parcial
+// (WR-03). O envelope `data` aceita um array inteiro, e o construtor de
+// evidência de produção o normaliza sem colapsar.
 function clientSnapshotFor(estado) {
   const base = fixture('reference');
-  const release = Array.isArray(estado.releases) ? estado.releases[0] ?? null : null;
-  const milestones = Array.isArray(estado.milestones) ? estado.milestones : [];
+  const releases = Array.isArray(estado.releases) ? estado.releases : [];
   return {
     version: estado.version,
     expectedSha: estado.expectedSha,
     tagRef: base.tagRef,
     tagObject: base.tagObject,
     branchHead: base.branchHead,
-    release: release
-      ? { ok: true, status: 200, data: release }
-      : { ok: false, status: 404, data: null },
-    milestones: { ok: true, status: 200, data: milestones },
+    release:
+      releases.length > 0
+        ? { ok: true, status: 200, data: releases }
+        : { ok: false, status: 404, data: null },
+    milestones: {
+      ok: true,
+      status: 200,
+      data: Array.isArray(estado.milestones) ? estado.milestones : [],
+    },
     ci: estado.ci ?? base.ci,
     runs: estado.runs ?? base.runs,
   };
 }
 
-// Roda os dois contratos puros sobre um único cliente fake (as mesmas leituras
-// que verify e plan fazem) e devolve as decisões junto do contador real de
-// escritas do fake.
-async function runContractsOver(fake, fixtureCarregado) {
-  const elegibilidade = await checkTagEligibility(fake, {
-    version: fixtureCarregado.version,
-    expectedSha: fixtureCarregado.expectedSha,
+// A decisão vem SEMPRE da costura de produção exportada pelo plano 09-07: ela
+// monta o cliente, percorre as CINCO leituras declaradas na ordem fixa e entrega
+// ao classificador a evidência que elas produziram. Não existe mais helper local
+// de snapshot nem de evidência neste arquivo — o que existia reimplementava a
+// normalização, e por isso a suíte podia passar exercitando um estado diferente
+// do que alegava (WR-03).
+async function runContractsOver(fake, snapshot) {
+  const mod = await cli();
+  const decisao = await mod.decide({
+    client: fake,
+    version: snapshot.version,
+    expectedSha: snapshot.expectedSha,
+    ci: snapshot.ci,
   });
-  const classificacao = classifySnapshot(evidenciaDe(fixtureCarregado));
   return {
-    elegibilidade,
-    classificacao,
+    elegibilidade: decisao.eligibility,
+    classificacao: decisao.classification,
+    // A evidência e a versão resolvida viajam junto porque o construtor de
+    // plano as consome: reconstruir a evidência aqui seria exatamente o
+    // helper local que esta tarefa apaga.
+    evidencia: decisao.evidence,
+    versao: decisao.version,
     // O valor emitido é o contador real do fake, não um literal: zero escritas
     // implica zero mutações, executavelmente.
-    mutations: fake.mutations,
+    mutations: decisao.mutations,
   };
 }
 
@@ -241,26 +345,77 @@ function listAllFiles(dir) {
 
 describe('zero mutação em verify e plan (D-16)', () => {
   it('nenhum fixture registra escrita: verify e plan emitem mutations 0', async () => {
-    for (const nome of NOMES_FIXTURE) {
-      const carregado = fixture(nome);
-      const fake = makeFakeClient(clientSnapshotFor(carregado));
-      const saida = await runContractsOver(fake, carregado);
-      assert.equal(fake.writes.length, 0, `${nome} deixou escape de escrita`);
-      assert.equal(saida.mutations, 0, `${nome} emitiu mutações diferentes de zero`);
-      assert.equal(saida.elegibilidade.writeAction, null, `${nome} carregou writeAction`);
-      assert.equal(saida.classificacao.writeAction, null, `${nome} carregou writeAction`);
-      if (nome === 'reference') {
-        // O baseline de referência é o único que chega ao classificador pelo
-        // caminho normalizado de produção, então é o único aqui que pode
-        // carregar o código exato. Os outros seis ainda passam por um helper
-        // local que colapsa os arrays de duplicata e conflito, e afirmar
-        // códigos exatos neles falharia até a tarefa 3 do plano 09-08 trocar
-        // esse helper pelo construtor de produção.
-        assert.equal(saida.classificacao.code, 'MISSING');
-        assert.equal(saida.classificacao.eligible, false);
-        assert.ok(saida.classificacao.reason.length > 0, `${nome} sem motivo PT-BR`);
+    for (const cenario of CENARIOS_EXATOS) {
+      const snapshot = snapshotDoCenario(cenario);
+      const fake = makeFakeClient(snapshot);
+      const mod = await cli();
+      const saida = await runContractsOver(fake, snapshot);
+      const rotulo = `[${cenario.nome}]`;
+      assert.equal(fake.writes.length, 0, `${rotulo} deixou escape de escrita`);
+      assert.equal(saida.mutations, 0, `${rotulo} emitiu mutações diferentes de zero`);
+      assert.equal(saida.mutations, fake.mutations, `${rotulo} relatou uma contagem que não é a medida`);
+      assert.equal(saida.elegibilidade.writeAction, null, `${rotulo} carregou writeAction`);
+      assert.equal(saida.classificacao.writeAction, null, `${rotulo} carregou writeAction`);
+
+      // Valor EXATO, nunca mera presença. Um código de estado que a suíte
+      // affirmed só como "é uma string" não detectaria um classificador que
+      // devolvesse o estado errado — que era o defeito WR-03.
+      assert.equal(saida.elegibilidade.code, cenario.elegibilidade, `${rotulo} código de elegibilidade`);
+      assert.equal(saida.elegibilidade.eligible, true, `${rotulo} elegibilidade`);
+      assert.equal(saida.classificacao.code, cenario.classificacao, `${rotulo} código de classificação`);
+      assert.ok(saida.classificacao.reason.length > 0, `${rotulo} sem motivo PT-BR`);
+
+      // `outcome` é um campo a parte: só o no-op concluído o carrega, e nenhum
+      // outro estado pode carregá-lo. A ausência é afirmada, não implícita.
+      assert.equal(saida.classificacao.outcome, cenario.outcome, `${rotulo} outcome`);
+      if (cenario.outcome === undefined) {
+        assert.ok(
+          !Object.prototype.hasOwnProperty.call(saida.classificacao, 'outcome'),
+          `${rotulo} carrega um campo outcome que não deveria existir`,
+        );
+      }
+
+      // A decisão carrega a lista INTEIRA de identificadores retidos, não um
+      // registro colapsado, e a lista dos alheios ao alvo também.
+      assert.deepEqual(
+        saida.classificacao.releases.map((registro) => registro.id),
+        cenario.retidos,
+        `${rotulo} identificadores de release retidos`,
+      );
+      const milestonesEsperadas = (cenario.milestonesAlvo ?? fixtureMilestones(cenario.nome))
+        .filter((registro) => registro.title === snapshot.version)
+        .map((registro) => registro.number);
+      assert.deepEqual(
+        saida.classificacao.milestones.map((registro) => registro.number),
+        milestonesEsperadas,
+        `${rotulo} números de milestone retidos`,
+      );
+      assert.ok(Array.isArray(saida.classificacao.unrelatedReleases), `${rotulo} sem lista de releases alheias`);
+      assert.ok(Array.isArray(saida.classificacao.unrelatedMilestones), `${rotulo} sem lista de milestones alheias`);
+
+      // A presença de conteúdo revisado é exata: o cenário revisado carrega as
+      // DUAS frases do próprio fixture, byte a byte, e o baseline de referência
+      // não carrega objeto revisado nenhum — não um objeto vazio.
+      const plano = mod.buildClosePlan({
+        version: saida.versao,
+        expectedSha: snapshot.expectedSha,
+        snapshot,
+        eligibility: saida.elegibilidade,
+        classificacao: saida.classificacao,
+        evidence: saida.evidencia,
+        mutations: saida.mutations,
+      });
+      if (cenario.revisado === true) {
+        assert.notEqual(plano.reviewed, null, `${rotulo} sem objeto revisado`);
+        assert.equal(plano.reviewed.releaseNotes, FIXTURE_REVISADO.release.data.notes);
+        assert.equal(
+          plano.reviewed.milestoneCompletionRecord,
+          FIXTURE_REVISADO.milestones.data[0].completionRecord,
+        );
+        assert.equal(plano.reviewedDigest, mod.canonicalReviewedDigest(plano.reviewed));
       } else {
-        assert.equal(typeof saida.classificacao.code, 'string', `${nome} sem código de estado`);
+        assert.equal(plano.reviewed, null, `${rotulo} carregou objeto revisado`);
+        assert.equal(plano.reviewedDigest, null, `${rotulo} carregou digest sem objeto revisado`);
       }
     }
   });
@@ -685,6 +840,20 @@ describe('higiene de segredo na saída e nas fontes (Pitfall 7)', () => {
     );
     saidas.push(JSON.stringify(portao), PLANO_DE_EXEMPLO, ...renderizados);
 
+    // E o texto do conteúdo revisado que o portão acabou de renderizar entra na
+    // varredura pela MESMA via: a lista acima carrega o render inteiro, e é ele
+    // que contém as duas frases do fixture congelado. Um segredo que aparecesse
+    // nas notas de Release encontraria a prova pelo mesmo caminho que o
+    // encontra no resto da saída.
+    assert.ok(
+      renderizados.some((evento) => evento.includes(reviewed.releaseNotes)),
+      'a varredura de credencial não cobriu o render do conteúdo revisado',
+    );
+    assert.ok(
+      renderizados.some((evento) => evento.includes(reviewed.milestoneCompletionRecord)),
+      'a varredura de credencial não cobriu o registro de conclusão da Milestone',
+    );
+
     for (const saida of saidas) {
       for (const forma of FORMAS_DE_CREDENCIAL) {
         assert.ok(!saida.includes(forma), `saída carrega forma de credencial: ${forma}`);
@@ -885,49 +1054,157 @@ it('recusa quando o conteúdo revisado mudou entre a renderização e a confirma
   assert.deepEqual(perguntou, [], 'a recusa por digest perguntou algo');
 });
 
-it('toda recusa antes do render nomeia a primeira fechadura que falhou e deixa o sink intocado', async () => {
+// Matriz consolidada de recusas (T-09-08-08). Cada linha é uma família com a
+// fechadura que ela nomeia, o NÚMERO de chamadas de sink que o observável
+// permite, os caracteres relatados pelo sink e se a pergunta foi aberta.
+//
+// As duas famílias de sink são linhas SEPARADAS de propósito, e a diferença
+// entre elas é a que mais importa aqui: recusa por sink AUSENTE ou que não é
+// função se observa com zero chamadas de sink, porque nada foi escrito;
+// recusa por sink com TOTAL ZERO DE CARACTERES se observa com as DUAS chamadas
+// de renderização feitas e a soma relatada igual a zero. Juntar as duas numa
+// linha só permitiria que uma passasse pela outra — e as duas pedem ações
+// diferentes do operador.
+//
+// A invocação TOTALMENTE em pipe é uma terceira linha, fora desta matriz, com
+// forma própria: é um processo filho, e ele falha na fechadura `tty`, que vem
+// ANTES da de saída. A linha de saída redirecionada e a linha de pipe nunca
+// podem ser a mesma linha.
+it('a matriz de recusas nomeia a fechadura certa e o observável de escrita de cada família', async () => {
   const { reviewed, reviewedDigest } = await revisadoComDigest();
-  const base = {
+  const completo = {
     yesFlag: true,
     isTTY: true,
     outputIsTTY: true,
     planText: PLANO_DE_EXEMPLO,
     reviewed,
     reviewedDigest,
-    ask: async () => CONFIRMATION_WORD,
-    write: () => PLANO_DE_EXEMPLO.length,
   };
-  const familia = [
-    ['plan', { ...base, planText: '   ' }],
-    ['flag', { ...base, yesFlag: false }],
-    ['tty', { ...base, isTTY: false }],
-    ['output', { ...base, outputIsTTY: false }],
-    ['sink', { ...base, write: undefined }],
-    ['content', { ...base, reviewed: { ...CONTEUDO_REVISADO, releaseNotes: '' } }],
+  // `observavel`:
+  //   chamadas  — quantas vezes o sink gravador foi chamado
+  //   caracteres — soma relatada pelos renders
+  //   perguntou  — se a pergunta foi aberta
+  const matriz = [
+    {
+      nome: 'plano ausente',
+      entrada: { ...completo, planText: '   ' },
+      fechadura: 'plan',
+      observavel: { chamadas: 0, caracteres: 0, perguntou: false },
+    },
+    {
+      nome: 'flag --yes ausente',
+      entrada: { ...completo, yesFlag: false },
+      fechadura: 'flag',
+      observavel: { chamadas: 0, caracteres: 0, perguntou: false },
+    },
+    {
+      nome: 'entrada não interativa (pipe de entrada)',
+      entrada: { ...completo, isTTY: false },
+      fechadura: 'tty',
+      observavel: { chamadas: 0, caracteres: 0, perguntou: false },
+    },
+    {
+      nome: 'saída redirecionada com entrada viva',
+      entrada: { ...completo, outputIsTTY: false },
+      fechadura: 'output',
+      observavel: { chamadas: 0, caracteres: 0, perguntou: false },
+    },
+    {
+      nome: 'conteúdo revisado em branco',
+      entrada: { ...completo, reviewed: { ...reviewed, releaseNotes: '' } },
+      fechadura: 'content',
+      observavel: { chamadas: 0, caracteres: 0, perguntou: false },
+    },
+    {
+      nome: 'conteúdo revisado ausente',
+      entrada: { ...completo, reviewed: undefined, reviewedDigest: undefined },
+      fechadura: 'content',
+      observavel: { chamadas: 0, caracteres: 0, perguntou: false },
+    },
+    {
+      nome: 'digest recalculado diferente do do plano',
+      entrada: { ...completo, reviewedDigest: 'f'.repeat(64) },
+      fechadura: 'content',
+      observavel: { chamadas: 0, caracteres: 0, perguntou: false },
+    },
+    {
+      nome: 'sink ausente (o destino de saída não existe)',
+      entrada: { ...completo, write: undefined },
+      semGravador: true,
+      fechadura: 'sink',
+      observavel: { chamadas: 0, caracteres: 0, perguntou: false },
+    },
+    {
+      nome: 'sink que não é função',
+      entrada: { ...completo, write: 'stdout' },
+      semGravador: true,
+      fechadura: 'sink',
+      observavel: { chamadas: 0, caracteres: 0, perguntou: false },
+    },
+    {
+      // A ÚNICA linha da matriz com chamadas de sink e ainda sem pergunta.
+      nome: 'sink que relata zero caracteres',
+      entrada: { ...completo },
+      gravador: () => 0,
+      fechadura: 'sink',
+      observavel: { chamadas: 2, caracteres: 0, perguntou: false },
+    },
+    {
+      // A renderização JÁ aconteceu: duas chamadas, caracteres acima de zero e a
+      // pergunta aberta. É a recusa mais tarde da ordem, e a única em que o
+      // operador viu algo antes de dizer não.
+      nome: 'palavra digitada diferente de sim',
+      entrada: { ...completo },
+      resposta: 'nao',
+      fechadura: 'answer',
+      observavel: { chamadas: 2, caracteres: 'acima-de-zero', perguntou: true },
+    },
   ];
-  for (const [fechadura, entrada] of familia) {
-    const eventos = [];
-    const montar = {
-      ...entrada,
-      ask: async () => {
-        eventos.push('pergunta');
-        return CONFIRMATION_WORD;
-      },
+
+  for (const linha of matriz) {
+    const chamadas = [];
+    const perguntas = [];
+    let caracteres = 0;
+    const entrada = { ...linha.entrada };
+    entrada.ask = async () => {
+      perguntas.push(true);
+      return linha.resposta ?? CONFIRMATION_WORD;
     };
-    // A família de sink é a ÚNICA cuja recusa não pode ser observada por um sink
-    // gravador: o sink é justamente o que falta. Nesses casos o sink gravador
-    // NÃO é instalado, e a única coisa observável é que nada foi perguntado.
-    if (entrada.write !== undefined) {
-      montar.write = (texto) => {
-        eventos.push(`plano:${texto}`);
-        return typeof texto === 'string' ? texto.length : 0;
+    if (!linha.semGravador) {
+      const relatar = linha.gravador ?? ((texto) => (typeof texto === 'string' ? texto.length : 0));
+      entrada.write = (texto) => {
+        chamadas.push(typeof texto === 'string' ? texto : '');
+        const relatorio = relatar(texto);
+        caracteres += typeof relatorio === 'number' && Number.isFinite(relatorio) ? relatorio : 0;
+        return relatorio;
       };
     }
-    const resultado = await confirmApply(montar);
-    assert.equal(resultado.confirmed, false, `fechadura ${fechadura} confirmou`);
-    assert.equal(resultado.lock, fechadura, `fechadura esperada ${fechadura}, recebida ${resultado.lock}`);
-    assert.deepEqual(eventos, [], `fechadura ${fechadura} tocou o sink ou a pergunta`);
+    const resultado = await confirmApply(entrada);
+    const rotulo = `[${linha.nome}]`;
+    assert.equal(resultado.confirmed, false, `${rotulo} confirmou`);
+    assert.equal(resultado.lock, linha.fechadura, `${rotulo} nomeou a fechadura errada`);
+    assert.equal(chamadas.length, linha.observavel.chamadas, `${rotulo} número de chamadas de sink`);
+    if (linha.observavel.caracteres === 'acima-de-zero') {
+      assert.ok(caracteres > 0, `${rotulo} sem caracteres relatados depois do render`);
+    } else {
+      assert.equal(caracteres, linha.observavel.caracteres, `${rotulo} caracteres relatados pelo sink`);
+    }
+    assert.equal(perguntas.length > 0, linha.observavel.perguntou, `${rotulo} estado da pergunta`);
   }
+});
+
+// A invocação TOTALMENTE em pipe tem forma própria — processo filho com entrada
+// E saída não terminais — e por isso falha na fechadura de TTY, que é a lock
+// três. A fechadura de saída (lock quatro) é INALCANÇÁVEL a partir dela, e
+// escrevê-la de outro jeito faria a prova falhar pelo motivo errado e esconderia
+// a ordem real.
+it('a invocação totalmente em pipe recusa na fechadura de tty, com stdout vazio', () => {
+  const piped = runCliPiped(['apply', '--yes']);
+  assert.notEqual(piped.status, 0);
+  assert.match(piped.stderr, /terminal interativo/);
+  assert.doesNotMatch(piped.stderr, /não foi mostrado em um terminal vivo/);
+  assert.equal(piped.stdout, '');
+  assert.doesNotMatch(piped.stderr, /Confirmar o apply/);
 });
 
 it('as três fechaduras novas ficam entre a de terminal e a de pergunta, e as cinco antigas guardam a ordem', () => {
@@ -1228,4 +1505,285 @@ it('dois planos sobre o mesmo snapshot congelado rendem texto e digest byte-idê
   assert.equal(mod.renderPlanText(segundo.plano), mod.renderPlanText(primeiro.plano));
   assert.equal(primeiro.plano.mutations, 0);
   assert.equal(segundo.plano.mutations, 0);
+});
+
+// Prova de ausência de deriva na CONFIRMAÇÃO, e não só na renderização: o
+// pré-flight da confirmação é rodado duas vezes sobre as MESMAS entradas e tem de
+// devolver a decisão idêntica e deixar o digest exatamente onde estava. Um gate
+// que mutasse o objeto revisado, ou que consumisse um settle, mudaria a segunda
+// decisão — e é exatamente isso que a reconciliação da Fase 11 vai depender.
+it('o pré-flight da confirmação duas vezes devolve a decisão idêntica e não move o digest', async () => {
+  const mod = await portao();
+  const { reviewed, reviewedDigest } = await revisadoComDigest();
+  const digestAntes = mod.canonicalReviewedDigest(reviewed);
+  const base = {
+    yesFlag: true,
+    isTTY: true,
+    outputIsTTY: true,
+    planText: PLANO_DE_EXEMPLO,
+    reviewed,
+    reviewedDigest,
+  };
+  const negada = () =>
+    confirmApply({
+      ...base,
+      ask: async () => 'nao',
+      write: () => PLANO_DE_EXEMPLO.length,
+    });
+  const primeira = await negada();
+  const segunda = await negada();
+  assert.deepEqual(segunda, primeira, 'o pré-flight da confirmação não é idempotente');
+  assert.equal(primeira.lock, 'answer');
+  // O objeto revisado é o MESMO objeto depois das duas passagens: a aprovação
+  // continua vinculada ao conteúdo que o operador leu.
+  assert.equal(reviewed, CONTEUDO_REVISADO, 'o gate trocou o objeto revisado');
+  assert.equal(mod.canonicalReviewedDigest(reviewed), digestAntes, 'o gate alterou o conteúdo revisado');
+  assert.equal(digestAntes, reviewedDigest);
+
+  // E o caminho aprovado também é idempotente, com o digest ecoado na decisão.
+  const aprovada = async () =>
+    confirmApply({
+      ...base,
+      ask: async () => CONFIRMATION_WORD,
+      write: () => PLANO_DE_EXEMPLO.length,
+    });
+  const decisaoA = await aprovada();
+  const decisaoB = await aprovada();
+  assert.deepEqual(decisaoB, decisaoA);
+  assert.equal(decisaoA.reviewedDigest, digestAntes);
+});
+
+// ===========================================================================
+// fronteiras declaradas da prova SAFE-04, em PT-BR
+// ===========================================================================
+//
+// O que ESTA prova afirma:
+//   - a dupla trava do apply exige as oito fechaduras na ordem exportada, e cada
+//     recusa nomeia a primeira que falhou;
+//   - nada é escrito e nenhuma pergunta é aberta até que toda fechadura de
+//     `plan` a `content` tenha passado; depois disso o plano ordenado é escrito
+//     primeiro e o conteúdo revisado segundo, ambos antes da pergunta;
+//   - o conteúdo revisado é o objeto que o digest cobre, e o digest é
+//     recalculado no momento da pergunta;
+//   - fim de entrada e erro de fluxo recusam em vez de ficar pendentes ou
+//     perguntar de novo;
+//   - verify, plan e apply são somente-leitura, e a contagem relatada é a
+//     contagem medida na fronteira de escrita.
+//
+// O que ESTA prova NÃO afirma, e é deliberado:
+//   - arbitragem ENTRE PROCESSOS. A instância-isolação prova é sobre o estado
+//     dentro de um processo; duas execuções simultâneas da CLI não são
+//     coordenadas por nada aqui, e essa coordenação é da Fase 11;
+//   - qualquer escrita remota. Nenhum verbo escreve no remoto nesta fase, e a
+//     confirmação aceita ainda assim falha fechado;
+//   - que a CI esteja verde de verdade. O bloco `ci` é evidência CONGELADA do
+//     fixture; a releitura ao vivo é da Fase 10;
+//   - que `closeMarkers` e `failedRunIds` sejam alcançáveis: eles não têm fonte
+//     entre as cinco leituras declaradas, o que COVERAGE.md registra como
+//     entrega da costura de reconciliação do plano 09-09.
+
+// As guardas de fonte leem o texto do arquivo, e elas existem para duas
+// propriedades que nenhuma sonda de comportamento consegue observar de fora:
+// que a suíte não voltou a ter um helper local de snapshot ou de evidência, e
+// que ela não reescreveu a ordem das fechaduras como cópia literal do texto
+// exportado (o que faria uma reordenação passar em silêncio).
+it('a suíte não define helper local de snapshot nem de evidência', () => {
+  const fonte = readFileSync(new URL('./safe04.test.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(
+    fonte,
+    /function\s+evidenceFromSnapshot|function\s+evidenciaDe/,
+    'a suíte voltou a ter um helper local de evidência: a normalização precisa ser a de produção',
+  );
+  assert.doesNotMatch(
+    fonte,
+    /function\s+.*[Ss]napshot\s*\(/,
+    'a suíte voltou a ter um helper local de snapshot',
+  );
+  // E a decisão tem de VIR do seam exportado, não do classificador chamado
+  // diretamente: `classifySnapshot` e `checkTagEligibility` continuam importados
+  // para a varredura de fonte, e não para decidir nada aqui.
+  const foraDaVarredura = fonte
+    .split('\n')
+    .filter((linha) => !/^\s*(\/\/|\*|\/\*)/.test(linha))
+    .filter((linha) => !/assert\.doesNotMatch\(fonte/.test(linha))
+    .filter((linha) => !/classifySnapshot\)|checkTagEligibility\)/.test(linha));
+  assert.doesNotMatch(
+    foraDaVarredura.join('\n'),
+    /classifySnapshot\(|checkTagEligibility\(/,
+    'a suíte chamou um contrato puro diretamente em vez da costura de produção',
+  );
+  assert.match(
+    fonte,
+    /mod\.decide\(/,
+    'a suíte não dirige a costura de produção exportada',
+  );
+});
+
+it('a suíte não reescreve a ordem das fechaduras como cópia literal fora da asserção de posição', () => {
+  const fonte = readFileSync(new URL('./safe04.test.js', import.meta.url), 'utf8');
+  // A lista literal aparece UMA vez, na asserção que compara a lista exportada
+  // com a ordem declarada pelo plano. Qualquer segunda ocorrência é uma cópia
+  // que passaria a divergir do código sem ninguém perceber.
+  const ocorrencias = (fonte.match(/'plan',\s*\n\s*'flag',\s*\n\s*'tty'/g) ?? []).length;
+  assert.equal(ocorrencias, 1, 'a ordem das fechaduras foi reescrita como cópia literal em mais de um lugar');
+  // E a lista é comparada com a EXPORTADA, não com um literal de oito entradas
+  // montado no lugar.
+  assert.match(fonte, /assert\.deepEqual\(APPLY_LOCKS,/, 'a lista de fechaduras não é comparada com a exportada');
+});
+
+// A segunda computation do digest dentro do construtor de plano é, por
+// natureza, INVISÍVEL a uma sonda de comportamento: uma função determinística
+// devolve o mesmo valor nas duas chamadas, então apagar a segunda computation
+// não muda nada que a suíte consiga observar. A afirmação que a torna
+// carregante é de código, e ela é explícita sobre isso: duas chamadas à função
+// exportada dentro do construtor, e uma recusa quando elas discordam.
+it('o construtor de plano computa o digest duas vezes e recusa quando elas discordam', () => {
+  const fonte = readFileSync(new URL('./release-close.js', import.meta.url), 'utf8');
+  const inicio = fonte.search(/^export function buildClosePlan\(/m);
+  assert.ok(inicio >= 0, 'buildClosePlan não está declarado no módulo da CLI');
+  let profundidade = 0;
+  let chave = -1;
+  for (let i = fonte.indexOf('(', inicio); i < fonte.length; i += 1) {
+    if (fonte[i] === '(') profundidade += 1;
+    else if (fonte[i] === ')') {
+      profundidade -= 1;
+      if (profundidade === 0) {
+        chave = fonte.indexOf('{', i);
+        break;
+      }
+    }
+  }
+  let fim = -1;
+  profundidade = 0;
+  for (let i = chave; i < fonte.length; i += 1) {
+    if (fonte[i] === '{') profundidade += 1;
+    else if (fonte[i] === '}') {
+      profundidade -= 1;
+      if (profundidade === 0) {
+        fim = i + 1;
+        break;
+      }
+    }
+  }
+  const corpo = fonte.slice(inicio, fim);
+  const chamadas = (corpo.match(/canonicalReviewedDigest\(/g) ?? []).length;
+  assert.equal(
+    chamadas,
+    2,
+    'o construtor chama a serialização ' + chamadas + ' vezes, e não 2',
+  );
+  assert.match(
+    corpo,
+    /new RecusaDeIntegridade\(/,
+    'o construtor não recusa quando as duas computações discordam',
+  );
+  // E a segunda computation não é a mesma variável relida: tem de ser uma
+  // chamada nova, senão a comparação é consigo mesma e sempre concorda.
+  assert.match(corpo, /const segunda = canonicalReviewedDigest\(/);
+  assert.match(corpo, /segunda !== reviewedDigest/);
+});
+
+// Corta o corpo de uma declaração de função a partir do texto-fonte inteiro,
+// começando na ocorrência de `expressao` e terminando na chave que fecha o
+// CORPO. A chave inicial é a que abre depois de fecharem todos os parênteses da
+// lista de parâmetros — e não a primeira chave qualquer: numa assinatura
+// desestruturada (`{ evidence, mutations }`) a primeira chave é a da
+// desestruturação, e um contador que começa nela devolve a assinatura e nada
+// mais. Uma guarda que inspeciona um fragmento é pior do que nenhuma guarda,
+// porque ela relata uma aprovação sem ter olhado.
+function fatiarFuncao(fonte, expressao) {
+  const inicio = fonte.search(expressao);
+  assert.ok(inicio >= 0, 'declaração não encontrada no módulo da CLI: ' + String(expressao));
+  let profundidade = 0;
+  let chave = -1;
+  for (let i = fonte.indexOf('(', inicio); i < fonte.length; i += 1) {
+    if (fonte[i] === '(') profundidade += 1;
+    else if (fonte[i] === ')') {
+      profundidade -= 1;
+      if (profundidade === 0) {
+        chave = fonte.indexOf('{', i);
+        break;
+      }
+    }
+  }
+  let fim = -1;
+  profundidade = 0;
+  for (let i = chave; i < fonte.length; i += 1) {
+    if (fonte[i] === '{') profundidade += 1;
+    else if (fonte[i] === '}') {
+      profundidade -= 1;
+      if (profundidade === 0) {
+        fim = i + 1;
+        break;
+      }
+    }
+  }
+  assert.ok(fim > 0, 'o corpo da declaração não fechou: ' + String(expressao));
+  return fonte.slice(inicio, fim);
+}
+
+// A CLI entrega ao portão um destino de saída que RELATA QUANTOS CARACTERES
+// escreveu, e não o booleano que `process.stdout.write` devolve.
+//
+// Esta afirmação é de FONTE por uma razão concreta, e a razão vale mais que a
+// prova: o caminho de apply da CLI carrega SEMPRE o baseline de referência, e
+// esse baseline não tem Release nem Milestone — a fechadura de conteúdo recusa e
+// o render NUNCA acontece nesse caminho. Toda chamada a `confirmApply` feita
+// aqui injeta o próprio `write`. Nenhuma prova de comportamento consegue
+// observar o que o adaptador da CLI entrega ao portão, porque nenhum caminho
+// alcançável chega a entregá-lo. Isso não é um buraco da suíte: é uma
+// propriedade da superfície de produção, e vale escrito.
+//
+// A consequência prática é que o adaptador só passa a ter prova COMPORTAMENTAL
+// quando a CLI passar a servir um baseline COM conteúdo revisado, e isso é a
+// Fase 10/11. Até lá a afirmação fica viva por leitura de código.
+it('a CLI entrega ao portão um sink que relata contagem de caracteres, e não um booleano', () => {
+  const fonte = readFileSync(new URL('./release-close.js', import.meta.url), 'utf8');
+
+  const adaptador = fatiarFuncao(fonte, /^function sinkQueContaCaracteres\(/m);
+  // A escrita no fluxo continua acontecendo…
+  assert.match(adaptador, /fluxo\.write\(/, 'o adaptador não escreve no fluxo de saída');
+  // …e o que volta é o comprimento do que foi escrito. O retorno direto de
+  // `write` seria booleano, e a fechadura de sink trata qualquer valor não
+  // numérico como total inválido — o plano engolido passaria a ser recusado
+  // por um motivo que não é o motivo, ou pior, aceito se o booleano virar 1.
+  assert.match(adaptador, /return recebido\.length;/, 'o adaptador não devolve uma contagem de caracteres');
+  assert.doesNotMatch(
+    adaptador,
+    /return\s+fluxo\.write\(/,
+    'o adaptador devolve o booleano de write em vez da contagem de caracteres',
+  );
+  assert.doesNotMatch(
+    adaptador,
+    /return\s+(true|false)\s*;/,
+    'o adaptador devolve um literal booleano em vez da contagem de caracteres',
+  );
+
+  // E o caminho de apply entrega ESSE adaptador ao portão, e não o `write` cru.
+  const apply = fatiarFuncao(fonte, /^async function runApply\(/m);
+  assert.match(
+    apply,
+    /write:\s*sinkQueContaCaracteres\(io\.stdout\)/,
+    'o caminho de apply não entrega o adaptador que conta ao portão',
+  );
+  assert.doesNotMatch(
+    apply,
+    /write:\s*io\.stdout\.write/,
+    'o caminho de apply entrega o write cru, que devolve booleano',
+  );
+  // E o booleano de terminal de saída vem do fluxo de SAÍDA. Ler a entrada duas
+  // vezes reabriria exatamente o desvio que a fechadura de saída existe para
+  // fechar, e nenhuma outra prova poderia enxergar isso: com os dois fluxos no
+  // mesmo estado, a combinação.live-viva / morta-viva é a única que separa os
+  // dois casos, e ela só existe aqui.
+  assert.match(
+    apply,
+    /outputIsTTY:\s*io\.stdout\.isTTY === true/,
+    'o caminho de apply não lê o booleano de terminal de saída do fluxo de saída',
+  );
+  assert.doesNotMatch(
+    apply,
+    /outputIsTTY:\s*io\.stdin\.isTTY/,
+    'o caminho de apply lê o booleano de terminal de saída do fluxo de entrada',
+  );
 });
