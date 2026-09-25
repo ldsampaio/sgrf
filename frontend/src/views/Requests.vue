@@ -20,27 +20,57 @@
     <table class="table"><thead><tr><th>Título</th><th>Status</th><th>Valor</th><th></th></tr></thead>
     <tbody><tr v-for="r in list" :key="r.id">
       <td>{{ r.title }}</td><td><StatusBadge :status="r.status" /></td><td>{{ formatBRL(r.requestedAmountCents) }}</td>
-      <td><button v-if="r.status === 'RASCUNHO'" class="btn ghost" @click="submit(r.id)">Submeter</button></td>
+      <td>
+        <button v-if="r.status === 'RASCUNHO'" class="btn ghost" @click="submit(r.id)">Submeter</button>
+        <!-- VOT-03: Arbitration panel for chefe -->
+        <div v-else-if="isArbitrationState(r) && isChefe" class="arbitration-panel">
+          <div class="alert warning" role="alert">
+            <strong>Arbitragem necessária — voto parcial detectado</strong>
+          </div>
+          <div class="field">
+            <label>Valor aprovado final (R$)</label>
+            <MoneyInput v-model="arbitrationAmounts[r.id]" :max="r.requestedAmountCents" :min="1" required />
+            <small class="hint">Entre 1 e {{ formatBRL(r.requestedAmountCents) }}</small>
+          </div>
+          <div class="field">
+            <label>Justificativa da arbitragem <span class="required">*</span></label>
+            <textarea class="input" v-model="arbitrationJustifications[r.id]" rows="3" placeholder="Justificativa obrigatória para arbitragem" required />
+          </div>
+          <button class="btn" :disabled="arbitrationLoading[r.id]" @click="confirmArbitration(r.id)">
+            {{ arbitrationLoading[r.id] ? 'Confirmando…' : 'Confirmar Arbitragem' }}
+          </button>
+          <div v-if="arbitrationError[r.id]" class="alert error" role="alert" style="margin-top:.5rem">{{ arbitrationError[r.id] }}</div>
+        </div>
+      </td>
     </tr></tbody></table>
   </div>
 </template>
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
+import { useAuth } from '../stores/auth';
 import { api } from '../services/api';
 import MoneyInput from '../components/MoneyInput.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { formatBRL } from '../utils/masks';
-const list = ref([]); const loading = ref(false); const err = ref('');
+
+const auth = useAuth();
+const list = ref([]);
+const loading = ref(false);
+const err = ref('');
 const form = ref({ type: 'EQUIPAMENTO', title: '', justification: '', spec: '' });
 const valueCents = ref(0);
 const DRAFT_KEY = 'sgrf:pending-draft';
+
+// VOT-03: Arbitration state
+const arbitrationAmounts = ref({});
+const arbitrationJustifications = ref({});
+const arbitrationLoading = ref({});
+const arbitrationError = ref({});
+
 // Suppress flag: programmatic resets (restore on mount, clear on submit)
 // must not re-persist through the watcher — only genuine user input writes.
 let suppressPersist = false;
-// Proactive form-side persist (D-09…D-10): every input/change overwrites the
-// single-slot snapshot, so a forced-logout bounce always finds the latest
-// draft. The interceptor only bounces — no cross-module hook. Every storage
-// access is try/catch (D-12: same-origin per-tab storage, no encryption).
+
 function persistDraft() {
   if (suppressPersist) return;
   try {
@@ -53,14 +83,13 @@ function persistDraft() {
     }));
   } catch { /* storage unavailable → best-effort, ignore */ }
 }
+
 function clearDraft() {
   try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* best-effort */ }
 }
+
 watch([() => form.value.type, () => form.value.title, () => form.value.justification, () => form.value.spec, valueCents], persistDraft, { flush: 'sync' });
-// Best-effort draft restore (D-09…D-11): after a forced-logout bounce the
-// Requests form reopens with its pre-bounce snapshot. The slot is cleared
-// unconditionally on mount so orphan snapshots never linger; malformed content
-// opens an empty form and never blocks navigation.
+
 function restoreDraft() {
   suppressPersist = true;
   try {
@@ -78,7 +107,12 @@ function restoreDraft() {
   } catch { /* corrupt slot → open empty (D-11) */ }
   finally { clearDraft(); suppressPersist = false; }
 }
-async function load() { const { data } = await api.get('/requests'); list.value = data.requests; }
+
+async function load() {
+  const { data } = await api.get('/requests');
+  list.value = data.requests;
+}
+
 async function create() {
   loading.value = true; err.value = '';
   try {
@@ -94,6 +128,53 @@ async function create() {
     await load();
   } catch (e) { err.value = e.response?.data?.error || 'Falha'; } finally { loading.value = false; }
 }
-async function submit(id) { await api.post(`/requests/${id}/submit`); await load(); }
-onMounted(() => { restoreDraft(); load(); });
+
+async function submit(id) {
+  await api.post(`/requests/${id}/submit`);
+  await load();
+}
+
+// VOT-03: Check if request is in arbitration state (APROVADO_PARCIALMENTE + AGUARDANDO_ARBITRAGEM)
+function isArbitrationState(request) {
+  return request.status === 'APROVADO_PARCIALMENTE' && request.decisionReason === 'AGUARDANDO_ARBITRAGEM';
+}
+
+// Check if current user is chefe
+function isChefe() {
+  return auth.user?.role === 'CHEFE_DEPARTAMENTO';
+}
+
+async function confirmArbitration(requestId) {
+  arbitrationLoading.value[requestId] = true;
+  arbitrationError.value[requestId] = '';
+  const amount = arbitrationAmounts.value[requestId];
+  const justification = arbitrationJustifications.value[requestId];
+  if (!amount || amount <= 0) {
+    arbitrationError.value[requestId] = 'Valor inválido';
+    arbitrationLoading.value[requestId] = false;
+    return;
+  }
+  if (!justification || !justification.trim()) {
+    arbitrationError.value[requestId] = 'Justificativa obrigatória';
+    arbitrationLoading.value[requestId] = false;
+    return;
+  }
+  try {
+    await api.patch(`/requests/${requestId}/partial-arbitration`, {
+      approvedAmountCents: amount,
+      justification: justification.trim(),
+    });
+    // Success: refresh list to show updated status
+    await load();
+  } catch (e) {
+    arbitrationError.value[requestId] = e.response?.data?.error || 'Falha na arbitragem';
+  } finally {
+    arbitrationLoading.value[requestId] = false;
+  }
+}
+
+onMounted(() => {
+  restoreDraft();
+  auth.me().then(load);
+});
 </script>
