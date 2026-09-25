@@ -250,12 +250,12 @@ async function collegiateDecision(req, res, next) {
         },
       });
       if (finalApproved > 0) {
-        const bal = await tx.fundBalance.findUnique({ where: { referenceYear: r.referenceYear } });
-        if (!bal || bal.availableCents < finalApproved) throw Object.assign(new Error('Saldo insuficiente'), { status: 400 });
-        await tx.fundBalance.update({
-          where: { referenceYear: r.referenceYear },
+        // GA-VOT-05: conditional updateMany - check availableCents >= finalApproved
+        const result = await tx.fundBalance.updateMany({
+          where: { referenceYear: r.referenceYear, availableCents: { gte: finalApproved } },
           data: { availableCents: { decrement: finalApproved }, provisionedCents: { increment: finalApproved }, version: { increment: 1 } },
         });
+        if (result.count === 0) throw Object.assign(new Error('Saldo insuficiente'), { status: 400 });
         await tx.financialTransaction.create({
           data: { requestId: r.id, type: 'PROVISION', amountCents: finalApproved, fromState: 'DISPONIVEL', toState: 'PROVISIONADO', performedBy: req.user.id, metadata: JSON.stringify({ collegiate: result }) },
         });
@@ -291,15 +291,14 @@ async function partialArbitration(req, res, next) {
     }
 
     const up = await prisma.$transaction(async (tx) => {
-      // Conditional FundBalance update (GA-VOT-05 pattern - to be hardened in Wave 4)
-      const bal = await tx.fundBalance.findUnique({ where: { referenceYear: r.referenceYear } });
-      if (!bal || bal.availableCents < amount) {
-        throw Object.assign(new Error('Saldo insuficiente'), { status: 400 });
-      }
-      await tx.fundBalance.update({
-        where: { referenceYear: r.referenceYear },
+      // GA-VOT-05: conditional updateMany - check availableCents >= amount
+      const result = await tx.fundBalance.updateMany({
+        where: { referenceYear: r.referenceYear, availableCents: { gte: amount } },
         data: { availableCents: { decrement: amount }, provisionedCents: { increment: amount }, version: { increment: 1 } },
       });
+      if (result.count === 0) {
+        throw Object.assign(new Error('Saldo insuficiente'), { status: 400 });
+      }
       await tx.financialTransaction.create({
         data: {
           requestId: r.id,
@@ -318,7 +317,7 @@ async function partialArbitration(req, res, next) {
           approvedAmountCents: amount,
           decidedAt: new Date(),
           decidedBy: req.user.id,
-          decisionReason: null,
+          decisionReason: '',
           collegiateMinutes: justification,
         },
       });

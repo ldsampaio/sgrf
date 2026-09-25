@@ -1,6 +1,7 @@
 const prisma = require('../config/db');
 const { audit } = require('../services/auditService');
 const { getSettings, getBalance } = require('../services/requestService');
+const env = require('../config/env');
 
 async function get(req, res, next) {
   try {
@@ -9,7 +10,7 @@ async function get(req, res, next) {
     const balance = await getBalance(year);
     // nunca expor credenciais SMTP
     const { ...safe } = settings;
-    res.json({ settings: { ...safe, smtpConfigured: true }, balance });
+    res.json({ settings: { ...safe, smtpConfigured: env.smtpEnabled && Boolean(env.smtp.host) }, balance });
   } catch (e) { next(e); }
 }
 
@@ -46,7 +47,21 @@ async function patchBalance(req, res, next) {
     }
     data.updatedBy = req.user.id;
     data.version = { increment: 1 };
-    const b = await prisma.fundBalance.upsert({ where: { referenceYear: year }, update: data, create: { referenceYear: year, ...data, version: 0 } });
+
+    // GA-VOT-05: version-based optimistic locking for balance adjustments
+    const current = await prisma.fundBalance.findUnique({ where: { referenceYear: year } });
+    const expectedVersion = current?.version ?? 0;
+
+    const result = await prisma.fundBalance.updateMany({
+      where: { referenceYear: year, version: expectedVersion },
+      data,
+    });
+
+    if (result.count === 0) {
+      throw Object.assign(new Error('Saldo modificado concorrentemente — tente novamente'), { status: 409 });
+    }
+
+    const b = await prisma.fundBalance.findUnique({ where: { referenceYear: year } });
     await prisma.financialTransaction.create({
       data: { type: 'BALANCE_ADJUST', amountCents: 0, fromState: 'ADMIN', toState: 'ADMIN', performedBy: req.user.id, metadata: JSON.stringify(req.body) },
     });

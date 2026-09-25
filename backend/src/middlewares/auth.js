@@ -8,6 +8,14 @@ async function authJwt(req, res, next) {
     const payload = verifyAccess(token);
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user || user.status !== 'ATIVO') return res.status(401).json({ error: 'Usuário inválido' });
+    if (user.mustChangePassword) {
+      const allowPaths = ['/api/auth/change-password', '/api/auth/me', '/api/auth/refresh', '/api/auth/logout'];
+      const url = req.originalUrl || req.path || '';
+      const isAllowlisted = allowPaths.some((p) => url.startsWith(p));
+      if (!isAllowlisted) {
+        return res.status(403).json({ error: 'Troca de senha obrigatória' });
+      }
+    }
     req.user = user;
     next();
   } catch {

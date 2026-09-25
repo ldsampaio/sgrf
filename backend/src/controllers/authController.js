@@ -14,7 +14,7 @@ async function login(req, res, next) {
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.status(401).json({ error: 'Credenciais inválidas' });
-    if (user.status !== 'ATIVO') return res.status(403).json({ error: 'Usuário inativo' });
+    if (user.status !== 'ATIVO') return res.status(401).json({ error: 'Credenciais inválidas' });
     if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
       await audit({ actorId: user.id, action: 'login_blocked', entityType: 'user', entityId: user.id, req });
       return res.status(423).json({ error: 'Conta temporariamente bloqueada' });

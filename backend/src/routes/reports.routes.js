@@ -2,6 +2,7 @@ const express = require('express');
 const PDFDocument = require('pdfkit');
 const prisma = require('../config/db');
 const { audit } = require('../services/auditService');
+const logger = require('../config/logger');
 const { authJwt } = require('../middlewares/auth');
 const { requirePermission } = require('../middlewares/permissions');
 const { scopeWhere, canViewRequest } = require('../middlewares/visibility');
@@ -22,6 +23,12 @@ function scopeFilter(user, q) {
   return where;
 }
 
+function sanitizeCSVCell(v) {
+  const s = String(v ?? '');
+  if (/^[=+@\t\r\n-]/.test(s) || /^[＝＋－＠]/.test(s)) return "'" + s;
+  return s;
+}
+
 function toCSV(rows, cols) {
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   return [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
@@ -29,6 +36,8 @@ function toCSV(rows, cols) {
 
 router.get('/requests', requirePermission('reports:requests'), async (req, res, next) => {
   try {
+    // REP-01: audit before any bytes stream — fail-open
+    await audit({ actorId: req.user.id, action: 'report_exported', entityType: 'report', entityId: `requests-${req.query.format || 'json'}`, req }).catch((e) => logger.warn({ err: e.message }, 'report audit failed'));
     const where = scopeFilter(req.user, req.query);
     const requests = await prisma.resourceRequest.findMany({ where, orderBy: { createdAt: 'desc' }, take: 500 });
     if (req.query.format === 'csv') {
@@ -45,7 +54,6 @@ router.get('/requests', requirePermission('reports:requests'), async (req, res, 
         doc.text(`${r.title} [${r.status}] ${(r.requestedAmountCents / 100).toFixed(2)}`);
       }
       doc.end();
-      await audit({ actorId: req.user.id, action: 'report_exported', entityType: 'report', entityId: 'requests-pdf', req });
       return;
     }
     res.json({ requests });
@@ -54,6 +62,7 @@ router.get('/requests', requirePermission('reports:requests'), async (req, res, 
 
 router.get('/financial', requirePermission('reports:financial'), async (req, res, next) => {
   try {
+    await audit({ actorId: req.user.id, action: 'report_exported', entityType: 'report', entityId: `financial-${req.query.format || 'json'}`, req }).catch((e) => logger.warn({ err: e.message }, 'report audit failed'));
     if (!['ADMINISTRADOR', 'CHEFE_DEPARTAMENTO'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Sem permissão' });
     }
@@ -69,6 +78,7 @@ router.get('/financial', requirePermission('reports:financial'), async (req, res
 
 router.get('/voting', requirePermission('reports:voting'), async (req, res, next) => {
   try {
+    await audit({ actorId: req.user.id, action: 'report_exported', entityType: 'report', entityId: `voting-${req.query.format || 'json'}`, req }).catch((e) => logger.warn({ err: e.message }, 'report audit failed'));
     const votes = await prisma.vote.findMany({ orderBy: { createdAt: 'desc' }, take: 500 });
     const vistas = await prisma.viewRequest.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
     // D-02: relatório de votação segue o escopo de visão dos pedidos —
@@ -91,6 +101,7 @@ router.get('/voting', requirePermission('reports:voting'), async (req, res, next
 
 router.get('/accountability', requirePermission('reports:accountability'), async (req, res, next) => {
   try {
+    await audit({ actorId: req.user.id, action: 'report_exported', entityType: 'report', entityId: `accountability-${req.query.format || 'json'}`, req }).catch((e) => logger.warn({ err: e.message }, 'report audit failed'));
     const requests = await prisma.resourceRequest.findMany({
       where: { status: { in: ['APROVADO', 'APROVADO_AUTOMATICAMENTE', 'APROVADO_PARCIALMENTE', 'CONCLUIDO'] } },
       orderBy: { decidedAt: 'desc' }, take: 500,
@@ -105,7 +116,6 @@ router.get('/accountability', requirePermission('reports:accountability'), async
         doc.text(`${r.title} solicitado ${(r.requestedAmountCents / 100).toFixed(2)} aprovado ${(r.approvedAmountCents / 100).toFixed(2)} status ${r.status}`);
       }
       doc.end();
-      await audit({ actorId: req.user.id, action: 'report_exported', entityType: 'report', entityId: 'accountability-pdf', req });
       return;
     }
     res.json({ requests });
@@ -114,12 +124,14 @@ router.get('/accountability', requirePermission('reports:accountability'), async
 
 // Stub RPA Fase 7
 router.get('/integration/provisioned', requirePermission('reports:integration'), async (req, res) => {
+  await audit({ actorId: req.user.id, action: 'report_exported', entityType: 'report', entityId: `integration-${req.query.format || 'json'}`, req }).catch((e) => logger.warn({ err: e.message }, 'report audit failed'));
   res.json({ note: 'Fase 7 — stub', hint: 'usar /api/reports/financial por enquanto' });
 });
 
 // Dashboard agregados: 3 pizzas (docentes Top8, saldos, categorias)
 router.get('/dashboard', requirePermission('reports:dashboard'), async (req, res, next) => {
   try {
+    await audit({ actorId: req.user.id, action: 'report_exported', entityType: 'report', entityId: 'dashboard-json', req }).catch((e) => logger.warn({ err: e.message }, 'report audit failed'));
     const year = Number(req.query.year || new Date().getFullYear());
     const where = scopeFilter(req.user, { ...req.query, mine: ['ALUNO', 'PROFESSOR'].includes(req.user.role) ? '1' : req.query.mine });
     where.referenceYear = year;
@@ -167,6 +179,7 @@ function dataURLtoBuffer(dataURL) {
 // PDF do dashboard com gráficos (imagens PNG vindas do frontend)
 router.post('/dashboard-pdf', requirePermission('reports:dashboard'), async (req, res, next) => {
   try {
+    await audit({ actorId: req.user.id, action: 'report_exported', entityType: 'report', entityId: `dashboard-pdf-${req.body?.year || new Date().getFullYear()}`, req }).catch((e) => logger.warn({ err: e.message }, 'report audit failed'));
     const year = Number(req.body?.year || new Date().getFullYear());
     const images = req.body?.images || {};
     res.header('Content-Type', 'application/pdf');
@@ -201,7 +214,6 @@ router.post('/dashboard-pdf', requirePermission('reports:dashboard'), async (req
       doc.text(`${r.requester?.name || ''} — ${r.title} [${r.type}] solicitado ${(r.requestedAmountCents / 100).toFixed(2)} aprovado ${(r.approvedAmountCents / 100).toFixed(2)}`);
     }
     doc.end();
-    await audit({ actorId: req.user.id, action: 'report_exported', entityType: 'report', entityId: `dashboard-pdf-${year}`, req });
   } catch (e) { next(e); }
 });
 

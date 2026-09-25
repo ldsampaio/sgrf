@@ -31,23 +31,23 @@
     {
       "number": "6",
       "name": "Voting & Money State Machine",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "7",
       "name": "Background Jobs",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "8",
       "name": "Reports/Audit & Auth Polish",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 6 of 8 · executing"
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-09-25T00:38:12.201Z"
+  "updated_at": "2026-09-25T04:36:25.454Z"
 }

@@ -56,19 +56,15 @@ async function submit(req, res, next) {
     const settings = await getSettings();
     const annual = await annualTotalCents(r.requesterId, r.referenceYear, r.id);
     const totalWithNew = annual + r.requestedAmountCents;
-    const balance = await getBalance(r.referenceYear);
 
     let status = 'EM_VOTACAO';
     let approvedCents = 0;
     if (totalWithNew <= settings.automaticApprovalLimitCents) {
-      if (balance.availableCents < r.requestedAmountCents) {
-        return res.status(400).json({ error: 'Saldo disponível insuficiente (RN-005)' });
-      }
       status = 'APROVADO_AUTOMATICAMENTE';
       approvedCents = r.requestedAmountCents;
     }
 
-    // transação atômica: status + provisionamento + saldo
+    // transação atômica: status + provisionamento + saldo (GA-VOT-05: conditional updateMany)
     const updated = await prisma.$transaction(async (tx) => {
       const up = await tx.resourceRequest.update({
         where: { id: r.id },
@@ -79,10 +75,13 @@ async function submit(req, res, next) {
         },
       });
       if (status === 'APROVADO_AUTOMATICAMENTE') {
-        await tx.fundBalance.update({
-          where: { referenceYear: r.referenceYear },
+        const result = await tx.fundBalance.updateMany({
+          where: { referenceYear: r.referenceYear, availableCents: { gte: approvedCents } },
           data: { availableCents: { decrement: approvedCents }, provisionedCents: { increment: approvedCents }, version: { increment: 1 } },
         });
+        if (result.count === 0) {
+          throw Object.assign(new Error('Saldo disponível insuficiente (RN-005)'), { status: 400 });
+        }
         await tx.financialTransaction.create({
           data: { requestId: r.id, type: 'PROVISION', amountCents: approvedCents, fromState: 'DISPONIVEL', toState: 'PROVISIONADO', performedBy: 'system', metadata: JSON.stringify({ rule: 'auto', limit: settings.automaticApprovalLimitCents }) },
         });
@@ -123,23 +122,22 @@ async function cancel(req, res, next) {
     const approved = ['APROVADO', 'APROVADO_AUTOMATICAMENTE', 'APROVADO_PARCIALMENTE'].includes(r.status);
     if (approved) {
       if (!isLeader) return res.status(403).json({ error: 'Sem permissão' });
-      // VOT-04: compensating REVERSE — atomic reversal of provision + audit
+      // VOT-04 + GA-VOT-05: compensating REVERSE with conditional updateMany
       const approvedAmount = r.approvedAmountCents || 0;
       if (approvedAmount > 0) {
         await prisma.$transaction(async (tx) => {
-          // Conditional reversal: ensure provisionedCents >= approvedAmount
-          const bal = await tx.fundBalance.findUnique({ where: { referenceYear: r.referenceYear } });
-          if (!bal || bal.provisionedCents < approvedAmount) {
-            throw Object.assign(new Error('Provisionado insuficiente para estorno'), { status: 400 });
-          }
-          await tx.fundBalance.update({
-            where: { referenceYear: r.referenceYear },
+          // GA-VOT-05: conditional updateMany - check provisionedCents >= approvedAmount
+          const result = await tx.fundBalance.updateMany({
+            where: { referenceYear: r.referenceYear, provisionedCents: { gte: approvedAmount } },
             data: {
               provisionedCents: { decrement: approvedAmount },
               availableCents: { increment: approvedAmount },
               version: { increment: 1 },
             },
           });
+          if (result.count === 0) {
+            throw Object.assign(new Error('Provisionado insuficiente para estorno'), { status: 400 });
+          }
           await tx.financialTransaction.create({
             data: {
               requestId: r.id,

@@ -1,6 +1,6 @@
-const prisma = require('./config/db');
-const logger = require('./config/logger');
-const { closeVoting } = require('./services/votingService');
+const prisma = require('../config/db');
+const logger = require('../config/logger');
+const { closeVoting } = require('../services/votingService');
 
 // Encerra votações vencidas (pula suspensas). Chamado por cron e manualmente.
 async function closeExpired() {

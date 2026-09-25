@@ -124,14 +124,14 @@ async function closeVoting(requestId, performedBy = 'system') {
       data: { status, approvedAmountCents: approvedCents, decidedAt: status.startsWith('APROVADO') || status === 'INDEFERIDO' ? new Date() : null, decidedBy: performedBy },
     });
     if (status === 'APROVADO' || status === 'APROVADO_PARCIALMENTE') {
-      const bal = await tx.fundBalance.findUnique({ where: { referenceYear: r.referenceYear } });
-      if (!bal || bal.availableCents < approvedCents) {
-        throw Object.assign(new Error('Saldo insuficiente'), { status: 400 });
-      }
-      await tx.fundBalance.update({
-        where: { referenceYear: r.referenceYear },
+      // GA-VOT-05: conditional updateMany - check availableCents >= approvedCents
+      const result = await tx.fundBalance.updateMany({
+        where: { referenceYear: r.referenceYear, availableCents: { gte: approvedCents } },
         data: { availableCents: { decrement: approvedCents }, provisionedCents: { increment: approvedCents }, version: { increment: 1 } },
       });
+      if (result.count === 0) {
+        throw Object.assign(new Error('Saldo insuficiente'), { status: 400 });
+      }
       await tx.financialTransaction.create({
         data: { requestId: r.id, type: 'PROVISION', amountCents: approvedCents, fromState: 'DISPONIVEL', toState: 'PROVISIONADO', performedBy, metadata: JSON.stringify({ tally: t }) },
       });

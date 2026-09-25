@@ -28,6 +28,31 @@ async function processQueue(limit = 10) {
   for (const mail of pendings) {
     if (mail.attempts >= 3) {
       await prisma.emailQueue.update({ where: { id: mail.id }, data: { status: 'GIVE_UP' } });
+      // Dual signal per docs/14 — alert admin via queue + audit (not just logger.error)
+      try {
+        await prisma.emailQueue.create({
+          data: {
+            to: env.initialAdminEmail,
+            subject: '[SGRD] Falha definitiva de e-mail',
+            body: `Falha ao enviar para ${mail.to} — assunto: ${mail.subject} — mailId: ${mail.id} — tentativas: 3 — erro: ${(mail.lastError || '').slice(0, 500)}`,
+          },
+        });
+      } catch (e) {
+        logger.error({ err: e.message }, 'give-up alert enqueue failed');
+      }
+      try {
+        const { audit } = require('./auditService');
+        await audit({
+          actorId: null,
+          action: 'email_give_up',
+          entityType: 'email_queue',
+          entityId: mail.id,
+          afterData: { to: mail.to, subject: mail.subject, attempts: 3, lastError: mail.lastError },
+          req: null,
+        });
+      } catch (e) {
+        logger.error({ err: e.message }, 'give-up audit failed');
+      }
       logger.error({ mailId: mail.id }, 'email give up, alert admin');
       continue;
     }
@@ -47,4 +72,4 @@ async function processQueue(limit = 10) {
   }
 }
 
-module.exports = { enqueue, processQueue };
+module.exports = { enqueue, processQueue, getTransporter };

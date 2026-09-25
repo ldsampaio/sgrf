@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: v0.1.1
-current_phase: 6
-current_phase_name: Voting & Money State Machine
-status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-09-25T01:31:28.213Z"
-last_activity: 2026-09-24
-last_activity_desc: Completed 06-02 VOT-02 annual cap accounting
-state_head: 28b732f2ebde4f75c3b60373b695a474f11f644f
+status: Awaiting next milestone
+stopped_at: Completed Phase 8 — all 4 plans executed
+last_updated: "2026-09-25T04:36:25.448Z"
+last_activity: 2026-09-25
+last_activity_desc: Milestone v0.1.1 completed and archived
+state_head: c739c1da32aef5a1295579535e6348295b372887
 progress:
   total_phases: 8
-  completed_phases: 5
-  total_plans: 21
-  completed_plans: 20
+  completed_phases: 8
+  total_plans: 29
+  completed_plans: 29
+current_phase: 08
+current_phase_name: Reports/Audit & Auth Polish
 ---
 
 # Project State
@@ -23,16 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-24)
 
 **Core value:** Requests are decided correctly and funds cannot leak — the right people approve the right amounts, every state change is authorized and auditable, and the ledger always balances.
-**Current focus:** Phase 6 — Voting & Money State Machine
+**Current focus:** Phase 08 — Reports/Audit & Auth Polish
 
 ## Current Position
 
-Phase: 6 (Voting & Money State Machine) — EXECUTING
-Plan: 5 of 5
-Status: 06-02 complete, ready for 06-03
-Last activity: 2026-09-24 — Completed 06-02 VOT-02 annual cap accounting
-
-Progress: [██████░░░░] 70%
+Phase: Milestone v0.1.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-09-25 — Milestone v0.1.1 completed and archived
 
 ## Performance Metrics
 
@@ -121,3 +119,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 Last session: 2026-09-25T01:31:28.194Z
 Stopped at: Completed 06-04-PLAN.md
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
