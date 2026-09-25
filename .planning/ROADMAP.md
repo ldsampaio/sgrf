@@ -38,7 +38,7 @@ Phase numbering continues from the completed v0.1.1 milestone. Decimal phases ap
   3. Deterministic `node:test` fixtures and mocked API scenarios classify missing, partial, duplicate, conflicting, failed, and concurrent states, and the tool exposes no ref-write or destructive tag path.
   4. The pure eligibility contract accepts an existing annotated tag only when its peeled commit equals both the full expected SHA and the observed remote `main`; any mismatch is reported without a write action.
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 Plans:
 **Wave 1**
 
@@ -46,7 +46,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 09-02-PLAN.md — Six-state classifier, six fixtures, scripted fake sequences, gh stub, no-ref-write proof
+- [x] 09-02-PLAN.md — Six-state classifier, six fixtures, scripted fake sequences, gh stub, no-ref-write proof
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
