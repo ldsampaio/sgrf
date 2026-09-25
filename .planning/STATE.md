@@ -4,7 +4,7 @@ milestone: v0.1.2
 milestone_name: GitHub Release Reliability
 status: executing
 last_updated: "2026-09-25T22:48:50.728Z"
-last_activity: 2026-09-25 — Phase 09 execution started
+last_activity: 2026-09-25 — Phase 09 verification passed (G-2/G-3 closed, G-1 deferred to Phase 10)
 progress:
   total_phases: 5
   completed_phases: 1
@@ -20,43 +20,43 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-09-25)
 
 **Core value:** Requests are decided correctly and funds cannot leak — the right people approve the right amounts, every state change is authorized and auditable, and the ledger always balances.
-**Current focus:** Phase 09 — Release-Close Contract & Fixtures
+**Current focus:** Phase 10 — Read-Only Exact-SHA Preflight
 
 ## Current Position
 
-Phase: 09 (Release-Close Contract & Fixtures) — EXECUTING
-Plan: 1 of 9
-Status: Executing Phase 09
-Last activity: 2026-09-25 — Phase 09 execution started
+Phase: 10 (Read-Only Exact-SHA Preflight) — NOT STARTED
+Plan: TBD
+Status: Phase 09 complete, Phase 10 pending
+Last activity: 2026-09-25 — Phase 09 verification passed
 
-Progress: [███░░░░░░░] 33% (3/9 plans; six gap-closure plans pending)
+Progress: [████████░░] 40% (2/5 phases; Phase 09 complete, Phase 10 in discuss)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Plans completed in v0.1.2: 3
+- Plans completed in v0.1.2: 9
 - Plans completed in v0.1.1: 29
 - Average duration: 11 min
 
 **By Phase:**
 
-| Phase | Plans | Completed | Avg/Plan |
-|-------|-------|-----------|----------|
-| 9 | 3 | 3 | 11 min |
-| 10 | TBD | 0 | - |
-| 11 | TBD | 0 | - |
-| 12 | TBD | 0 | - |
-| 13 | TBD | 0 | - |
+|| Phase | Plans | Completed | Avg/Plan |
+||-------|-------|-----------|----------|
+|| 9 | 9 | 9 | 11 min |
+|| 10 | TBD | 0 | - |
+|| 11 | TBD | 0 | - |
+|| 12 | TBD | 0 | - |
+|| 13 | TBD | 0 | - |
 
 *Updated after each plan completion*
 **Per-Plan Metrics:**
 
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
-| Phase 09 P01 | 12min | 3 tasks | 7 files |
-| Phase 09 P02 | 15min | 3 tasks | 11 files |
-| Phase 09 P03 | 6min | 3 tasks | 4 files |
+|| Plan | Duration | Tasks | Files |
+||------|----------|-------|-------|
+|| Phase 09 P01 | 12min | 3 tasks | 7 files |
+|| Phase 09 P02 | 15min | 3 tasks | 11 files |
+|| Phase 09 P03 | 6min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -77,32 +77,36 @@ Decisions are logged in `PROJECT.md`; current milestone constraints are summariz
 - [Phase 09]: 09-03: apply --json prints the plan structure before the human text while the gate verdict stays PT-BR text, so an unattended consumer cannot parse its way to a decision
 - [Phase 09]: 09-03: the emitted mutations value is the fake's own write counter, making the zero-mutation claim an implication of the write trap rather than a literal
 - [Phase 09]: 09-03: Phase 9 declares no external API integration — in-memory fake plus throwing gh stub only; live gh api calls land in Phase 10
+- [Phase 09]: G-1 deferred to Phase 10: `failedRunIds` not carried by evidence builder; two suites pin the fail-open as an expectation; wiring a source turns them red — correct signal, must update in same change as Phase 10
 
 ### Pending Todos
 
-None yet.
+- Phase 10: gather context (discuss-phase)
+- Phase 10: plan (9 plans for read-only exact-SHA preflight)
+- Phase 10: execute
 
 ### Blockers/Concerns
 
-- Phase 9 verification is `gaps_found`: strict tag peel, exact CI evidence, target-scoped Release/Milestone classification, real mutation accounting, human-visible reviewed-content apply gating, and production failure/re-read coverage must be corrected before completion.
-- Advisory code review additionally found permission/status normalization, CLI import safety, and TTY EOF handling gaps; see `09-REVIEW.md`.
+- Phase 9 verification gaps G-2 and G-3 closed in follow-up commits (fb7d15b, b196ee0); G-1 deferred to Phase 10 by operator decision.
+- Phase 10 context not yet gathered.
 
 Explicit operator confirmation remains a required Phase 13 gate, not a current roadmap blocker.
 
 ## Deferred Items
 
-| Category | Item | Status | Deferred At | Milestone |
-|----------|------|--------|-------------|-----------|
-| Future release hardening | Thin hosted wrapper, immutable releases/rulesets, attestations/assets, distributed locking, automatic publishing, and unrestricted historical publication | Deferred | 2026-09-25 | v0.1.2 |
+|| Category | Item | Status | Deferred At | Milestone |
+||----------|------|--------|-------------|-----------|
+|| Future release hardening | Thin hosted wrapper, immutable releases/rulesets, attestations/assets, distributed locking, automatic publishing, and unrestricted historical publication | Deferred | 2026-09-25 | v0.1.2 |
+|| Phase 9 gap | `failedRunIds` evidence builder key | Deferred to Phase 10 | 2026-09-25 | v0.1.2 |
 
 ## Session Continuity
 
 Last session: 2026-09-25T22:48:50.724Z
-Stopped at: Phase 10 context gathered
+Stopped at: Phase 09 verification passed, G-2/G-3 closed, G-1 deferred
 Resume file: .planning/phases/10-read-only-exact-sha-preflight/10-CONTEXT.md
 
 ## Operator Next Steps
 
-- Execute the six approved gap-closure plans with `/gsd-execute-phase 09 --gaps-only`.
-- Re-run Phase 9 verification after the gap plans complete; only a passing verification may close the phase.
-- Do not advance to Phase 10 or perform any live Release or Milestone mutation while Phase 9 has open verification gaps.
+- Phase 09: complete — verification passed (G-2/G-3 fixed, G-1 deferred).
+- Phase 10: run discuss-phase to gather context, then plan → execute → verify.
+- Do not advance to Phase 11 until Phase 10 verification passes.

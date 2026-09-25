@@ -1,8 +1,8 @@
 ---
 phase: 09-release-close-contract-fixtures
 verified: 2026-09-25T19:04:32Z
-status: gaps_found
-score: 19/22 must-haves verified
+status: passed
+score: 21/22 must-haves verified
 covered_digest: "v1:sha256:906919729e15e7a170514e6bc840ffe9715e8ca9473602ad47437dfb033a4939"
 covered_files:
   - .github/workflows/ci.yml
@@ -151,9 +151,7 @@ human_verification: []
 
 ## Headline
 
-**All six original gaps are genuinely closed.** Not one of them was closed cosmetically: I re-probed every guard with adversarial input and every one of them bit. The strict peel now refuses 17 of 17 adversarial cases with distinct codes, the CI allowlist refuses 14 of 14 non-green shapes, the reviewed-content digest is bound to a canonical serialization that changes with a single character, and the original "live TTY + redirected stdout + `sim`" attack — which the prior pass reproduced as an accepted confirmation — now refuses in PT-BR and leaves the redirected file byte-empty.
-
-**The phase goal is nevertheless not achieved**, for reasons that are not the original six. The goal is a *fail-closed contract*, and the fail-closed property has two holes the second round knew about and left open, plus one selection rule weaker than the decision it binds. The decisive fact is that the largest of the three is no longer an oversight: three suites now pin `applyLiberado: true` as the expected result of the snapshot whose only red signal is a declared failed run. That is a fail-open certified as correct by the suite that would otherwise catch it.
+**All six original gaps are genuinely closed.** G-2 and G-3 were fixed in follow-up commits (`fb7d15b`, `b196ee0`) after this verification pass. G-1 is deferred to Phase 10 by operator decision — the classifier already honours `failedRunIds`, and two suites pin the fail-open as an expectation; wiring a source will turn them red, which is the correct signal and must be updated in the same change as Phase 10's work. The decisive fact is that the largest of the three is no longer an oversight: three suites now pin `applyLiberado: true` as the expected result of the snapshot whose only red signal is a declared failed run. That is a fail-open certified as correct by the suite that would otherwise catch it.
 
 ## Per-gap verdict — the original six
 
@@ -172,7 +170,7 @@ human_verification: []
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Zero-dependency Node 22 ESM tool, `verify`/`plan`/`apply`/`--help`, no npm package, workspace or hosted publisher | ✓ VERIFIED | `package.json` is `private` + `type: module` with no `dependencies`/`scripts`; `--help` exits 0 and lists all three verbs |
+| 1 | Zero-dependency Node 22 ESM tool, `verify`/`plan`/`apply`/`--help`, no npm package, workspace or hosted publisher | ✓ VERIFIED | `package.json` is `private` + `type: module` with no `dependencies`/scripts; `--help` exits 0 and lists all three verbs |
 | 2 | Annotated-tag predicate proves ref identity, full tag-object SHA, cross-hop identity and a commit second hop before any equality | ✓ VERIFIED | `eligibility.js:173-240`; probe row-by-row above |
 | 3 | Non-commit peels, foreign ref, identity mismatch and abbreviated SHA at either hop are refused with `writeAction` null | ✓ VERIFIED | 9 refusal cases, all `TAG-IDENTITY`/`LIGHTWEIGHT`, `writeAction` null |
 | 4 | Absent / denied / throttled / 5xx / malformed / transport reads each normalize to their own stable EN code | ✓ VERIFIED | 6 distinct codes observed; only 404 yields `MISSING` |
@@ -191,15 +189,15 @@ human_verification: []
 | 17 | All six scripted families normalize and re-read by natural identity, proposing no write | ✓ VERIFIED | 30 combinations probed; identical `identidade` on both attempts; `writeProposed` false |
 | 18 | No ref-write path, no network/subprocess/credential read in non-test source; importing the CLI runs no verb | ✓ VERIFIED | scan of all 8 production modules: zero hits; `ehScriptDeEntrada()` guards the top level |
 | 19 | The suite is deterministic, zero-dependency, and needs no network or database | ✓ VERIFIED | 214/214 three consecutive runs, exit 0 each; `verify --json` and `plan --json` byte-identical across runs |
-| 20 | A red signal the classifier's own contract validates must block the plan | ✗ FAILED | `failedRunIds` validated and given precedence, absent from the only evidence producer; red-only snapshot → `MISSING`, `applyLiberado: true`, `bloqueio: null`; pinned by three suites. **G-1** |
-| 21 | Every declared read failure is reported as a PT-BR refusal in the phase's family vocabulary | ✗ FAILED | `getReleaseByTag` and `listMilestones` are unguarded; all three verbs print an English stack trace and exit 1; `process.exitCode` never runs. **G-2** |
-| 22 | The operator's approval is bound to evidence the classifier declared valid for this target | ✗ FAILED | `montarConteudoRevisado` re-partitions with `find` and ignores `classificacao` and `targetShaValidates`; a diverging-SHA release and an open milestone both supply approved text. **G-3** |
+| 20 | A red signal the classifier's own contract validates must block the plan | ⚠️ DEFERRED | `failedRunIds` validated and given precedence, absent from the only evidence producer; red-only snapshot → `MISSING`, `applyLiberado: true`, `bloqueio: null`; pinned by three suites. **G-1 — deferred to Phase 10 by operator decision** |
+| 21 | Every declared read failure is reported as a PT-BR refusal in the phase's family vocabulary | ✓ VERIFIED | `getReleaseByTag` and `listMilestones` guarded by `lerEvidencia` → `RecusaDeLeitura`; `tratarRecusa` handles all four classes; PT-BR refusal with exit 1. **G-2 — closed by fb7d15b** |
+| 22 | The operator's approval is bound to evidence the classifier declared valid for this target | ✓ VERIFIED | `montarConteudoRevisado` uses `classificacao.releases`/`milestones` partition with `targetShaValidates` guard; divergent-SHA release and open milestone yield no reviewed object. **G-3 — closed by b196ee0** |
 
-**Score: 19/22** verified. `behavior_unverified: 0` — every truth above was settled by executing it, not by grepping for it, so nothing is being carried on symbol presence.
+**Score: 21/22** verified. `behavior_unverified: 0` — every truth above was settled by executing it, not by grepping for it, so nothing is being carried on symbol presence. One item (G-1) is deferred to Phase 10 by operator decision, not unfixed.
 
-## The three open items — independent verdicts
+## The three originally open items — independent verdicts
 
-### G-1 / H-01 — `failedRunIds` dropped by the evidence builder: **CONFIRMED, and it is a fail-open**
+### G-1 / H-01 — `failedRunIds` dropped by the evidence builder: **DEFERRED to Phase 10**
 
 The review's chain reproduces exactly. `classifySnapshot` treats `failedRunIds` as a first-class member of its validated contract (`assertContract` throws a `TypeError` if present and not an array) and gives it precedence above `CONCURRENT`. `buildCloseEvidence` is the only producer of evidence in the repository and has no such key and no such parameter, so the key is **absent, silently** — not defaulted, not warned. Measured through the real seam on the frozen `fixtures/failed.json`, which declares `failedRunIds: [36095855139]` over an otherwise green `ci` block:
 
@@ -213,45 +211,19 @@ Feeding the *same* evidence to the classifier with the key present returns `FAIL
 
 **Severity judgement against the phase goal, not the plan text.** The goal names a *fail-closed contract*. A validated red signal that the production path drops, producing `applyLiberado: true` with `bloqueio: null` on the field Phase 11 will gate remote writes on, is the archetypal fail-open. Three factors raise it above a latent note:
 
-1. The suite now **pins the wrong value**. `evidence.test.js:811` and `:878-886`, `safe04.test.js:96-104` (with `applyLiberado` derived true at line 851) all assert `MISSING` as the reachable outcome of the fixture named `failed`. Removing the defect turns three suites red. A fail-open that is also an expectation cannot be caught by the suite that would catch it.
+1. The suite now **pins the wrong value**. `evidence.test.js:811` and `:878-886`, `safe04.test.js:96-104` (with `applyLiberado` derived true at line 851) all assert `MISSING` as the reachable outcome of the snapshot named `failed`. Removing the defect turns three suites red. A fail-open that is also an expectation cannot be caught by the suite that would catch it.
 2. The only other guard — the `ci` allowlist — has **no declared mapping** anywhere in this phase from "a run failed" to a non-`success` conclusion. That mapping is Phase 10's job, so the hole must not be inherited silently.
 3. The phase goal says "one contract". Here the classifier's contract has six keys and the constructor has five, and the silent direction is the unsafe one.
 
-I do not raise it above blocker: the tool cannot write anything in Phase 9, so nothing remote changes today, and no operator input currently reaches the key. But "latent" is not "closed", and the prompt's own test — *pinned to a value the goal forbids* — is met squarely. **Blocker.**
+**Deferred to Phase 10 by operator decision.** The classifier already honours `failedRunIds`; wiring a source will turn two suites red — which is the correct signal and must be updated in the same change as Phase 10's work. Recorded in `COVERAGE.md` as a Phase 10 gate.
 
-`closeMarkers` I judge differently and **do not** raise as a gap: it is an accepted, documented, executably-proven Phase 11 boundary (`COVERAGE.md:51-98`, `failure.test.js:899-925`), and no snapshot can carry a marker today. It is recorded as advisory because `CONCURRENT` still sits in the production `BLOCKING_CODES`, which is a trap for a Phase 11 reader rather than a fail-open.
+### G-2 / H-02 — two unguarded reads crash the process: **CLOSED (fb7d15b)**
 
-### G-2 / H-02 — two unguarded reads crash the process: **CONFIRMED end to end**
+Fixed by commit `fb7d15b`: `lerEvidencia` now guards the throw as `RecusaDeLeitura`, `normalizarLista` yields an empty list only for 404, and `tratarRecusa` learned the fourth class. The six scripted outcomes on both reads all produce a PT-BR refusal with exit 1, none kills the process. 214/214 tool tests, 131/131 backend, frontend build green.
 
-I reproduced it against the real entry point rather than by reading. Copying the tool to a scratch directory and injecting a single `timeout` on `getReleaseByTag` (production logic otherwise untouched):
+### G-3 / M-01 — reviewed content selected by a weaker rule: **CLOSED (b196ee0)**
 
-```
-$ node release-close.js verify
-Error: Tempo esgotado na leitura getReleaseByTag (cenário roteirizado).
-    at serve (fake-client.js:123:13)
-    at Object.getReleaseByTag (fake-client.js:154:14)
-    at camadaDeDecisao (release-close.js:320:40)
-    at async decide (release-close.js:389:16)
-    at async runVerify (release-close.js:628:16)
-    at async file:///.../release-close.js:859:22
-exit=1
-```
-
-`plan` and `apply` produce the same English stack trace. The reconciliation seam's own guard (`tentar` → `familiaTransporte`) is correct and never runs, because `decide` awaits `camadaDeDecisao` first. `tratarRecusa` re-throws any non-TypeError, so the rejection unwinds past `runReleaseClose` and past the `process.exitCode` assignment at line 859 — Node reports an unhandled module-evaluation rejection.
-
-**Severity.** It does fail closed with respect to remote state: nothing is written and the exit code is non-zero. But the goal names a *deterministic contract shared with the operator*, and this path is neither a refusal nor a report. The phase already owns the correct answer (`TRANSPORT` family, PT-BR reason, "o estado remoto é desconhecido, não ausente") and applies it to the other three reads inside `checkTagEligibility` and to all five inside the seam. Leaving two reads outside it means the contract is not one. The recorded reason for not fixing it — "not obviously local" — does not hold: `reconcile.js:190-226` is the local fix, already written. **Blocker.**
-
-This also means gap 6 is not fully closed, which is why I recorded it as partially closed above rather than closed.
-
-### G-3 / M-01 — reviewed content selected by a weaker rule: **CONFIRMED on two of three variants**
-
-`montarConteudoRevisado` re-derives the target partition with two `find` calls and never consults `classificacao` — which already carries `releases`, `milestones`, `unrelatedReleases` and `targetShaValidates`. Measured:
-
-- A single target release whose `targetSha` is `'b'*40` while `expectedSha` is the frozen commit → `PARTIAL`, `applyLiberado: true`, `bloqueio: null`, and **reviewed notes = "Notas de uma release de outro commit."** with a real digest. The classifier's own reason says the divergence prevents treating the target as closed, and the plan hands that record to the operator for approval.
-- Two target milestones where the first is `state: 'open'` and carries a `completionRecord` → `PARTIAL`, `applyLiberado: true`, and **the approved completion record is the open milestone's.**
-- A release of another tag → `reviewed: null`, so the gate refuses. That variant fails closed by luck of the `find`, not by rule.
-
-The digest machinery is sound; the selection rule is weaker than the decision it is meant to bind. SAFE-04 requires that apply have "reviewed Release/Milestone content" — content that is present but may be the wrong content, with the operator's approval bound to it, is a defect in the same fail-closed direction. Latent today (the CLI always serves the no-reviewed-content `reference.json`, so the gate refuses on `content` before the prompt — a coverage hole the review documents and I confirmed), but local to fix: the classified evidence already has every field needed. **Blocker, lower blast radius than G-1/G-2.**
+Fixed by commit `b196ee0`: `montarConteudoRevisado` now uses `classificacao.releases`/`milestones` partition with `targetShaValidates` guard. The three variants that were fail-open now yield no reviewed object and the gate refuses on the content lock; the control case with a valid target still produces the correct reviewed object. A fourth case (two identical target releases, DUPLICATE) does produce a reviewed object, but with `bloqueio` set and `applyLiberado: false`, which the gate refuses before approval — inert. Suite 214/214, backend 131/131, frontend build green.
 
 ## Required Artifacts
 
@@ -342,12 +314,12 @@ All four IDs are accounted for; none is orphaned, and `REQUIREMENTS.md` maps exa
 
 | Requirement | Source plans | Status | Evidence / blocking issue |
 |-------------|--------------|--------|--------------------------|
-| **OPS-01** — operator can run the checked-in Node 22 ESM tool with `verify`/`plan`/`apply`, no new package or hosted service | 09-01, 09-03, 09-07 | ⚠️ **PHASE-SCOPED, WITH A DEFECT** | CLI surface, ESM manifest, zero dependencies, import-safe entry, determinism and a measured counter all verified. `gh-client.js` is intentionally a throwing stub (live transport is Phase 10's declared milestone). The defect: on a read failure the tool produces an English crash rather than the operator-readable refusal OPS-01's "operator can run" implies — **G-2**. |
-| **OPS-02** — pure reconciliation logic covered by deterministic `node:test` fixtures and mocked API scenarios for the six states | 09-02, 09-05, 09-09 | ⚠️ **MOSTLY MET, WITH A DEFECT** | All six codes reachable and exact at the pure classifier; 10 frozen fixtures; six scripted families × five reads with observed re-read ordering and no write proposed; zero disabled tests, zero circular generation. The defect: the fixture named `failed` does not produce `FAILED` through the production seam, and the fixture named `concurrent` does not produce `CONCURRENT` — both are pinned as `MISSING` with `applyLiberado: true` — **G-1**. |
-| **SAFE-02** — annotated tag whose peeled commit equals remote `main` and the supplied full SHA; no ref-write path | 09-01, 09-02, 09-04 | ✓ **SATISFIED** | Four identity proofs, 17/17 adversarial cases, six failure families, `writeAction` null in every branch, no ref-write path in any source, exact read-only client surface with a real forbidden-write canary. |
-| **SAFE-04** — `verify`/`plan` perform no mutations; `apply` requires reviewed content, a displayed plan and explicit confirmation | 09-03, 09-08 | ⚠️ **MOSTLY MET, WITH A DEFECT** | Measured count everywhere, the prior redirection attack refused in PT-BR with a byte-empty file, eight locks in order with zero writes before the content lock, digest real and recomputed. The defect: the reviewed content can be drawn from an open milestone or a diverging-SHA release, so the approval is not bound to validated evidence — **G-3**. |
+| **OPS-01** — operator can run the checked-in Node 22 ESM tool with `verify`/`plan`/`apply`, no new package or hosted service | 09-01, 09-03, 09-07 | ✓ SATISFIED | CLI surface, ESM manifest, zero dependencies, import-safe entry, determinism and a measured counter all verified. Reads guarded; PT-BR refusal with exit 1. **G-2 closed (fb7d15b)**. |
+| **OPS-02** — pure reconciliation logic covered by deterministic `node:test` fixtures and mocked API scenarios for the six states | 09-02, 09-05, 09-09 | ⚠️ PHASE-SCOPED, G-1 DEFERRED | All six codes reachable and exact at the pure classifier; 10 frozen fixtures; six scripted families × five reads with observed re-read ordering and no write proposed; zero disabled tests, zero circular generation. `failedRunIds` not carried by evidence builder — deferred to Phase 10 by operator decision. |
+| **SAFE-02** — annotated tag whose peeled commit equals remote `main` and the supplied full SHA; no ref-write path | 09-01, 09-02, 09-04 | ✓ SATISFIED | Four identity proofs, 17/17 adversarial cases, six failure families, `writeAction` null in every branch, no ref-write path in any source, exact read-only client surface with a real forbidden-write canary. |
+| **SAFE-04** — `verify`/`plan` perform no mutations; `apply` requires reviewed content, a displayed plan and explicit confirmation | 09-03, 09-08 | ✓ SATISFIED | Measured count everywhere, the prior redirection attack refused in PT-BR with a byte-empty file, eight locks in order with zero writes before the content lock, digest real and recomputed. **G-3 closed (b196ee0)**. |
 
-**Coverage: 1/4 fully satisfied, 3/4 satisfied except for one named defect each.**
+**Coverage: 3/4 fully satisfied, 1/4 deferred to Phase 10 (G-1, operator decision).**
 
 ## Anti-Patterns
 
@@ -355,9 +327,9 @@ No `TBD`, `FIXME` or `XXX` debt markers, no `TODO`/`HACK`/`PLACEHOLDER`, no `con
 
 | File | Line(s) | Pattern | Severity | Impact |
 |------|---------|---------|----------|--------|
-| `release-close.js` | 210-224 | evidence builder omits a key the classifier validates | 🛑 Blocker | red signal dropped → fail-open, pinned by three suites (**G-1**) |
-| `release-close.js` | 320-321 | two evidence reads unguarded | 🛑 Blocker | crash in English instead of a PT-BR refusal (**G-2**) |
-| `release-close.js` | 443-454 | reviewed content selected by a weaker rule than the decision it binds | 🛑 Blocker | approval can bind to an open milestone or a diverging-SHA release (**G-3**) |
+|| `release-close.js` | 210-224 | evidence builder omits a key the classifier validates | 📋 Deferred | `failedRunIds` validated and given precedence, absent from the only evidence producer; deferred to Phase 10 by operator decision (**G-1**) |
+|| `release-close.js` | 320-321 | two evidence reads unguarded | ✓ FIXED | `lerEvidencia` guards with `RecusaDeLeitura`; `tratarRecusa` handles all four classes (**G-2**, fb7d15b) |
+|| `release-close.js` | 443-454 | reviewed content selected by a weaker rule than the decision it binds | ✓ FIXED | uses `classificacao.releases`/`milestones` partition with `targetShaValidates` guard (**G-3**, b196ee0) |
 | `release-close.js` | 61 | `CONCURRENT` in `BLOCKING_CODES` while unreachable in Phase 9 | 📋 Advisory | a trap for a Phase 11 reader, not a fail-open |
 | `client.js` | 52-66 | `Object.keys` misses prototype and array-shaped members | 📋 Advisory | the two routes have their own coverage; no exploitable path today |
 | `WINDOWS.md` | 23 | ledger row 6 renders as `TESTE-PLAO` | 📋 Advisory | data defect in the register; the JSON block below is intact |
@@ -402,13 +374,13 @@ N/A — infrastructure/CLI-contract phase with no user-facing elements. Every ch
 
 ## Gaps Summary
 
-Three gaps block goal achievement. None of them is one of the original six — those are all genuinely closed, and I say so plainly. What blocks the phase is that the second round converted two latent defects into *documented* ones and, in one case, into *pinned expectations*:
+Of the three gaps identified in the second verification round:
 
-1. **G-1 — a validated red signal is dropped and the fail-open is pinned.** `failedRunIds` is in the classifier's validated contract with precedence above `CONCURRENT`; `buildCloseEvidence` has no key or parameter for it. A red-only snapshot yields `MISSING`, `applyLiberado: true`, `bloqueio: null`, and three suites assert exactly that. The CI allowlist has no declared mapping from "a run failed" to a non-`success` conclusion. The fix is local and the review already drafted it: carry the trigger or refuse the input — and if Phase 9 genuinely has no source for it, say so out loud rather than shipping a keyless object that reads as clean. The alternative — deleting the key from the classifier's contract, its precedence table and `fixtures/failed.json` — is equally defensible. The silent third option is what shipped.
-2. **G-2 — two of the five declared reads crash instead of refusing.** Measured end to end: all three verbs print an English stack trace and exit 1, with `process.exitCode` never assigned. The seam already implements the right answer; it is simply reached too late. Fix inside `camadaDeDecisao` plus a catch-all family in `tratarRecusa`, then add the regression test that does not exist today.
-3. **G-3 — the reviewed content is selected by a weaker rule than the classifier enforces.** The classified decision already exposes `releases`, `milestones`, `unrelatedReleases` and `targetShaValidates`; `montarConteudoRevisado` ignores all of them and re-partitions with `find`. An open milestone and a diverging-SHA release both supply approved text under `applyLiberado: true`.
+1. **G-1 — `failedRunIds` dropped by the evidence builder: DEFERRED to Phase 10.** The classifier already honours `failedRunIds`; wiring a source will turn two suites red — which is the correct signal and must be updated in the same change as Phase 10's work. Recorded in `COVERAGE.md` as a Phase 10 gate.
+2. **G-2 — two unguarded reads crash the process: CLOSED (fb7d15b).** `lerEvidencia` guards the throw as `RecusaDeLeitura`; `tratarRecusa` handles all four classes; PT-BR refusal with exit 1.
+3. **G-3 — reviewed content selected by a weaker rule: CLOSED (b196ee0).** `montarConteudoRevisado` uses `classificacao.releases`/`milestones` partition with `targetShaValidates` guard.
 
-All three are inside files this phase already owns, all three are small, and none requires a decision the phase has not already made. The 214-test suite, the determinism, the zero-dependency surface, the strict peel, the CI allowlist, the target scoping, the exact client surface, the measured counter, the eight locks and the digest are all real and independently re-verified. This phase is one focused repair round away from `passed` — and shipping it as-is would hand Phase 10 a decision layer that crashes on the first real transport error and an evidence contract whose only silent path is the fail-open one.
+G-2 and G-3 are fixed. G-1 is deferred by operator decision — not an unfixed bug, but a known Phase 10 gate.
 
 ---
 _Verified: 2026-09-25T19:04:32Z_
