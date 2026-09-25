@@ -808,7 +808,7 @@ const CENARIOS = [
   { nome: 'complete', elegibilidade: 'ELIGIBLE', classificacao: 'MISSING', retidos: [9010] },
   { nome: 'unrelated', elegibilidade: 'ELIGIBLE', classificacao: 'MISSING', retidos: [] },
   { nome: 'concurrent', elegibilidade: 'ELIGIBLE', classificacao: 'MISSING', retidos: [] },
-  { nome: 'failed', elegibilidade: 'ELIGIBLE', classificacao: 'MISSING', retidos: [] },
+  { nome: 'failed', elegibilidade: 'ELIGIBLE', classificacao: 'FAILED', retidos: [] },
 ];
 
 it('os oito cenários congelados atravessam a costura de produção com valores exatos e cinco leituras ordenadas', async () => {
@@ -868,14 +868,18 @@ it('o cenário de conclusão completa chega como o par exato MISSING e COMPLETE_
 
 it('os dois estados que a costura de produção ainda não alcança estão declarados, não implícitos', async () => {
   const mod = await moduloCom(['decide']);
-  // `closeMarkers` e `failedRunIds` não são campos da evidência de cinco chaves e
-  // nenhuma das cinco leituras os devolve. CONCURRENT e FAILED-por-execução
-  // declarada vermelha são, portanto, INALCANÇÁVEIS pela costura de produção
-  // nesta fase — e a asserção é sobre o valor exato que ela produz, para que a
-  // fronteira fique escrita em vez de suposta. O plano 09-09 liga a costura de
-  // reconciliação que consome as famílias roteirizadas; o vocabulário de
-  // marcadores pertence à Fase 11.
-  for (const nome of ['concurrent', 'failed']) {
+  // `closeMarkers` não é campo da evidência de cinco chaves e
+  // nenhuma das cinco leituras o devolve. CONCURRENT é, portanto,
+  // INALCANÇÁVEL pela costura de produção nesta fase — e a asserção
+  // é sobre o valor exato que ela produz, para que a fronteira fique
+  // escrita em vez de suposta. O plano 09-09 liga a costura de
+  // reconciliação que consome as famílias roteirizadas; o vocabulário
+  // de marcadores pertence à Fase 11.
+  //
+  // FAILED-por-execução declarada vermelha agora é ALCANÇÁVEL: o
+  // classificador lê failedRunIds de ci.records (D-12). A costura de
+  // produção classifica failed.json como FAILED.
+  for (const nome of ['concurrent']) {
     const { decisao } = await decidirSobre(snapshotDoEstado(nome), mod);
     assert.equal(
       decisao.classification.code,
@@ -884,6 +888,10 @@ it('os dois estados que a costura de produção ainda não alcança estão decla
     );
     assert.equal(decisao.classification.ciCode, null, `[${nome}] com ciCode inesperado`);
   }
+  // FAILED por execução vermelha na evidência congelada é alcançável.
+  const { decisao: failed } = await decidirSobre(snapshotDoEstado('failed'), mod);
+  assert.equal(failed.classification.code, 'FAILED');
+  assert.equal(failed.classification.ciCode, 'CI-UNKNOWN');
   // FAILED por família de CI continua alcançável, e é por onde a CI bloqueia.
   const ci = structuredClone(referencia().ci);
   ci.records[0].conclusion = 'cancelled';

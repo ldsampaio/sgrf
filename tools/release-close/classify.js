@@ -155,6 +155,8 @@ function assertContract(snapshot) {
 
   // O gatilho vermelho explícito é opcional, mas nunca pode ser malformado em
   // silêncio: um sinal vermelho estruturalmente quebrado é violação de contrato.
+  // Nota: failedRunIds é derivado de ci.records (D-12), não declarado como chave
+  // de nível superior no snapshot.
   if (snapshot.failedRunIds !== undefined && !Array.isArray(snapshot.failedRunIds)) {
     throw invalid('Snapshot inválido: failedRunIds deve ser uma lista de identificadores de execução.');
   }
@@ -302,8 +304,9 @@ function avaliarCi(ci, expectedSha) {
 }
 
 function execucoesVermelhas(snapshot) {
-  if (!Array.isArray(snapshot.failedRunIds)) return [];
-  return snapshot.failedRunIds.filter((runId) => Number.isInteger(runId));
+  return snapshot.ci.records
+    .filter((registro) => registro.status === 'completed' && registro.conclusion !== 'success')
+    .map((registro) => registro.runId);
 }
 
 function inFlightMarkers(snapshot) {

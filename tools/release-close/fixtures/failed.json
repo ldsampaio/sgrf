@@ -6,7 +6,6 @@
   "releases": [],
   "milestones": [],
   "closeMarkers": [],
-  "failedRunIds": [36095855139],
   "target": {
     "version": "v0.1.1",
     "expectedSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf"
@@ -28,7 +27,7 @@
         "job": "frontend",
         "headSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
         "status": "completed",
-        "conclusion": "success"
+        "conclusion": "failure"
       },
       {
         "runId": 36095872529,

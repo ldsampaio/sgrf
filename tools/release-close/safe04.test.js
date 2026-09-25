@@ -97,7 +97,7 @@ const CENARIOS_EXATOS = [
     nome: 'failed',
     forma: 'plana',
     elegibilidade: 'ELIGIBLE',
-    classificacao: 'MISSING',
+    classificacao: 'FAILED',
     retidos: [],
     outcome: undefined,
     revisado: false,
