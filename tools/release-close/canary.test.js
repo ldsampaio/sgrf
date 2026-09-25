@@ -27,7 +27,9 @@
 
 import { it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import * as contrato from './client.js';
+import * as arapuca from './fake-client.js';
 
 // Cliente mínimo que satisfaz a superfície: exatamente as cinco leituras.
 const LEITURAS = () => ({
@@ -278,4 +280,240 @@ it('invariante: a superfície do módulo é fechada, sem reset nem tolerância',
     'assertClientShape',
     'assertNoMutation',
   ]);
+});
+
+// ── Grupo B: a arapuca programável mede de verdade ──────────────────────────
+//
+// No RED a fábrica de arapuca armada ainda não existe: o módulo é importado
+// inteiro e um helper afirma a existência da fábrica ANTES de chamá-la, de modo
+// que cada sonda falha em asserção e não em crash de import (INVALID_RED).
+
+const referencia = () =>
+  JSON.parse(readFileSync(new URL('./fixtures/reference.json', import.meta.url), 'utf8'));
+
+function arapucaDeProducao(snapshot = referencia(), failurePlan) {
+  return arapuca.makeFakeClient(snapshot, failurePlan);
+}
+
+function arapucaArmada(snapshot = referencia(), failurePlan) {
+  assert.equal(
+    typeof arapuca.makeArmedFakeClient,
+    'function',
+    'fake-client.js ainda não expõe a fábrica que arma a arapuca',
+  );
+  return arapuca.makeArmedFakeClient(snapshot, failurePlan);
+}
+
+it('arapuca: a contagem medida vem do fecho, não de um array público editável', () => {
+  const fake = arapucaDeProducao();
+  assert.equal(fake.mutations, 0);
+  assert.equal(fake.writes.length, 0);
+  // O registro exposto é uma cópia congelada do talão do fecho: empurrar nele é
+  // TypeError e não move a contagem, que é a medição e não o comprimento de nada
+  // que o chamador possa editar.
+  assert.throws(
+    () => fake.writes.push({ capability: 'empurro', args: [] }),
+    TypeError,
+    'o registro de efeitos exposto aceitou escrita',
+  );
+  assert.equal(fake.mutations, 0, 'empurrar no registro exposto alterou a contagem medida');
+  assert.equal(fake.writes.length, 0);
+});
+
+it('arapuca: a armadilha registra o efeito e incrementa a contagem medida', () => {
+  const fake = arapucaArmada();
+  assert.equal(fake.mutations, 0, 'a arapuca armada já nasceu com contagem diferente de zero');
+  fake.trap('createRelease', ['v0.1.1']);
+  assert.equal(fake.mutations, 1, 'a armadilha não mediu o efeito');
+  assert.equal(fake.writes.length, 1, 'o efeito não foi registrado');
+  assert.equal(fake.writes[0].capability, 'createRelease');
+  assert.deepEqual(fake.writes[0].args, ['v0.1.1']);
+  fake.trap('updateRef', ['refs/tags/v0.1.1']);
+  assert.equal(fake.mutations, 2, 'a contagem medida não acumulou o segundo efeito');
+  assert.equal(fake.writes.length, 2, 'o comprimento do registro divergiu da contagem');
+  assert.equal(fake.mutations, fake.writes.length);
+});
+
+it('arapuca: o invariante compartilhado recusa a contagem de uma armadilha armada', () => {
+  const invariante = invarianteCompartilhado();
+  const fake = arapucaArmada();
+  assert.equal(invariante(fake), 0);
+  fake.trap('createRelease', ['v0.1.1']);
+  assert.throws(
+    () => invariante(fake),
+    (erro) => {
+      assert.ok(erro instanceof TypeError, `a recusa precisa ser TypeError: ${erro}`);
+      assert.match(erro.message, /createRelease/, 'a recusa não nomeia a capacidade observada');
+      assert.match(erro.message, /\b1\b/, 'a recusa não declara a contagem');
+      return true;
+    },
+  );
+});
+
+it('arapuca: o cliente é congelado e recusa anexar capacidade diretamente', () => {
+  const fake = arapucaDeProducao();
+  assert.equal(Object.isFrozen(fake), true, 'a arapuca não está congelada');
+  assert.throws(
+    () => {
+      fake.createRelease = async () => null;
+    },
+    TypeError,
+    'atribuir uma capacidade não disparou TypeError',
+  );
+  assert.throws(
+    () => Object.defineProperty(fake, 'createRelease', { value: async () => null }),
+    TypeError,
+    'definir uma capacidade por descriptor não disparou TypeError',
+  );
+  assert.equal('createRelease' in fake, false, 'a capacidade sobreviveu ao congelamento');
+  assert.throws(
+    () => {
+      fake.mutations = 99;
+    },
+    TypeError,
+    'atribuir a contagem medida não disparou TypeError',
+  );
+  assert.equal(fake.mutations, 0, 'a contagem medida foi atribuída de fora');
+  assert.throws(
+    () => {
+      fake.writes = [];
+    },
+    TypeError,
+    'atribuir o registro de efeitos não disparou TypeError',
+  );
+});
+
+it('arapuca: a arapuca de produção não expõe a armadilha', () => {
+  const fake = arapucaDeProducao();
+  assert.equal(fake.trap, undefined, 'a arapuca de produção expôs a armadilha');
+  assert.equal(typeof arapucaArmada().trap, 'function', 'a arapuca armada não expôs a armadilha');
+});
+
+it('arapuca: armar a armadilha não muda a superfície pública do cliente', () => {
+  const producao = arapucaDeProducao();
+  const armada = arapucaArmada();
+  assert.deepEqual(
+    Object.keys(producao).sort(),
+    Object.keys(armada).sort(),
+    'a armadilha mudou a superfície pública da arapuca',
+  );
+  // A forma exata aceita as duas: a armadilha não é uma capacidade da
+  // superfície, é uma costura de teste fora do que o chamador lê.
+  assert.equal(contrato.assertClientShape(producao), true);
+  assert.equal(contrato.assertClientShape(armada), true);
+});
+
+it('arapuca: writes é um acessor somente leitura cuja forma os pontos fora deste plano já esperam', async () => {
+  // Costura de compatibilidade com eligibility.test.js e safe04.test.js, dois
+  // arquivos que este plano não possui e não pode editar. A forma observável
+  // fica congelada e nomeada: devolve um array, comprimento igual à contagem do
+  // fecho, e array vazio congelado quando nada foi observado — então
+  // `fake.writes.length === 0`, leitura por índice, iteração e comparação
+  // profunda contra `[]` continuam exatamente como estão.
+  const fake = arapucaDeProducao();
+  assert.ok(Array.isArray(fake.writes), 'o acessor writes não devolveu um array');
+  assert.equal(Object.isFrozen(fake.writes), true, 'o array devolvido não está congelado');
+  assert.equal(fake.writes.length, fake.mutations);
+  assert.equal(fake.writes.length, 0);
+  assert.equal(fake.writes[0], undefined);
+  assert.deepEqual(fake.writes, []);
+  assert.deepEqual([...fake.writes], []);
+
+  // Uma leitura real pela superfície não move a contagem.
+  await fake.getTagRef('v0.1.1');
+  await fake.getBranchHead('main');
+  assert.equal(fake.mutations, 0, 'uma leitura produziu mutação');
+  assert.equal(fake.writes.length, 0, 'uma leitura encheu o registro de efeitos');
+});
+
+it('arapuca: os pontos de leitura de writes.length fora do escopo continuam no lugar', () => {
+  // Se um desses pontos mudar, a costura de compatibilidade deixa de ser
+  // necessária e a migração passa a ser explícita — com os dois arquivos
+  // adicionados ao escopo do plano que a fizer, nunca silenciosamente.
+  for (const nome of ['eligibility.test.js', 'safe04.test.js']) {
+    const texto = readFileSync(new URL(`./${nome}`, import.meta.url), 'utf8');
+    assert.match(texto, /writes\.length/, `${nome} deixou de ler writes.length`);
+  }
+});
+
+// ── Grupo B.2: o que a tarefa 2 proíbe mudar ─────────────────────────────────
+//
+// Estas sondas são verdes ANTES da tarefa 2 e devem continuar verdes depois: a
+// tarefa 2 muda o que o contador significa, não o que as leituras fazem. O
+// contrato de plano roteirizado (D-07) é consumido pelo plano 09-09 e não pode
+// se mover.
+
+it('arapuca: o vocabulário roteirizado segue com os seis desfechos, na ordem', () => {
+  assert.deepEqual(arapuca.SCRIPTED_FAILURE_OUTCOMES, [
+    'timeout',
+    'lost-response',
+    'status-409',
+    'status-422',
+    'status-429',
+    'status-5xx',
+  ]);
+});
+
+it('arapuca: a numeração de sequência começa em um e sobe de um em um', async () => {
+  const fake = arapucaDeProducao();
+  for (const metodo of contrato.READ_METHODS) {
+    await fake[metodo]('v0.1.1');
+  }
+  assert.deepEqual(
+    fake.calls.map((c) => c.seq),
+    [1, 2, 3, 4, 5],
+  );
+  assert.equal(fake.calls[0].method, 'getTagRef');
+  assert.equal(fake.calls[4].method, 'listMilestones');
+});
+
+it('arapuca: a ordem das leituras é ref, objeto da tag, cabeça, release, milestones', async () => {
+  const fake = arapucaDeProducao();
+  for (const metodo of contrato.READ_METHODS) {
+    await fake[metodo]('v0.1.1');
+  }
+  assert.deepEqual(
+    fake.calls.map((c) => c.method),
+    ['getTagRef', 'getTagObject', 'getBranchHead', 'getReleaseByTag', 'listMilestones'],
+  );
+});
+
+it('arapuca: o roteiro é consumido em ordem e a fila esgotada volta ao snapshot', async () => {
+  const fake = arapucaDeProducao(referencia(), { getTagRef: ['status-409', 'timeout'] });
+
+  const primeira = await fake.getTagRef('v0.1.1');
+  assert.equal(primeira.ok, false);
+  assert.equal(primeira.status, 409);
+  assert.equal(primeira.data, null);
+
+  await assert.rejects(
+    () => fake.getTagRef('v0.1.1'),
+    (erro) => erro instanceof Error && erro.message.includes('Tempo esgotado'),
+  );
+
+  // Terceira chamada: a fila deste método acabou, então o snapshot responde.
+  const terceira = await fake.getTagRef('v0.1.1');
+  assert.equal(terceira.ok, true);
+  assert.equal(terceira.data.object.type, 'tag');
+  assert.deepEqual(
+    fake.calls.map((c) => c.method),
+    ['getTagRef', 'getTagRef', 'getTagRef'],
+  );
+  assert.equal(fake.mutations, 0, 'o roteiro roteirizado produziu mutação');
+});
+
+it('arapuca: o plano de falhas continua sendo recusado com TypeError', () => {
+  const invalidos = [
+    { getTagRef: 'timeout' },
+    { getReleaseByTag: ['desfecho-desconhecido'] },
+    { metodoInexistente: ['timeout'] },
+  ];
+  for (const plano of invalidos) {
+    assert.throws(
+      () => arapuca.makeFakeClient(referencia(), plano),
+      TypeError,
+      `plano de falhas inválido foi aceito: ${JSON.stringify(plano)}`,
+    );
+  }
+  assert.throws(() => arapuca.makeFakeClient(null), TypeError);
 });
