@@ -146,6 +146,51 @@ absence rule is unchanged in the direction that matters — absence is still abs
 but now only when it is proven. Suite 214/214, backend 131/131, frontend build
 green.
 
+### G-1 is deferred to Phase 10, and Phase 10 inherits it as a gate
+
+`failedRunIds` is a first-class member of the classifier's validated contract
+(`assertContract` throws a `TypeError` if it is present and not an array) and it
+takes precedence above `CONCURRENT`. `buildCloseEvidence` has neither the key nor
+a parameter for it, so the key **vanishes silently**. Re-confirmed by execution
+on 2026-09-25: a snapshot whose only red signal is `failedRunIds: [36095855139]`
+classifies `MISSING` with `applyLiberado: true` and `bloqueio: null` through the
+production path, while the same evidence with the key present classifies `FAILED`
+and names the red run. The classifier refuses; the production path releases.
+
+**This is deferred to Phase 10 by operator decision, not resolved.** Phase 10 is
+the first phase that reads CI from GitHub, and a live CI query is the only source
+that could carry the key; adding a sixth declared read now would have to pass
+09-06's exact-surface check and would pre-empt the Phase 11 marker vocabulary.
+What Phase 10 inherits, and must not rediscover:
+
+- The classifier already honours the key. Nothing in `classify.js` needs to change
+  when a source appears.
+- Two suites currently pin the fail-open as an expectation:
+  `evidence.test.js:811`/`:878-886` and `safe04.test.js:96-104` assert `MISSING`
+  as the reachable outcome of the fixture named `failed`. **Wiring the source
+  will turn them red, and that redness is the correct signal** — it is the test
+  that was pinning the defect. They have to be updated to expect `FAILED` in the
+  same change that supplies the key.
+- Until a source exists, a red-only snapshot reaching the operator as
+  `applyLiberado: true` is a known, accepted, and documented hole. It is not
+  coverage, and this phase does not claim it as any.
+
+### G-3 was fixed here, and the fix is local
+
+`montarConteudoRevisado` used two `find` calls and never consulted
+`classificacao`, so the operator's approved text was selected by a weaker rule
+than the decision it feeds: with a release whose `targetSha` diverged, the
+classifier's own reason said the divergence prevents treating the target as
+closed, and the plan still handed that release's notes over for approval. Fixed
+by selecting through the partition the classifier validated — three guards: the
+target must validate, the validated identity must match back into the raw
+evidence (the only source of text, since the classifier sees no text by design),
+and the approved milestone must be `closed` with `openIssues: 0`, the same
+definition of concluded the classifier uses. No sixth read, no vocabulary
+borrowed from Phase 11. All three previously-fail-open variants now produce no
+reviewed object and the gate refuses on the content lock; the control case still
+produces the correct one, so the fix did not trade fail-open for fail-closed.
+
 ### The two states the production path still cannot reach
 
 ## Failure families: where they are reachable from

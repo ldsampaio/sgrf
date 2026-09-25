@@ -313,8 +313,16 @@ skipped: 0
   missing: []
 
 - truth: "Uma execução declarada vermelha na evidência bloqueia o plano; o caminho de produção não a descarta."
-  status: open
+  status: deferred
+  deferred_to: phase-10
+  decided: 2026-09-25
   reason: >
+    DECISÃO DO OPERADOR: empurrado para a Fase 10, onde a evidência de CI real
+    existe e pode ser a fonte da chave. Até lá, o contrato do classificador
+    declara `failedRunIds` e a evidência não a produz — a lacuna fica explícita
+    em COVERAGE.md como gate da Fase 10, e NÃO é tratada como coberta por esta
+    fase. Registrado aqui para que a Fase 10 não a herde como descoberta nova.
+
     G-1 do 09-VERIFICATION.md, RECONFIRMADO por execução independente em 2026-09-25 e
     NÃO afetado pela correção de 09-25. `classifySnapshot` trata `failedRunIds` como
     membro de primeira classe do contrato validado e lhe dá precedência sobre
@@ -342,7 +350,8 @@ skipped: 0
   missing: []
 
 - truth: "O texto que o operador aprova vem do registro que o classificador validou para este alvo."
-  status: open
+  status: fixed
+  resolved: 2026-09-25
   reason: >
     G-3 do 09-VERIFICATION.md, RECONFIRMADO por execução independente em 2026-09-25.
     `montarConteudoRevisado` (release-close.js:543) escolhe os registros com dois

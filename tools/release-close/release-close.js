@@ -540,10 +540,73 @@ function resolveMarker(spec, ctx) {
 // na fechadura de conteúdo, e o renderizador diz isso em PT-BR em vez de
 // inventar texto. Um digest sobre texto inventado vincularia a aprovação do
 // operador a nada.
-function montarConteudoRevisado({ evidencia, version, expectedSha, commitSha }) {
-  const release = evidencia.releases.find((registro) => registro.tagName === version);
-  const milestone = evidencia.milestones.find((registro) => registro.title === version);
+// O texto que o operador aprova é selecionado pela MESMA partição que o
+// classificador aplicou, e não por um `find` próprio.
+//
+// A versão anterior casava `tagName === version` e `title === version` sobre a
+// evidência bruta, o que é uma regra MAIS FRACA que a decisão que ela alimenta:
+// o classificador já tinha sobrevivido a essa verificação. Medido em duas
+// variantes, ambas com release e milestone do alvo de modo que o objeto
+// revisado existisse:
+//   A) release do alvo com `targetSha` divergente — o motivo do classificador
+//      diz que "a divergência impede tratar o alvo como concluído", e mesmo
+//      assim as notas aprovadas eram as da release de OUTRO commit, com
+//      `applyLiberado: true`.
+//   B) duas milestones do alvo com a primeira `open` — o `find` pegava a
+//      primeira, e o registro aprovado era o da milestone ABERTA.
+//
+// A correção usa a partição validada como FONTE DA IDENTIDADE, sem duplicar a
+// regra nem reintroduzi-la: `classificacao.releases` e `classificacao.milestones`
+// são os registros que o classificador validou, e cada um traz `id`/`number`.
+// A identidade é casada de volta na evidência bruta — que é a única fonte do
+// texto, já que o classificador não vê texto por desenho — e o texto é lido de
+// lá.
+//
+// A seleção é pelo MENOR id e pelo MENOR number, que é a ordenação
+// determinística que o classificador já aplicou ao reter a partição: dois
+// registros do alvo não podem render duas aprovações diferentes para a mesma
+// execução.
+//
+// Se a partição não validar o alvo, não há objeto revisado e o portão recusa na
+// fechadura de conteúdo. Aprovação sobre texto que a decisão rejeitou vincularia
+// o digest a nada.
+function montarConteudoRevisado({ evidencia, classificacao, version, expectedSha, commitSha }) {
+  // Sem classificação, ou com um alvo que a classificação não validou, não há
+  // texto aprovável. `targetShaValidates` é a resposta do classificador à
+  // pergunta "o registro do alvo é este commit?"; a partição do alvo é a
+  // resposta à "existem registros desta versão?".
+  if (classificacao === undefined || classificacao === null) return null;
+  if (classificacao.targetShaValidates !== true) return null;
+
+  const particaoReleases = Array.isArray(classificacao.releases) ? classificacao.releases : [];
+  const particaoMilestones = Array.isArray(classificacao.milestones) ? classificacao.milestones : [];
+  if (particaoReleases.length === 0 || particaoMilestones.length === 0) return null;
+
+  const menor = (lista, chave) =>
+    lista.reduce((a, b) => (b[chave] ?? Infinity) < (a[chave] ?? Infinity) ? b : a);
+
+  const alvoRelease = menor(particaoReleases, 'id');
+  const alvoMilestone = menor(particaoMilestones, 'number');
+
+  // A identidade validada é casada de volta na evidência bruta — a única fonte
+  // do texto. `tagName`/`title` continuam conferidos como segunda barreira: se
+  // a identidade não bater, não há objeto revisado em vez de um texto trocado.
+  const release = evidencia.releases.find(
+    (registro) => registro.tagName === version
+      && (alvoRelease.id === null || registro.id === alvoRelease.id),
+  );
+  const milestone = evidencia.milestones.find(
+    (registro) => registro.title === version
+      && (alvoMilestone.number === null || registro.number === alvoMilestone.number),
+  );
   if (release === undefined || milestone === undefined) return null;
+
+  // A milestone aprovada tem de estar CONCLUÍDA. O classificador conta uma
+  // milestone como concluída por `state === 'closed' && openIssues === 0`
+  // (classify.js:402); aprovar o texto de uma milestone aberta aprobaria um
+  // registro de um estado que a decisão trata como parcial.
+  if (milestone.state !== 'closed' || milestone.openIssues !== 0) return null;
+
   const releaseNotes = release.notes;
   const milestoneCompletionRecord = milestone.completionRecord;
   if (typeof releaseNotes !== 'string' || releaseNotes.trim().length === 0) return null;
@@ -626,7 +689,7 @@ export function buildClosePlan({
   // silenciosa. É calculado DUAS vezes e as duas comparações têm de concordar —
   // um digest não determinístico recusaria aqui, e não depois, no portão, onde o
   // operador já teria lido um conteúdo que não corresponde a nada.
-  const reviewed = montarConteudoRevisado({ evidencia, version, expectedSha, commitSha });
+  const reviewed = montarConteudoRevisado({ evidencia, classificacao, version, expectedSha, commitSha });
   let reviewedDigest = null;
   if (reviewed !== null) {
     reviewedDigest = canonicalReviewedDigest(reviewed);
