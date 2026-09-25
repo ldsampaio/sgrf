@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 4
 waived_count: 0
 fixed_count: 0
-total_count: 3
-last_updated: 2026-09-25T17:21:24.441Z
+total_count: 4
+last_updated: 2026-09-25T17:41:45.043Z
 ---
 
 # Broken Windows Ledger
@@ -18,6 +18,7 @@ last_updated: 2026-09-25T17:21:24.441Z
 | 1 | 09 | deviation | tools/release-close/eligibility.test.js |  | 09-04 task 3 is test-only consolidation: no intentional RED was producible because all 19 matrix behaviors were already implemented by this plan's own task 1 and task 2 RED/GREEN cycles; load-bearing proof was a 3-mutation probe instead | open |  | 2026-09-25T16:50:35.301Z |  |
 | 2 | 09 | deviation | tools/release-close/classify.test.js |  | 09-05 task 3 is test-only consolidation: no intentional RED was producible because all of its behaviors were already implemented by this plan's own task 1 and task 2 RED/GREEN cycles; load-bearing proof was a 6-mutation probe instead, which itself exposed one escaping probe (the ci.targetSha-vs-target guard) that the matrix row was rewritten to isolate | open |  | 2026-09-25T17:05:58.642Z |  |
 | 3 | 09 | deviation | tools/release-close/canary.test.js |  | 09-06 task 3 is test-only: no intentional RED was producible because every behavior it asserts was already implemented by this plan's own task 1 and task 2 RED/GREEN cycles; load-bearing proof was a 15-mutation probe instead, which itself exposed one escaping probe (the integer/non-negative measurement guard, masked because both refusal paths throw TypeError) and one real defect (a grandchild that inherited NODE_TEST_CONTEXT exited zero regardless of the escape, making the canary a permanent false green) | open |  | 2026-09-25T17:21:24.441Z |  |
+| 4 | 09 | deviation | tools/release-close/evidence.test.js |  | Tarefa 3 do plano 09-07 e somente-teste: nenhum RED intencional era produzivel, porque todo comportamento que ela afirma foi implementado pelas tarefas 1 e 2 do mesmo plano (verificado por sonda). A guarda foi provada load-bearing por uma sonda de 14 mutacoes de release-close.js, 14/14 pegas, fonte restaurada byte-identical. | open |  | 2026-09-25T17:41:45.043Z |  |
 
 ````json
 [
@@ -57,6 +58,19 @@ last_updated: 2026-09-25T17:21:24.441Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-25T17:21:24.441Z",
+    "resolved_at": null,
+    "milestone": "v0.1.2"
+  },
+  {
+    "id": 4,
+    "kind": "deviation",
+    "phase": "09",
+    "file": "tools/release-close/evidence.test.js",
+    "line": null,
+    "description": "Tarefa 3 do plano 09-07 e somente-teste: nenhum RED intencional era produzivel, porque todo comportamento que ela afirma foi implementado pelas tarefas 1 e 2 do mesmo plano (verificado por sonda). A guarda foi provada load-bearing por uma sonda de 14 mutacoes de release-close.js, 14/14 pegas, fonte restaurada byte-identical.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-25T17:41:45.043Z",
     "resolved_at": null,
     "milestone": "v0.1.2"
   }
