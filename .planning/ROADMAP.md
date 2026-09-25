@@ -190,19 +190,19 @@ Plans:
   4. Cancelling an approved request requires ADMINISTRADOR/CHEFE_DEPARTAMENTO + justification and writes an audited compensating reversal; ordinary cancellation enforces ownership from the Phase 4 permission map
   5. The state-machine test count grows — fixes are covered by characterization-then-flip tests, not verified by eyeballing
 
-**Plans**: 3/5 plans executed
+**Plans**: 4/5 plans executed
 
 Plans:
 
 - [x] 06-01-PLAN.md
 - [x] 06-02-PLAN.md
 - [x] 06-03-PLAN.md
-- [ ] 06-04-PLAN.md
+- [x] 06-04-PLAN.md
 - [ ] 06-05-PLAN.md
 
 - [x] 06-01: Tie-break convergence — grep every `status ===` guard across `backend/src`, decide mechanism (chefe `changeMyVote` allowed in tiebreak status vs chefe's regular vote excluded from tie-break eligibility), fix + tests
 - [x] 06-02: Annual-limit accounting — `CONCLUIDO` counts toward `annualTotalCents` + unit test against `docs/03`
-- [ ] 06-03: Implement the Phase 2 partial-approval rule in `closeVoting`, replacing "first partial vote wins" + tests encoding the rule
+- [x] 06-03: Implement the Phase 2 partial-approval rule in `closeVoting`, replacing "first partial vote wins" + tests encoding the rule
 - [ ] 06-04: Cancellation-after-approval — role check + mandatory justification + audited `FinancialTransaction` reversal; wire ordinary cancel to the Phase 4 ownership guard
 - [ ] 06-05: Money-path serialization at the 5 balance-write sites — conditional `updateMany({ availableCents: { gte } })` inside `$transaction`, `tx.*` only, annual read inside tx, `patchBalance`'s two ops wrapped in one transaction + concurrency test *(pending TOCTOU scope confirm — see STATE.md blockers)*
 
@@ -264,6 +264,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Deploy & Environment Contract | 4/3 | Complete    | 2026-09-24 |
 | 4. Authorization Hardening | 3/3 | Complete    | 2026-09-24 |
 | 5. Session Refresh | 4/4 | Complete    | 2026-09-24 |
-| 6. Voting & Money State Machine | 3/5 | In Progress|  |
+| 6. Voting & Money State Machine | 4/5 | In Progress|  |
 | 7. Background Jobs | 0/4 | Not started | - |
 | 8. Reports/Audit & Auth Polish | 0/4 | Not started | - |
