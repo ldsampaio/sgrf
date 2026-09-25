@@ -38,11 +38,11 @@ Phase numbering continues from the completed v0.1.1 milestone. Decimal phases ap
   3. Deterministic `node:test` fixtures and mocked API scenarios classify missing, partial, duplicate, conflicting, failed, and concurrent states, and the tool exposes no ref-write or destructive tag path.
   4. The pure eligibility contract accepts an existing annotated tag only when its peeled commit equals both the full expected SHA and the observed remote `main`; any mismatch is reported without a write action.
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 09-01-PLAN.md — Tracer slice: CLI skeleton, pure eligibility, client seam, reference fixture, proof suite
+- [x] 09-01-PLAN.md — Tracer slice: CLI skeleton, pure eligibility, client seam, reference fixture, proof suite
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -123,7 +123,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 9. Release-Close Contract & Fixtures | v0.1.2 | 0/TBD | Not started | - |
+| 9. Release-Close Contract & Fixtures | v0.1.2 | 1/3 | In Progress|  |
 | 10. Read-Only Exact-SHA Preflight | v0.1.2 | 0/TBD | Not started | - |
 | 11. Guarded Idempotent Reconciliation | v0.1.2 | 0/TBD | Not started | - |
 | 12. CI Race Rehearsal & Operator Runbook | v0.1.2 | 0/TBD | Not started | - |

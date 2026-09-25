@@ -3,13 +3,13 @@ gsd_state_version: "1.0"
 milestone: v0.1.2
 milestone_name: GitHub Release Reliability
 current_phase: 09
-current_phase_name: release-close-contract-fixtures
-status: Roadmap approved — ready to plan Phase 9
-stopped_at: Phase 9 context gathered
-last_updated: "2026-09-25T14:14:17.324Z"
+current_phase_name: Release-Close Contract & Fixtures
+status: executing
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-09-25T14:24:22.558Z"
 last_activity: 2026-09-25
-last_activity_desc: Created the v0.1.2 roadmap with 18/18 requirements mapped
-state_head: ffcf393d4572e3f5c27892f569260b6f9f27f3d0
+last_activity_desc: Phase 09 execution started
+state_head: "0bde390b162d7e3e73113125c34201cd85402011"
 progress:
   total_phases: 5
   completed_phases: 0
@@ -24,14 +24,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-09-25)
 
 **Core value:** Requests are decided correctly and funds cannot leak — the right people approve the right amounts, every state change is authorized and auditable, and the ledger always balances.
-**Current focus:** Phase 9 — Release-Close Contract & Fixtures
+**Current focus:** Phase 09 — Release-Close Contract & Fixtures
 
 ## Current Position
 
-Phase: 09 (release-close-contract-fixtures) — READY TO EXECUTE
-Plan: —
-Status: Roadmap approved — ready to plan Phase 9
-Last activity: 2026-09-25 — Created the v0.1.2 roadmap with 18/18 requirements mapped
+Phase: 09 (Release-Close Contract & Fixtures) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-09-25 — Phase 09 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -54,6 +54,11 @@ Progress: [░░░░░░░░░░] 0%
 | 13 | TBD | 0 | - |
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 09 P01 | 12min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -67,6 +72,8 @@ Decisions are logged in `PROJECT.md`; current milestone constraints are summariz
 - Remote truth comes from fresh GitHub readback; the red backend run on another SHA does not gate recovery, while target-SHA main/tag runs `36095855139` and `36095872529` do.
 - Phase 13 requires fresh verify, reviewed content, displayed plan, and explicit operator confirmation. No live mutation occurs earlier.
 - Application, database, Docker, frontend, and CI test/build commands are unchanged; v2 policy work remains deferred.
+- [Phase 09]: 09-01: eligibility codes fixed as MISSING/LIGHTWEIGHT/SAFE-02/ELIGIBLE (EN codes, PT-BR reasons)
+- [Phase 09]: 09-01: CLI exit contract 0 eligible-or-help, 1 ineligible-or-refusal-or-invalid-input, 2 usage-error
 
 ### Pending Todos
 
@@ -84,9 +91,9 @@ None. Explicit operator confirmation is a required Phase 13 gate, not a current 
 
 ## Session Continuity
 
-Last session: 2026-09-25T13:57:19.933Z
-Stopped at: Phase 9 context gathered
-Resume file: /home/lucas/Documentos/Projetos/sgrf/.planning/phases/09-release-close-contract-fixtures/09-CONTEXT.md
+Last session: 2026-09-25T14:24:22.548Z
+Stopped at: Completed 09-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
