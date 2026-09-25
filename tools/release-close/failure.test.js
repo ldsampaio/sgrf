@@ -991,3 +991,79 @@ it('uma recusa da costura bloqueia o plano mesmo quando a elegibilidade sobreviv
   assert.equal(custura.writeAction, null);
   semApplyLiberado(custura);
 });
+
+it('uma recusa de permissão é a família própria, e não uma indisponibilidade', async () => {
+  // Nenhum fixture congelado carrega um envelope 401/403 — a arapuca
+  // programável não tem desfecho para ele e os oito cenários são todos
+  // ausentes, parciais, duplicados, conflitantes, vermelhos ou concorrentes. O
+  // ESTADO é declarado aqui, e só ele: o envelope da leitura é trocado, e
+  // nenhuma normalização é reimplementada. A distinção entre credencial e
+  // disponibilidade é justamente a que o operador precisa, e uma família sem
+  // prova seria uma família afirmada.
+  const base = fixture('reference');
+  const snapshot = {
+    ...base,
+    tagRef: { ok: false, status: 403, data: null },
+  };
+  const { decisao } = await decisaoDeProducao(snapshot);
+  assert.equal(decisao.eligibility.code, 'PERMISSION', 'a elegibilidade de produção não nomeou a recusa de permissão');
+  const client = makeFakeClient(snapshot);
+  const custura = await chamarCostura({ client, decisao, failurePlan: { getTagRef: [] } });
+  assert.equal(custura.family, 'PERMISSION', 'a costura colapsou a recusa de permissão em outra família');
+  assert.match(custura.reason, /não alcança o recurso/);
+  assert.match(custura.reason, /desconhecido, não ausente/);
+  assert.equal(custura.recovered, false);
+  assert.equal(custura.writeProposed, false);
+});
+
+it('com estado bloqueante E recusa, o bloqueio relatado é a recusa da leitura', async () => {
+  const mod = await cli();
+  // DUPLICATE é um código bloqueante; a recusa da releitura também bloqueia. As
+  // duas coisas são verdade ao mesmo tempo, e o operador precisa da que muda a
+  // ação dele: um estado INDETERMINADO pede releitura, um estado conhecido
+  // duplicado pede decisão humana sobre qual release fechar.
+  const snapshot = clienteDeEstado(fixture('duplicate'));
+  const { decisao } = await decisaoDeProducao(snapshot);
+  assert.equal(decisao.classification.code, 'DUPLICATE');
+  const client = makeFakeClient(snapshot, { getBranchHead: ['timeout', 'timeout'] });
+  const custura = await chamarCostura({ client, decisao, failurePlan: { getBranchHead: ['timeout', 'timeout'] } });
+  assert.equal(custura.family, 'TRANSPORT');
+  const plano = mod.buildClosePlan({
+    version: decisao.version,
+    expectedSha: decisao.expectedSha,
+    snapshot,
+    eligibility: decisao.eligibility,
+    classificacao: decisao.classification,
+    evidence: decisao.evidence,
+    mutations: decisao.mutations,
+    reconciliation: custura,
+  });
+  assert.equal(plano.applyLiberado, false);
+  assert.match(plano.bloqueio, /^reconciliação recusada \(TRANSPORT\): /);
+  assert.doesNotMatch(plano.bloqueio, /^estado DUPLICATE/);
+});
+
+it('o código de saída de verify leva a recusa da costura em conta, e isso é lido do código', () => {
+  // LIMITE DECLARADO: nenhuma família de falha pode ALCANÇAR `runVerify` nesta
+  // fase — a CLI nunca passa um plano de falhas, e sem plano a costura não
+  // executa leitura nenhuma. A regra está lá para a Fase 10/11, quando uma
+  // leitura real puder falhar, e por isso ela é uma guarda de FONTE: não há
+  // caminho de comportamento que a observe hoje, e uma guarda que afirma o
+  // contrário passaria sem olhar nada. A afirmação é explícita sobre isso.
+  const fonte = fonteDoModulo('release-close.js');
+  const corpo = corpoDaFuncao(fonte, /^async function runVerify\(/m);
+  assert.match(corpo, /reconciliation/, 'a verificação não lê o bloco de reconciliação');
+  assert.match(
+    corpo,
+    /eligibility\.eligible\s*&&\s*!recusou\s*\?\s*0\s*:\s*1/,
+    'o código de saída de verify ignora a recusa da costura',
+  );
+  const recusa = /const recusou = decision\.reconciliation !== null && decision\.reconciliation\.family !== null;/.test(corpo);
+  assert.ok(recusa, 'a verificação não tem a condição de recusa que o seu código de saída usa');
+  // E a mesma condição no texto não aparece: verify não ganhou linha nenhuma.
+  assert.doesNotMatch(
+    corpo,
+    /renderVerifyText\([^)]*reconciliation|renderVerifyJson\([^)]*reconciliation/,
+    'a saída de verify ganhou o bloco de reconciliação, e a forma observada mudou',
+  );
+});
