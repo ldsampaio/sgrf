@@ -19,7 +19,7 @@ Milestone v0.1.2 recovers the missing GitHub publication for v0.1.1 and establis
 Phase numbering continues from the completed v0.1.1 milestone. Decimal phases appear between their surrounding integers in numeric order.
 
 |- [x] **Phase 9: Release-Close Contract & Fixtures** - Define the Node 22 operator contract and prove pure ref, CI, and reconciliation decisions with deterministic tests (✅ complete — G-2/G-3 closed, G-1 deferred to Phase 10)
-|- [ ] **Phase 10: Read-Only Exact-SHA Preflight** - Prove repository, tag, main, target-SHA CI, Release, and Milestone state without mutations
+|- [x] **Phase 10: Read-Only Exact-SHA Preflight** - Prove repository, tag, main, target-SHA CI, Release, and Milestone state without mutations (✅ complete — 8 plans, 228 tests)
 - [ ] **Phase 11: Guarded Idempotent Reconciliation** - Rehearse ordered apply, adoption, retry, conflict, and concurrency behavior without touching the live repository
 - [ ] **Phase 12: CI Race Rehearsal & Operator Runbook** - Prove bounded CI settlement and immediate safety fences, and document the complete recovery procedure
 - [ ] **Phase 13: v0.1.1 Live Release & Milestone Recovery** - After explicit operator approval, publish and verify the missing v0.1.1 GitHub Release and Milestone
@@ -82,7 +82,18 @@ Plans:
   3. The tool selects successful canonical `backend` and `frontend` checks for both the protected-`main` push run and the version-tag push run at the exact same full target SHA; pending, skipped, failed, contradictory, wrong-run, or wrong-SHA evidence cannot qualify.
   4. The live v0.1.1 baseline reports tag object `0a68d6f0c55e7be07d13a0bbc4ed36d4af772630`, peeled/main/expected commit `10c62ac85fd3ab275b8926c89f5f34ba4116e2cf`, green runs `36095855139` and `36095872529`, and missing Release/Milestone, while the historical red backend run on another SHA is ignored.
 
-**Plans**: TBD
+**Plans**: 10-01 through 10-08 (all executed)
+
+| Plan | Artifact | Status |
+|------|----------|--------|
+| 10-01 | tools/release-close/gh-client.js — 6 real `gh api` methods via execFile | ✅ |
+| 10-02 | tools/release-close/classify.js — failedRunIds from ci.records | ✅ |
+| 10-03 | tools/release-close/release-close.js — verify wired, --fixture, input validation | ✅ |
+| 10-04 | tools/release-close/fixtures/live-baseline.json + gh-client.test.js | ✅ |
+| 10-05 | tools/release-close/verify.test.js — full verification suite | ✅ |
+| 10-06 | tools/release-close/integration.test.js — end-to-end CLI | ✅ |
+| 10-07 | README.md + STACK.md + INTEGRATIONS.md + 10-07-SUMMARY.md | ✅ |
+| 10-08 | 10-VERIFICATION.md — phase verification, 22/22 must-haves | ✅ |
 
 ### Phase 11: Guarded Idempotent Reconciliation
 

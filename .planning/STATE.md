@@ -4,13 +4,13 @@ milestone: v0.1.2
 milestone_name: GitHub Release Reliability
 status: executing
 last_updated: "2026-09-25T22:48:50.728Z"
-last_activity: 2026-09-25 — Phase 09 verification passed (G-2/G-3 closed, G-1 deferred to Phase 10)
+last_activity: 2026-09-25 — Phase 10 complete (all 8 plans executed, 228 tests pass)
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 9
-  completed_plans: 9
-  percent: 20
+  completed_phases: 2
+  total_plans: 17
+  completed_plans: 17
+  percent: 40
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: `.planning/PROJECT.md` (updated 2026-09-25)
 
 ## Current Position
 
-Phase: 10 (Read-Only Exact-SHA Preflight) — NOT STARTED
-Plan: TBD
-Status: Phase 09 complete, Phase 10 pending
-Last activity: 2026-09-25 — Phase 09 verification passed
+Phase: 10 (Read-Only Exact-SHA Preflight) — COMPLETE
+Plan: all 8 plans executed
+Status: Phase 10 complete
+Last activity: 2026-09-25 — Phase 10 complete (all 8 plans executed, 228 tests pass)
 
-Progress: [████████░░] 40% (2/5 phases; Phase 09 complete, Phase 10 in discuss)
+Progress: [████████████] 40% (2/5 phases; Phase 09 complete, Phase 10 complete)
 
 ## Performance Metrics
 
