@@ -41,8 +41,33 @@
           </button>
           <div v-if="arbitrationError[r.id]" class="alert error" role="alert" style="margin-top:.5rem">{{ arbitrationError[r.id] }}</div>
         </div>
+        <!-- VOT-04: Cancel button for non-terminal requests -->
+        <button v-else-if="canCancel(r)" class="btn ghost" @click="openCancelModal(r)">Cancelar</button>
       </td>
     </tr></tbody></table>
+  </div>
+
+  <!-- VOT-04: Cancel confirmation modal -->
+  <div v-if="cancelModal.request" class="modal-overlay" @click.self="closeCancelModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="cancel-modal-title">
+      <h3 id="cancel-modal-title">Cancelar solicitação</h3>
+      <p><strong>{{ cancelModal.request.title }}</strong></p>
+      <p>Status atual: <StatusBadge :status="cancelModal.request.status" /></p>
+      <div class="alert warning" role="alert" v-if="isApprovedStatus(cancelModal.request.status)">
+        <strong>Atenção:</strong> Esta solicitação está aprovada/provisionada. O cancelamento exigirá reversão financeira e só pode ser feito por ADMINISTRADOR ou CHEFE_DEPARTAMENTO.
+      </div>
+      <div class="field">
+        <label>Justificativa <span class="required">*</span></label>
+        <textarea class="input" v-model="cancelJustification" rows="3" placeholder="Justificativa obrigatória" required @keyup.enter="confirmCancel" />
+      </div>
+      <div v-if="cancelError" class="alert error" role="alert">{{ cancelError }}</div>
+      <div style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:1rem">
+        <button class="btn ghost" @click="closeCancelModal" :disabled="cancelLoading">Voltar</button>
+        <button class="btn" @click="confirmCancel" :disabled="cancelLoading || !cancelJustification.trim()">
+          {{ cancelLoading ? 'Cancelando…' : 'Confirmar cancelamento' }}
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 <script setup>
@@ -66,6 +91,12 @@ const arbitrationAmounts = ref({});
 const arbitrationJustifications = ref({});
 const arbitrationLoading = ref({});
 const arbitrationError = ref({});
+
+// VOT-04: Cancel modal state
+const cancelModal = ref({ request: null });
+const cancelJustification = ref('');
+const cancelLoading = ref(false);
+const cancelError = ref('');
 
 // Suppress flag: programmatic resets (restore on mount, clear on submit)
 // must not re-persist through the watcher — only genuine user input writes.
@@ -170,6 +201,46 @@ async function confirmArbitration(requestId) {
     arbitrationError.value[requestId] = e.response?.data?.error || 'Falha na arbitragem';
   } finally {
     arbitrationLoading.value[requestId] = false;
+  }
+}
+
+// VOT-04: Check if request can be cancelled (not terminal status)
+function canCancel(request) {
+  return !['CONCLUIDO', 'CANCELADO'].includes(request.status);
+}
+
+// VOT-04: Check if request is in approved status (requires admin/chefe + financial reversal)
+function isApprovedStatus(status) {
+  return ['APROVADO', 'APROVADO_AUTOMATICAMENTE', 'APROVADO_PARCIALMENTE'].includes(status);
+}
+
+function openCancelModal(request) {
+  cancelModal.value.request = request;
+  cancelJustification.value = '';
+  cancelError.value = '';
+}
+
+function closeCancelModal() {
+  cancelModal.value.request = null;
+  cancelJustification.value = '';
+  cancelError.value = '';
+  cancelLoading.value = false;
+}
+
+async function confirmCancel() {
+  if (!cancelModal.value.request || !cancelJustification.value.trim()) return;
+  cancelLoading.value = true;
+  cancelError.value = '';
+  try {
+    await api.post(`/requests/${cancelModal.value.request.id}/cancel`, {
+      justification: cancelJustification.value.trim(),
+    });
+    await load();
+    closeCancelModal();
+  } catch (e) {
+    cancelError.value = e.response?.data?.error || 'Falha ao cancelar';
+  } finally {
+    cancelLoading.value = false;
   }
 }
 
