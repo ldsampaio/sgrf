@@ -21,6 +21,20 @@ cd ../frontend && npm run dev
 
 Teste backend: `cd backend && npx vitest run`.
 
+## Release Close CLI (read-only preflight)
+
+Verifica elegibilidade de tag antes do fechamento de release:
+
+```bash
+node tools/release-close/release-close.js verify --version v0.1.1 --sha <40-char-sha>
+node tools/release-close/release-close.js verify --fixture --version v0.1.1 --sha <40-char-sha>   # sem rede
+node tools/release-close/release-close.js verify --json --version v0.1.1 --sha <40-char-sha>
+```
+
+Verbos: `verify` (tag/main/CI/Release/Milestone, mutations: 0), `plan` (plano de fechamento), `apply` (plano + confirmação).
+
+Nenhum verbo escreve no remoto nesta fase. `--fixture` ativa cliente fake.
+
 ## Seeds
 
 - Deploy (`npm run seed`): cria só o admin via `INITIAL_ADMIN_EMAIL` + `INITIAL_ADMIN_TEMPORARY_PASSWORD`.
