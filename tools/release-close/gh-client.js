@@ -48,9 +48,9 @@ export async function getTagObject(tagSha) {
 }
 
 export async function getBranchHead(branch = 'main') {
-  const data = await ghApi(`/repos/${REPO}/git/refs/heads/${branch}`);
-  if (!data || data.status === 404) return { ok: false, status: 404, data: null };
-  return { ok: true, status: 200, data };
+  const envelope = await ghApi(`/repos/${REPO}/git/refs/heads/${branch}`);
+  if (!envelope || envelope.status === 404) return { ok: false, status: 404, data: null };
+  return { ok: true, status: 200, data: { sha: envelope.object.sha } };
 }
 
 export async function getReleaseByTag(version) {
@@ -83,6 +83,7 @@ export const ghClient = {
   getReleaseByTag,
   listMilestones,
   listCiRuns,
+  get mutations() { return 0; },
 };
 
 assertClientShape(ghClient);

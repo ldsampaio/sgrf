@@ -170,16 +170,17 @@ describe('elegibilidade de tag (SAFE-02)', () => {
   });
 
   it('dupla execução do verify é segura: saída idêntica e zero escritas (OPS-01 idempotência)', () => {
-    // Mesma entrada congelada duas vezes: os dois payloads precisam ser
-    // byte a byte idênticos e trazer o contador de mutações medido.
-    const primeira = runCli(['verify', '--json']);
-    const segunda = runCli(['verify', '--json']);
-    assert.equal(primeira.status, 0);
-    assert.equal(segunda.status, 0);
-    assert.equal(primeira.stdout, segunda.stdout);
-    assert.equal(JSON.parse(primeira.stdout).mutations, 0);
-    assert.equal(JSON.parse(segunda.stdout).mutations, 0);
-  });
+      // Mesma entrada congelada duas vezes: os dois payloads precisam ser
+      // byte a byte idênticos e trazer o contador de mutações medidos.
+      const args = ['verify', '--json', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf'];
+      const primeira = runCli(args);
+      const segunda = runCli(args);
+      assert.equal(primeira.status, 0);
+      assert.equal(segunda.status, 0);
+      assert.equal(primeira.stdout, segunda.stdout);
+      assert.equal(JSON.parse(primeira.stdout).mutations, 0);
+      assert.equal(JSON.parse(segunda.stdout).mutations, 0);
+    });
 
   it('clientes fake independentes têm logs isolados (OPS-01 concorrência single-process)', async () => {
     // Limite explícito desta prova: ela isola instâncias no MESMO processo.
@@ -645,11 +646,11 @@ it('normalização: nenhuma família de falha escapa como rejeição', async () 
 });
 
 it('CLI concorda com o predicado: verify --json sai zero com ELIGIBLE e não zero com SAFE-02', () => {
-  const baseline = runCli(['verify', '--json']);
+  const baseline = runCli(['verify', '--json', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf']);
   assert.equal(baseline.status, 0);
-  assert.equal(JSON.parse(baseline.stdout).code, 'ELIGIBLE');
+  assert.equal(JSON.parse(baseline.stdout).tag.code, 'ELIGIBLE');
 
-  const divergente = runCli(['verify', '--json', '--sha', 'b'.repeat(40)]);
+  const divergente = runCli(['verify', '--json', '--version', 'v0.1.1', '--sha', 'b'.repeat(40)]);
   assert.notEqual(divergente.status, 0);
-  assert.equal(JSON.parse(divergente.stdout).code, 'SAFE-02');
+  assert.equal(JSON.parse(divergente.stdout).tag.code, 'SAFE-02');
 });

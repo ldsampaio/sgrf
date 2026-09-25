@@ -26,6 +26,7 @@ import { pathToFileURL } from 'node:url';
 import { checkTagEligibility } from './eligibility.js';
 import { classifySnapshot } from './classify.js';
 import { makeFakeClient } from './fake-client.js';
+import { ghClient } from './gh-client.js';
 import { assertNoMutation } from './client.js';
 import { confirmApply, canonicalReviewedDigest } from './apply-gate.js';
 import { reconciliar } from './reconcile.js';
@@ -40,7 +41,7 @@ export { canonicalReviewedDigest, renderReviewedText } from './apply-gate.js';
 const USAGE = `Uso: node tools/release-close/release-close.js <verify|plan|apply> [opções]
 
 Verbos:
-  verify            verifica a elegibilidade da tag sobre o fixture de referência
+  verify            verifica o estado do remoto: tag, main, CI, Release, Milestone
   plan              mostra o plano ordenado de fechamento (somente leitura, mutations: 0)
   apply             mostra o mesmo plano e exige --yes + terminal interativo + "sim"
 
@@ -48,6 +49,7 @@ Opções:
   --help            mostra esta ajuda
   --json            saída em JSON (verify/plan: decisão + mutations; plan: passos; apply: plano antes do texto humano)
   --yes             confirmação explícita exigida pelo apply (nunca substitui o prompt)
+  --fixture         ativa o cliente fake (sem rede; para testes)
   --repo <o/r>      repositório alvo (opaco nesta fase)
   --version <v>     versão da tag (padrão: v0.1.1 do fixture)
   --sha <sha>       SHA esperado (padrão: expectedSha do fixture)
@@ -141,7 +143,7 @@ function usageError(message, err) {
 }
 
 function parseArgs(argv) {
-  const args = { verb: null, help: false, json: false, yes: false, repo: null, version: null, sha: null };
+  const args = { verb: null, help: false, json: false, yes: false, fixture: false, repo: null, version: null, sha: null };
   const positionals = [];
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
@@ -151,6 +153,8 @@ function parseArgs(argv) {
       args.json = true;
     } else if (token === '--yes') {
       args.yes = true;
+    } else if (token === '--fixture') {
+      args.fixture = true;
     } else if (token === '--repo' || token === '--version' || token === '--sha') {
       const value = argv[i + 1];
       if (value === undefined || value.startsWith('--')) {
@@ -764,18 +768,34 @@ function renderJson(payload, out) {
   out.write(`${JSON.stringify(payload)}\n`);
 }
 
-function renderVerifyText(version, decision, mutations, out) {
-  const estado = decision.eligible ? 'ELEGÍVEL' : 'INELEGÍVEL';
+function renderVerifyText(decision, out) {
+  const { eligibility, classification, evidence, mutations, version } = decision;
+  const estado = eligibility.eligible ? 'ELEGÍVEL' : 'INELEGÍVEL';
+  const mainOk = eligibility.eligible;
   out.write(
-    `Elegibilidade de tag ${version}: ${estado}\n` +
-      `Motivo: ${decision.reason}\n` +
-      `Código: ${decision.code}\n` +
+    `Tag ${version}: ${estado} (${eligibility.code})\n` +
+      `Motivo: ${eligibility.reason}\n` +
+      `Main: ${mainOk ? 'OK' : 'DIVERGENT'}\n` +
+      `CI: ${classification.code === 'FAILED' ? 'BLOQUEADO' : 'OK'} (${classification.ciCode || 'success'})\n` +
+      `Release: ${evidence.releases.length > 0 ? 'presente' : 'ausente'}\n` +
+      `Milestone: ${evidence.milestones.length > 0 ? 'presente' : 'ausente'}\n` +
       `mutations: ${mutations}\n`,
   );
 }
 
-function renderVerifyJson(decision, mutations, out) {
-  out.write(`${JSON.stringify({ ...decision, mutations })}\n`);
+function renderVerifyJson(decision, out) {
+  const { eligibility, classification, evidence, mutations, version } = decision;
+  out.write(
+    `${JSON.stringify({
+      version,
+      tag: { eligible: eligibility.eligible, code: eligibility.code, reason: eligibility.reason, writeAction: eligibility.writeAction },
+      main: { ok: eligibility.eligible },
+      ci: { code: classification.code, ciCode: classification.ciCode },
+      release: { present: evidence.releases.length > 0, count: evidence.releases.length },
+      milestone: { present: evidence.milestones.length > 0, count: evidence.milestones.length },
+      mutations,
+    })}\n`,
+  );
 }
 
 // Recusa de entrada inválida: a violação de contrato do classificador (bloco ci
@@ -796,16 +816,27 @@ function tratarRecusa(err, stderr) {
   throw err;
 }
 
-async function runVerify({ json, version, sha }, io) {
+async function runVerify({ json, version, sha, fixture }, io) {
+  // Validação de entrada antes de qualquer leitura remota (SAFE-01).
+  if (!version || !/^v\d+\.\d+\.\d+$/.test(version)) {
+    io.stderr.write(`Entrada inválida: --version deve ser vX.Y.Z (ex: v0.1.1).\n`);
+    return 1;
+  }
+  if (!sha || !/^[0-9a-f]{40}$/.test(sha)) {
+    io.stderr.write(`Entrada inválida: --sha deve ser um SHA completo de 40 hex minúsculos.\n`);
+    return 1;
+  }
+
   const snapshot = loadReferenceFixture();
+  const client = fixture ? makeFakeClient(snapshot) : ghClient;
   let decision;
   try {
-    decision = await decide({ snapshot, version, expectedSha: sha });
+    decision = await decide({ snapshot, client, version, expectedSha: sha });
   } catch (err) {
     return tratarRecusa(err, io.stderr);
   }
-  if (json) renderVerifyJson(decision.eligibility, decision.mutations, io.stdout);
-  else renderVerifyText(decision.version, decision.eligibility, decision.mutations, io.stdout);
+  if (json) renderVerifyJson(decision, io.stdout);
+  else renderVerifyText(decision, io.stdout);
   // Uma família de falha da costura sai com código diferente de zero mesmo que a
   // elegibilidade tenha sobrevivido: a costura rodou sobre o mesmo cliente, e
   // uma releitura que voltou a falhar é o estado mais indeterminado que existe.

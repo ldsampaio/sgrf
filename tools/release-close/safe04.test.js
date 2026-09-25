@@ -421,9 +421,10 @@ describe('zero mutação em verify e plan (D-16)', () => {
   });
 
   it('a verificação em texto e em json carrega o contador mutations 0', () => {
-    const texto = runCli(['verify']);
+    const args = ['verify', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf'];
+    const texto = runCli(args);
     assert.match(texto, /^mutations: 0$/m);
-    const json = JSON.parse(runCli(['verify', '--json']));
+    const json = JSON.parse(runCli([...args, '--json']));
     assert.equal(json.mutations, 0);
   });
 
@@ -436,21 +437,22 @@ describe('zero mutação em verify e plan (D-16)', () => {
 
   it('a saída json de verify e de plan é parseável e traz o campo mutations', () => {
     for (const verbo of ['verify', 'plan']) {
-      const json = JSON.parse(runCli([verbo, '--json']));
+      const args = verbo === 'verify' ? ['verify', '--json', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf'] : [verbo, '--json'];
+      const json = JSON.parse(runCli(args));
       assert.equal(typeof json.mutations, 'number', `${verbo} sem campo mutations`);
       assert.equal(json.mutations, 0, `${verbo} com mutações`);
-      const decisao = json.elegibilidade ?? json;
+      const decisao = json.tag ?? json.elegibilidade ?? json;
       assert.equal(typeof decisao.code, 'string', `${verbo} sem decisão`);
       assert.equal(decisao.writeAction, null, `${verbo} carregou writeAction`);
     }
-    const verify = JSON.parse(runCli(['verify', '--json']));
+    const verify = JSON.parse(runCli(['verify', '--json', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf']));
     const plan = JSON.parse(runCli(['plan', '--json']));
-    assert.equal(verify.code, 'ELIGIBLE');
+    assert.equal(verify.tag.code, 'ELIGIBLE');
     assert.equal(plan.elegibilidade.code, 'ELIGIBLE');
     // A decisão embutida no plano é a mesma que verify emite; o contador
     // mutations vive no topo de cada saída.
     const { mutations: _contador, ...decisaoDoVerify } = verify;
-    assert.deepEqual(plan.elegibilidade, decisaoDoVerify);
+    assert.deepEqual(plan.elegibilidade, decisaoDoVerify.tag);
   });
 
   it('verificação seguida de plano sobre o mesmo fake: decisões idênticas, zero escritas (hipótese E)', async () => {
@@ -464,10 +466,10 @@ describe('zero mutação em verify e plan (D-16)', () => {
   });
 
   it('verificação e plano pela CLI concordam na elegibilidade (hipótese E, nível de saída)', () => {
-    const verify = JSON.parse(runCli(['verify', '--json']));
+    const verify = JSON.parse(runCli(['verify', '--json', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf']));
     const plan = JSON.parse(runCli(['plan', '--json']));
-    assert.equal(plan.elegibilidade.code, verify.code);
-    assert.equal(plan.elegibilidade.reason, verify.reason);
+    assert.equal(plan.elegibilidade.code, verify.tag.code);
+    assert.equal(plan.elegibilidade.reason, verify.tag.reason);
     assert.equal(plan.mutations, 0);
     assert.equal(verify.mutations, 0);
   });
@@ -795,8 +797,8 @@ describe('higiene de segredo na saída e nas fontes (Pitfall 7)', () => {
   it('as saídas capturadas de verify, plan e apply não carregam forma de credencial', async () => {
     const { reviewed, reviewedDigest } = await revisadoComDigest();
     const saidas = [
-      runCli(['verify']),
-      runCli(['verify', '--json']),
+      runCli(['verify', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf']),
+      runCli(['verify', '--json', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf']),
       runCli(['plan']),
       runCli(['plan', '--json']),
       runCli(['verify', '--help']),

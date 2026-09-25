@@ -219,8 +219,8 @@ const sinkSaida = { write: (t) => { fora.push(['saida', String(t)]); return true
 const sinkErro = { write: (t) => { fora.push(['erro', String(t)]); return true; } };
 const casos = [
   ['--help'],
-  ['verify'],
-  ['verify', '--json'],
+  ['verify', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf'],
+  ['verify', '--json', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf'],
   ['plan'],
   ['plan', '--json'],
   ['apply'],
@@ -296,9 +296,9 @@ it('verbo desconhecido devolve dois com o uso no fluxo de erro', () => {
 });
 
 it('verify no baseline congelado devolve zero e não escreve no fluxo de erro', () => {
-  const resultado = rodarCli(['verify']);
+  const resultado = rodarCli(['verify', '--version', 'v0.1.1', '--sha', '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf']);
   assert.equal(resultado.status, 0, `status ${resultado.status}: ${resultado.stderr}`);
-  assert.match(resultado.stdout, /^Elegibilidade de tag v0\.1\.1: ELEGÍVEL$/m);
+  assert.match(resultado.stdout, /^Tag v0\.1\.1: ELEGÍVEL \(ELIGIBLE\)$/m);
   assert.equal(resultado.stderr, '');
 });
 
