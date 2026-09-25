@@ -2,6 +2,11 @@
 //
 // Roda com: node --test tools/release-close/ (zero dependências, sem rede,
 // sem banco). Nomes em PT-BR seguindo a convenção de backend/tests/.
+//
+// As sondas de identidade estrita e de normalização vivem em `it` de TOPO, fora
+// do `describe`: o node recua as linhas `not ok` de subtestes aninhados, e o
+// verificador de evidência RED (gsd check tdd-red-evidence) só reconhece o
+// teste-alvo quando a linha `not ok N - <nome>` sai na coluna 0 do TAP.
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,6 +19,22 @@ const fixture = (name) =>
   JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), 'utf8'));
 
 const clone = (obj) => JSON.parse(JSON.stringify(obj));
+
+// Versão do baseline: lida do fixture congelado, nunca digitada à mão, para que
+// o fixture permaneça a única fonte da verdade (D-08).
+const VERSION = 'v0.1.1';
+
+// Executa a CLI local capturando o status mesmo em saída não zero, para que a
+// asserção falhe em asserção (e não em exceção de subprocesso).
+const runCli = (args) => {
+  const cli = new URL('./release-close.js', import.meta.url);
+  try {
+    const stdout = execFileSync(process.execPath, [cli.pathname, ...args], { encoding: 'utf8' });
+    return { status: 0, stdout };
+  } catch (err) {
+    return { status: err.status ?? null, stdout: err.stdout ?? '', stderr: err.stderr ?? '' };
+  }
+};
 
 describe('elegibilidade de tag (SAFE-02)', () => {
   it('aceita tag anotada quando peel == main == SHA esperado', async () => {
@@ -168,4 +189,111 @@ describe('elegibilidade de tag (SAFE-02)', () => {
     assert.equal(primeiro.calls.length, 3);
     assert.equal(segundo.calls.length, 0);
   });
+});
+
+// ── Identidade estrita da tag anotada em dois saltos ────────────────────────
+// Uma tag anotada só é elegível quando as QUATRO provas do plano de dois saltos
+// fecham: nome exato da ref pedida, SHA do objeto da tag em 40 hex, identidade
+// do objeto da tag igual à da ref, e segundo salto em commit.
+
+it('identidade estrita: rejeita peel em tree com TAG-IDENTITY', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagObject.data.object.type = 'tree';
+  const decisao = await checkTagEligibility(makeFakeClient(snap), {
+    version: VERSION,
+    expectedSha: snap.expectedSha,
+  });
+  assert.equal(decisao.code, 'TAG-IDENTITY');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('identidade estrita: rejeita peel em blob com TAG-IDENTITY', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagObject.data.object.type = 'blob';
+  const decisao = await checkTagEligibility(makeFakeClient(snap), {
+    version: VERSION,
+    expectedSha: snap.expectedSha,
+  });
+  assert.equal(decisao.code, 'TAG-IDENTITY');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('identidade estrita: rejeita tag que aponta para outra tag com TAG-IDENTITY', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagObject.data.object.type = 'tag';
+  const decisao = await checkTagEligibility(makeFakeClient(snap), {
+    version: VERSION,
+    expectedSha: snap.expectedSha,
+  });
+  assert.equal(decisao.code, 'TAG-IDENTITY');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('identidade estrita: rejeita ref de outra versão com TAG-IDENTITY', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagRef.data.ref = 'refs/tags/v0.1.0';
+  const decisao = await checkTagEligibility(makeFakeClient(snap), {
+    version: VERSION,
+    expectedSha: snap.expectedSha,
+  });
+  assert.equal(decisao.code, 'TAG-IDENTITY');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('identidade estrita: rejeita identidade do objeto da tag divergente com TAG-IDENTITY', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagObject.data.sha = 'a'.repeat(40);
+  const decisao = await checkTagEligibility(makeFakeClient(snap), {
+    version: VERSION,
+    expectedSha: snap.expectedSha,
+  });
+  assert.equal(decisao.code, 'TAG-IDENTITY');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('identidade estrita: rejeita SHA do objeto da tag abreviado com TAG-IDENTITY', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagRef.data.object.sha = snap.tagRef.data.object.sha.slice(0, 7);
+  const decisao = await checkTagEligibility(makeFakeClient(snap), {
+    version: VERSION,
+    expectedSha: snap.expectedSha,
+  });
+  assert.equal(decisao.code, 'TAG-IDENTITY');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('identidade estrita: rejeita commit peeled abreviado com TAG-IDENTITY', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagObject.data.object.sha = snap.tagObject.data.object.sha.slice(0, 7);
+  const decisao = await checkTagEligibility(makeFakeClient(snap), {
+    version: VERSION,
+    expectedSha: snap.expectedSha,
+  });
+  assert.equal(decisao.code, 'TAG-IDENTITY');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('identidade estrita: chama o segundo salto com o SHA exato do objeto da tag', async () => {
+  const snap = clone(fixture('reference'));
+  const fake = makeFakeClient(snap);
+  await checkTagEligibility(fake, { version: VERSION, expectedSha: snap.expectedSha });
+  const segundo = fake.calls.find((c) => c.method === 'getTagObject');
+  assert.deepEqual(segundo.args, [snap.tagRef.data.object.sha]);
+});
+
+it('CLI concorda com o predicado: verify --json sai zero com ELIGIBLE e não zero com SAFE-02', () => {
+  const baseline = runCli(['verify', '--json']);
+  assert.equal(baseline.status, 0);
+  assert.equal(JSON.parse(baseline.stdout).code, 'ELIGIBLE');
+
+  const divergente = runCli(['verify', '--json', '--sha', 'b'.repeat(40)]);
+  assert.notEqual(divergente.status, 0);
+  assert.equal(JSON.parse(divergente.stdout).code, 'SAFE-02');
 });
