@@ -60,6 +60,65 @@ vocabulary belongs to the Phase 11 reconciliation. The CI-blocked `FAILED`
 outcome, in contrast, is production-reachable: it is the frozen `ci` block with
 one conclusion changed.
 
+### Plan 09-09 verdict on its own flagged gap: the gap is still OPEN
+
+Plan 09-07 flagged that `closeMarkers` and `failedRunIds` have no source among
+the five declared reads, named two candidate fixes (a sixth declared read, or
+09-09's reconciliation seam), and this section is the answer. **Routing the
+scripted failure families through the seam does not close it**, and the reason
+is a vocabulary mismatch that is worth stating plainly rather than leaving for
+someone to rediscover:
+
+- The six scripted failure families are the READ vocabulary: `TRANSPORT`
+  (timeout, lost response) and `UNAVAILABLE` (409, 422, 429, 5xx), plus
+  `PERMISSION`, `MISSING` and `MALFORMED` from the frozen envelopes. None of
+  them is `CONCURRENT` and none is `FAILED`.
+- The seam is the seam's consumer, not its source. It receives `evidence`,
+  `eligibility` and `classification` as DATA and delegates re-derivation to an
+  injected decision layer; it performs no read that could produce a close
+  marker, and it has no way to carry `failedRunIds` into the classifier, because
+  that key is not one of the five the evidence contract declares.
+- The only producer of that evidence in this phase is `buildCloseEvidence`, and
+  it still hardcodes `closeMarkers: []` and has no `failedRunIds` key at all.
+
+`failure.test.js` now proves the gap executably rather than asserting it in
+prose: driving the production path over `fixtures/concurrent.json` — which
+declares two in-progress close markers — yields `evidence.closeMarkers === []`
+and `classification.code === 'MISSING'`, never `CONCURRENT`, and the seam
+repasses that classification unchanged without inventing a family. So the seam
+is `CONCURRENT`-**transport**-safe (it would carry such a classification
+faithfully if one ever arrived) and it is not `CONCURRENT`-**reachable**.
+
+Closing the gap therefore still needs one of: a sixth declared read (a new
+client capability, which has to pass 09-06's exact-surface check), or a Phase 11
+close-marker source that the evidence builder can draw on. Adding a sixth read
+was explicitly outside 09-09's declared files and is not attempted here. The
+regression-recording point is that the classification itself is fully covered —
+`CONCURRENT` and the explicit-red `FAILED` are proven at the classifier — and
+only the *transport* of those states into the production evidence is missing.
+
+One residual seam in the same area, narrower and also real: a transport throw
+from `getReleaseByTag` or `listMilestones` escapes `camadaDeDecisao` as an
+unhandled rejection, because those two reads are the only ones the layer does
+not guard (`checkTagEligibility` guards the other three). The failure is
+surfaced to the operator as a crash rather than as a PT-BR refusal. The six
+scripted families are exercised on the first read, so this plan's verification
+does not hit it; it is reported in `09-09-SUMMARY.md` as a Threat Flag rather
+than fixed, because changing those two reads is outside this plan's declared
+behaviour for the decision layer.
+
+## Failure families: where they are reachable from
+
+Since 09-09, every scripted failure family passes through a production seam
+(`tools/release-close/reconcile.js`), but **not through the operator surface**:
+the failure plan is a programmatic parameter of the exported `decide` and there
+is no command-line flag, environment variable or usage-text entry that reaches
+it, so `verify`, `plan` and `apply` always run the seam with no plan and with an
+empty observed read sequence. The families are proven through the exported
+decision and the exported seam; they are not, and this phase does not claim
+they are, reachable from a command line.
+
+
 ## Zero dependencies and zero network
 
 `tools/release-close/package.json` declares `"type": "module"` with no
