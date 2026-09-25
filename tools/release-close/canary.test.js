@@ -71,21 +71,37 @@ it('superfície exata: rejeita capacidade extra chamável nomeando-a', () => {
   );
 });
 
-it('superfície exata: rejeita capacidade extra com nome não óbvio e array', () => {
-  // A recusa é estrutural, não uma lista de nomes: qualquer chamável fora dos
-  // cinco cai, inclusive um nome que nenhuma varredura de texto adivinharia.
-  for (const extra of [
-    { name: 'apagar', value: async () => null },
-    { name: 'saida', value: ['v0.1.1'] },
-    { name: 'refletir', value: { entao: null } },
-  ]) {
-    const client = { ...LEITURAS(), [extra.name]: extra.value };
+it('superfície exata: rejeita capacidade extra com nome que nenhuma varredura adivinharia', () => {
+  // A recusa é estrutural, não uma lista de nomes: qualquer chamável próprio de
+  // topo cai, incluindo nomes que a varredura estática de texto nunca cita.
+  for (const nome of ['apagar', 'refletir', 'encaminharPara', 'mutacaoRemota']) {
+    const client = { ...LEITURAS(), [nome]: async () => null };
     assert.throws(
       () => contrato.assertClientShape(client),
-      (erro) => erro instanceof TypeError && erro.message.includes(extra.name),
-      `capacidade "${extra.name}" não foi recusada`,
+      (erro) => erro instanceof TypeError && erro.message.includes(nome),
+      `capacidade "${nome}" não foi recusada`,
     );
   }
+});
+
+it('superfície exata: a recusa não desce para objeto aninhado, por contrato', () => {
+  // Fronteira explícita do contrato: a verificação trata dos membros próprios
+  // ENUMERÁVEIS e de TOPO do objeto devolvido, e não desce para dentro deles —
+  // descer seria indiscernível da contabilidade legítima que o fake expõe (o
+  // log de chamadas e o registro de efeitos são arrays e objetos), e o contrato
+  // proíbe a recusa de inspecionar objetos aninhados. Um membro não chamável
+  // que carrega um chamável mais fundo é, portanto, CONTABILIDADE nesta
+  // superfície, não capacidade.
+  //
+  // A camada que cobre essa rota não é a verificação de forma: é o invariante
+  // de zero mutação, que recusa pela CONTAGEM MEDIDA na fronteira de efeito
+  // colateral, venha a chamada de onde vier. E é o grupo canary (tarefa 3) que
+  // prova, num processo filho, que uma rota de escape é barrada.
+  const aninhado = { ...LEITURAS(), rotas: { createRelease: async () => null } };
+  assert.equal(contrato.assertClientShape(aninhado), true);
+
+  const emArray = { ...LEITURAS(), metodos: [async () => null] };
+  assert.equal(contrato.assertClientShape(emArray), true);
 });
 
 it('superfície exata: rejeita cada leitura ausente nomeando-a', () => {
@@ -167,12 +183,13 @@ function invarianteCompartilhado() {
   return contrato.assertNoMutation;
 }
 
-const rotular = (medicao) => {
-  const chaves = Object.keys(mediacao);
+// Rotulo legivel para a mensagem de asercao. O nome e ASCII de proposito:
+// um parametro e seu uso com grafia quase identica falha em ReferenceError,
+// e essa falha e um crash de sonda, nao uma asercao.
+const descrever = (registro) => {
+  const chaves = Object.keys(registro);
   if (chaves.length === 0) return 'sem chaves';
-  return chaves
-    .map((chave) => `${chave}=${String(mediacao[chave])}`)
-    .join(',');
+  return chaves.map((chave) => chave + '=' + String(registro[chave])).join(',');
 };
 
 it('invariante: o módulo expõe o invariante compartilhado com um único parâmetro', () => {
@@ -240,7 +257,7 @@ it('invariante: recusa medição ausente, negativa, fracionária ou não numéri
     assert.throws(
       () => invariante(medicao),
       TypeError,
-      `medição inválida aceita: { ${rotular(medicao)} }`,
+      `medição inválida aceita: { ${descrever(medicao)} }`,
     );
   }
   for (const entrada of [null, undefined, 'zero', 0, [0]]) {
