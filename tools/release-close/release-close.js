@@ -3,10 +3,12 @@
 //
 // Invocação: node tools/release-close/release-close.js <verify|plan|apply> ...
 // Zero dependências, ESM. `verify` e `plan` servem o fixture de referência via
-// fake-client e são somente-leitura: ambos carregam o contador `mutations`.
-// `apply` renderiza o plano ordenado (previsão da ordem de recuperação da
-// Fase 11), entrega o texto ao portão de dupla trava (apply-gate.js) e falha
-// fechado — nenhum caminho de escrita remota existe nesta fase.
+// fake-client e são somente-leitura: ambos carregam a contagem de mutações
+// MEDIDA na fronteira de escrita e validada pelo invariante compartilhado de
+// zero mutação, nunca um literal. `apply` renderiza o plano ordenado (previsão
+// da ordem de recuperação da Fase 11), entrega o texto ao portão de dupla
+// trava (apply-gate.js) e falha fechado — nenhum caminho de escrita remota
+// existe nesta fase.
 //
 // A ferramenta nunca abre subprocesso, nunca lê variáveis de ambiente de
 // credencial e nunca registra cabeçalhos — a saída limita-se aos campos da
@@ -24,6 +26,7 @@ import { pathToFileURL } from 'node:url';
 import { checkTagEligibility } from './eligibility.js';
 import { classifySnapshot } from './classify.js';
 import { makeFakeClient } from './fake-client.js';
+import { assertNoMutation } from './client.js';
 import { confirmApply } from './apply-gate.js';
 
 const USAGE = `Uso: node tools/release-close/release-close.js <verify|plan|apply> [opções]
@@ -169,29 +172,154 @@ function loadReferenceFixture() {
   return JSON.parse(readFileSync(url, 'utf8'));
 }
 
-// Evidência plana de classificação no contrato de cinco chaves, derivada do
-// fixture de referência: o cliente fake entrega envelopes, a classificação
-// consome campos.
+// Evidência de PRODUÇÃO no contrato de cinco chaves que o classificador exige.
+// Cada valor tem a fonte nomeada, e nenhuma delas é "um valor que a ferramenta
+// possa inventar":
 //
-// Este é o ÚNICO lugar do módulo onde a tradução de envelope para lista é
-// permitida: `snapshot.release` e `snapshot.milestones` são envelopes `ok` que
-// o cliente serve, e o classificador lê listas. O bloco `ci` é copiado
-// atravessado — nenhuma evidência de CI é reconstruída aqui, e o literal
-// `checks: { state: 'success' }` que existia aqui (o vetor de falsificação que
-// esta fase fecha) foi removido: um estado verde de CI não é um valor que a
-// ferramenta possa inventar a partir de identificadores de execução.
-export function evidenceFromSnapshot(snapshot, target) {
-  if (!target || typeof target !== 'object') {
-    throw new TypeError('Entrada inválida: o alvo resolvido é obrigatório para montar a evidência.');
+//   target     — a versão pedida e o SHA esperado já resolvidos pela CLI;
+//   ci         — cópia byte a byte do bloco ci CONGELADO do snapshot. Nenhuma
+//                das cinco leituras declaradas devolve CI, e o bloco congelado
+//                de fixtures/reference.json é a única fonte de CI do
+//                repositório (09-05 task 1). O construtor nunca constrói,
+//                nunca infere e nunca inventa um padrão: sem bloco, `ci` fica
+//                ausente e a violação de contrato do classificador aparece
+//                como recusa de entrada inválida — nunca como execução verde.
+//   releases   — o payload `data` da resposta de getReleaseByTag. Um registro
+//                vira lista de um elemento; um array é retido INTEIRO, para
+//                que uma carga de duplicata ou de conflito sobreviva. Nunca se
+//                seleciona o primeiro elemento e nunca se descarta um
+//                registro: os que não casam com o alvo não são apagados, são
+//                partcionados pelo classificador em `unrelatedReleases`.
+//   milestones — o array `data` da resposta de listMilestones, retido por
+//                completo, com o mesmo motivo.
+//   closeMarkers — lista vazia. O vocabulário de marcadores pertence à
+//                reconciliação da Fase 11, e nenhuma das cinco leituras o
+//                devolve.
+//
+// A tradução de envelope para lista acontece AQUI e em mais lugar nenhum:
+// `snapshot.release` e `snapshot.milestones` são envelopes `ok` que o cliente
+// serve, e o classificador lê listas.
+export function buildCloseEvidence({ version, expectedSha, ci, release, milestones }) {
+  if (typeof version !== 'string' || version.length === 0) {
+    throw new TypeError('Entrada inválida: a versão pedida é obrigatória para montar a evidência.');
   }
-  const release = snapshot.release && snapshot.release.ok ? snapshot.release.data : null;
-  const milestones = snapshot.milestones && snapshot.milestones.ok ? snapshot.milestones.data : [];
+  if (typeof expectedSha !== 'string' || expectedSha.length === 0) {
+    throw new TypeError('Entrada inválida: o SHA esperado é obrigatório para montar a evidência.');
+  }
   return {
-    target: { version: target.version, expectedSha: target.expectedSha },
-    ci: snapshot.ci,
-    releases: release ? [release] : [],
-    milestones: Array.isArray(milestones) ? [...milestones] : [],
+    target: { version, expectedSha },
+    ci,
+    releases: normalizarLista(release),
+    milestones: normalizarLista(milestones),
     closeMarkers: [],
+  };
+}
+
+// Envelope `{ ok, status, data }` -> lista de evidência. Ausente (404) vira
+// lista vazia; `data` que já é lista é copiado inteiro; `data` que é um único
+// registro vira lista de um elemento.
+function normalizarLista(envelope) {
+  if (!envelope || envelope.ok !== true) return [];
+  const data = envelope.data;
+  if (Array.isArray(data)) return [...data];
+  if (data === null || data === undefined) return [];
+  return [data];
+}
+
+// Recusa do invariante compartilhado de zero mutação (09-06). É uma classe
+// própria, e não um TypeError, porque a recusa NÃO é entrada inválida: são duas
+// famílias que o próprio invariante nomeia no texto (efeito remoto escapou
+// versus medição corrompida) e que pedem ações opostas do operador. Envolver o
+// motivo preserva o texto do invariante atravessado intacto, sem reimplementar
+// a classificação de família aqui e sem rotular um escape como entrada inválida.
+class RecusaDoInvariante extends Error {
+  constructor(motivo) {
+    super(motivo);
+    this.name = 'RecusaDoInvariante';
+  }
+}
+
+// A MEDIÇÃO do cliente, validada. O valor relatado ao operador é o que o
+// invariante devolve, e o invariante devolve alguma coisa apenas quando a
+// contagem é exatamente zero. Não existe caminho de fallback que renderize zero
+// quando a medição falta: medição ausente ou corrompida é falha do contrato de
+// leitura e recusa como tal.
+function medirMutacoes(client) {
+  try {
+    return assertNoMutation(client);
+  } catch (err) {
+    throw new RecusaDoInvariante(err.message);
+  }
+}
+
+// Decisão de produção: a costuradora única da fase. Monta o cliente uma vez,
+// percorre as cinco leituras declaradas e entrega ao classificador a evidência
+// que elas produziram.
+//
+// A ordem é fixa e é a mesma que o log de chamadas da suíte de elegibilidade
+// exige: as três leituras de tag e main primeiro, em ordem, e só então as duas
+// de release e milestone. As três primeiras são feitas por
+// `checkTagEligibility`, que é quem as consome — relê-las aqui para capturá-las
+// inflaria o log para sete chamadas e apagaria a prova de que a decisão
+// production exercita a costura real. As duas últimas são feitas aqui, sempre,
+// mesmo quando a elegibilidade já short-circuitou, porque a evidência de
+// release e milestone é o que o classificador precisa.
+//
+// `version`, `expectedSha` e `ci` chegam resolvidos ou saem do snapshot. `client`
+// chega injetado ou é construído a partir do snapshot. `ci` nunca é derivado de
+// outro valor: o que não foi fornecido e não está no snapshot fica ausente.
+export async function decide({ snapshot, client, version, expectedSha, ci }) {
+  const entrada = { snapshot, client, version, expectedSha, ci };
+  if (
+    (entrada.client === undefined || entrada.client === null) &&
+    (entrada.snapshot === undefined || entrada.snapshot === null)
+  ) {
+    throw new TypeError('Entrada inválida: a decisão exige um cliente injetado ou um snapshot para construí-lo.');
+  }
+  const resolvedVersion = version ?? snapshot?.version;
+  const resolvedSha = expectedSha ?? snapshot?.expectedSha;
+  const resolvedCi = ci ?? snapshot?.ci;
+  const resolvedClient = client ?? makeFakeClient(snapshot);
+
+  // As três leituras de elegibilidade, na ordem fixa, através do cliente.
+  const eligibility = await checkTagEligibility(resolvedClient, {
+    version: resolvedVersion,
+    expectedSha: resolvedSha,
+  });
+
+  // As duas leituras de evidência, na mesma ordem fixa. Elas correm
+  // incondicionalmente: mesmo com a elegibilidade já decidida, a evidência de
+  // release e milestone é obrigatória para classificar.
+  const release = await resolvedClient.getReleaseByTag(resolvedVersion);
+  const milestones = await resolvedClient.listMilestones();
+
+  // O alvo resolvido entra no contrato: um override de `--version` ou `--sha`
+  // flui para a classificação em vez de ser ignorado. Um override que deixa de
+  // bater com o `ci.targetSha` congelado classifica como FAILED com a família
+  // CI-WRONG-SHA, que é a resposta fail-closed correta.
+  const evidence = buildCloseEvidence({
+    version: resolvedVersion,
+    expectedSha: resolvedSha,
+    ci: resolvedCi,
+    release,
+    milestones,
+  });
+  const classification = classifySnapshot(evidence);
+
+  // A medição é feita ANTES de qualquer renderização e é o que o relatório
+  // carrega: o número que o operador lê é o que a fronteira mediu.
+  const mutations = medirMutacoes(resolvedClient);
+
+  return {
+    version: resolvedVersion,
+    expectedSha: resolvedSha,
+    target: evidence.target,
+    ci: resolvedCi,
+    evidence,
+    eligibility,
+    classification,
+    mutations,
+    client: resolvedClient,
   };
 }
 
@@ -203,8 +331,28 @@ function resolveMarker(spec, ctx) {
 
 // Monta o plano ordenado: o que seria criado, o que seria adotado, em que
 // ordem e contra quais SHAs/IDs congelados (D-15).
-export function buildClosePlan({ version, expectedSha, snapshot, eligibility, classificacao, mutations }) {
-  const evidence = evidenceFromSnapshot(snapshot, { version, expectedSha });
+//
+// `evidence` e `mutations` chegam da decisão de produção: o plano não reconstrói
+// a evidência (reconstruir foi exatamente o defeito que colapsava duplicata e
+// conflito) e não fixa a contagem (o literal `0` foi removido — o número
+// relatado é a medição do invariante compartilhado, que já recusou qualquer
+// contagem diferente de zero antes de este ponto).
+//
+// `tagSha` e `commitSha` continuam vindo dos envelopes de tag do snapshot, e
+// isso é deliberado: `reference.json` é o snapshot no formato do cliente, ou
+// seja, são exatamente os mesmos bytes que o cliente serviu e que as três
+// leituras de elegibilidade provaram byte a byte. São campos de exibição do
+// plano, não evidência de classificação — o classificador nunca os vê.
+export function buildClosePlan({
+  version,
+  expectedSha,
+  snapshot,
+  eligibility,
+  classificacao,
+  evidence,
+  mutations,
+}) {
+  const evidencia = evidence ?? buildCloseEvidence({ version, expectedSha, ci: snapshot.ci });
   const tagSha =
     (snapshot.tagRef && snapshot.tagRef.data && snapshot.tagRef.data.object
       ? snapshot.tagRef.data.object.sha
@@ -217,8 +365,8 @@ export function buildClosePlan({ version, expectedSha, snapshot, eligibility, cl
     version,
     tagSha,
     commitSha,
-    releasePresente: evidence.releases.length > 0,
-    milestonePresente: evidence.milestones.length > 0,
+    releasePresente: evidencia.releases.length > 0,
+    milestonePresente: evidencia.milestones.length > 0,
   };
   const steps = CLOSE_STEP_SPECS.map((spec) => {
     const marcador = resolveMarker(spec, ctx);
@@ -231,11 +379,16 @@ export function buildClosePlan({ version, expectedSha, snapshot, eligibility, cl
       assunto: spec.assunto(ctx),
     };
   });
+  // `applyLiberado` tem UM significado em toda a fase: tag elegível sem estado
+  // bloqueante. MISSING não é um dos códigos bloqueantes, então um alvo já
+  // fechado reporta applyLiberado true aqui — e a reconciliação da Fase 11
+  // relata um campo de nome diferente (`writeProposed`), nunca derivado deste.
   const bloqueado = BLOCKING_CODES.includes(classificacao.code);
   return {
     verb: 'plan',
     version,
     expectedSha,
+    target: evidencia.target,
     tagSha,
     commitSha,
     runs: snapshot.runs ?? [],
@@ -243,6 +396,7 @@ export function buildClosePlan({ version, expectedSha, snapshot, eligibility, cl
     milestonePresente: ctx.milestonePresente,
     elegibilidade: eligibility,
     classificacao,
+    evidencia,
     applyLiberado: eligibility.eligible === true && bloqueado === false,
     bloqueio: bloqueado
       ? `estado ${classificacao.code}: ${classificacao.reason}`
@@ -294,39 +448,32 @@ function renderVerifyJson(decision, mutations, out) {
   out.write(`${JSON.stringify({ ...decision, mutations })}\n`);
 }
 
-// Decisão compartilhada por verify, plan e apply: elegibilidade da tag +
-// classificação do estado de fechamento, sempre sobre o fixture congelado.
-async function decide(snapshot, { version, sha }) {
-  const resolvedVersion = version ?? snapshot.version;
-  const resolvedSha = sha ?? snapshot.expectedSha;
-  const target = { version: resolvedVersion, expectedSha: resolvedSha };
-  const client = makeFakeClient(snapshot);
-  const eligibility = await checkTagEligibility(client, {
-    version: resolvedVersion,
-    expectedSha: resolvedSha,
-  });
-  // O alvo resolvido entra no contrato: um override de `--version` ou `--sha`
-  // flui para a classificação em vez de ser ignorado. Um override que deixa de
-  // bater com o `ci.targetSha` congelado classifica como FAILED com a família
-  // CI-WRONG-SHA, que é a resposta fail-closed correta.
-  const classificacao = classifySnapshot(evidenceFromSnapshot(snapshot, target));
-  return { resolvedVersion, resolvedSha, eligibility, classificacao, mutations: 0 };
+// Recusa de entrada inválida: a violação de contrato do classificador (bloco ci
+// ausente, alvo malformado) e a validação do chamador são a MESMA recusa de
+// uso — a CLI escreve o motivo PT-BR e devolve 1. A recusa do invariante de
+// mutação é outra coisa e tem o seu próprio texto, atravessado intacto.
+function tratarRecusa(err, stderr) {
+  if (err instanceof RecusaDoInvariante) {
+    stderr.write(`${err.message}\n`);
+    return 1;
+  }
+  if (err instanceof TypeError) {
+    stderr.write(`Entrada inválida: ${err.message}\n`);
+    return 1;
+  }
+  throw err;
 }
 
 async function runVerify({ json, version, sha }, io) {
   const snapshot = loadReferenceFixture();
   let decision;
   try {
-    decision = await decide(snapshot, { version, sha });
+    decision = await decide({ snapshot, version, expectedSha: sha });
   } catch (err) {
-    if (err instanceof TypeError) {
-      io.stderr.write(`Entrada inválida: ${err.message}\n`);
-      return 1;
-    }
-    throw err;
+    return tratarRecusa(err, io.stderr);
   }
   if (json) renderVerifyJson(decision.eligibility, decision.mutations, io.stdout);
-  else renderVerifyText(decision.resolvedVersion, decision.eligibility, decision.mutations, io.stdout);
+  else renderVerifyText(decision.version, decision.eligibility, decision.mutations, io.stdout);
   return decision.eligibility.eligible ? 0 : 1;
 }
 
@@ -334,21 +481,18 @@ async function runPlan({ json, version, sha }, io) {
   const snapshot = loadReferenceFixture();
   let plan;
   try {
-    const decision = await decide(snapshot, { version, sha });
+    const decision = await decide({ snapshot, version, expectedSha: sha });
     plan = buildClosePlan({
-      version: decision.resolvedVersion,
-      expectedSha: decision.resolvedSha,
+      version: decision.version,
+      expectedSha: decision.expectedSha,
       snapshot,
       eligibility: decision.eligibility,
-      classificacao: decision.classificacao,
+      classificacao: decision.classification,
+      evidence: decision.evidence,
       mutations: decision.mutations,
     });
   } catch (err) {
-    if (err instanceof TypeError) {
-      io.stderr.write(`Entrada inválida: ${err.message}\n`);
-      return 1;
-    }
-    throw err;
+    return tratarRecusa(err, io.stderr);
   }
   if (json) renderJson(plan, io.stdout);
   else io.stdout.write(renderPlanText(plan));
@@ -372,21 +516,18 @@ async function runApply({ json, yes, version, sha }, io) {
   const snapshot = loadReferenceFixture();
   let plan;
   try {
-    const decision = await decide(snapshot, { version, sha });
+    const decision = await decide({ snapshot, version, expectedSha: sha });
     plan = buildClosePlan({
-      version: decision.resolvedVersion,
-      expectedSha: decision.resolvedSha,
+      version: decision.version,
+      expectedSha: decision.expectedSha,
       snapshot,
       eligibility: decision.eligibility,
-      classificacao: decision.classificacao,
+      classificacao: decision.classification,
+      evidence: decision.evidence,
       mutations: decision.mutations,
     });
   } catch (err) {
-    if (err instanceof TypeError) {
-      io.stderr.write(`Entrada inválida: ${err.message}\n`);
-      return 1;
-    }
-    throw err;
+    return tratarRecusa(err, io.stderr);
   }
 
   // A estrutura vai primeiro quando pedida; o texto humano vai sempre em

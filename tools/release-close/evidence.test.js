@@ -84,11 +84,29 @@ function funcaoQueContem(texto, indice) {
 // Corpo de uma função declarada, contado por chave. Usado para provar que uma
 // guarda está DENTRO de uma função e não ao lado dela — o tipo de afirmação que
 // uma regex solta sobre o arquivo inteiro não consegue fazer.
+//
+// A contagem começa na chave que abre o CORPO, e não na chave de desestruturação
+// dos parâmetros: `function f({ a, b }, io) {` tem duas chaves antes do corpo, e
+// contar desde a primeira devolveria só a assinatura — uma prova que passa sem
+// olhar para nada.
 function fatiarFuncao(texto, nome) {
   const inicio = texto.search(new RegExp(`^(?:export\\s+)?(?:async\\s+)?function\\s+${nome}\\s*\\(`, 'm'));
   if (inicio < 0) return '';
-  const chave = texto.indexOf('{', inicio);
   let profundidade = 0;
+  let chave = -1;
+  for (let i = inicio; i < texto.length; i += 1) {
+    if (texto[i] === '(') profundidade += 1;
+    else if (texto[i] === ')') {
+      profundidade -= 1;
+      // Fechou a lista de parâmetros: a próxima chave abre o corpo.
+      if (profundidade === 0) {
+        chave = texto.indexOf('{', i);
+        break;
+      }
+    }
+  }
+  if (chave < 0) return '';
+  profundidade = 0;
   for (let i = chave; i < texto.length; i += 1) {
     if (texto[i] === '{') profundidade += 1;
     else if (texto[i] === '}') {
@@ -394,6 +412,15 @@ function numeros(detalhes) {
   return detalhes.map((registro) => registro.number);
 }
 
+// Duas milestones que NOMEIAM a versão pedida. Nenhum fixture congelado traz
+// duas de uma vez, e digitar um número à mão seria valor que o repositório não
+// possui (D-08). A segunda é derivada da primeira mudando só o identificador, o
+// que é exatamente a mutação que a partição de alvo precisa enxergar.
+function duasMilestonesDoAlvo() {
+  const [unica] = fixture('complete').milestones;
+  return [unica, { ...unica, number: unica.number + 1 }];
+}
+
 async function decidirSobre(snapshot, mod) {
   const client = (await import('./fake-client.js')).makeFakeClient(snapshot);
   const decisao = await mod.decide({
@@ -446,13 +473,13 @@ it('o construtor de evidência retém os dois registros de release e os dois nú
   const mod = await moduloCom(['buildCloseEvidence']);
   const base = referencia();
   const releases = fixture('duplicate').releases;
-  const [primeira, segunda] = fixture('complete').milestones;
+  const [alvo, segunda] = duasMilestonesDoAlvo();
   const evidencia = mod.buildCloseEvidence({
     version: base.version,
     expectedSha: base.expectedSha,
     ci: base.ci,
     release: envelope(releases),
-    milestones: envelope([primeira, segunda]),
+    milestones: envelope([alvo, segunda]),
   });
   assert.deepEqual(
     evidencia.releases.map((registro) => registro.id),
@@ -461,7 +488,7 @@ it('o construtor de evidência retém os dois registros de release e os dois nú
   );
   assert.deepEqual(
     evidencia.milestones.map((registro) => registro.number),
-    [primeira.number, segunda.number],
+    [alvo.number, segunda.number],
     'a lista de milestones foi colapsada no primeiro registro',
   );
 });
@@ -532,31 +559,39 @@ it('o caminho de produção classifica o conflito com os dois identificadores re
 
 it('o escopo de alvo nomeia só os registros do alvo e retém os alheios', async () => {
   const mod = await moduloCom(['decide']);
-  const base = referencia();
-  const alvo = fixture('partial').releases[0];
-  const alheio = fixture('unrelated').releases[0];
+  // Release PUBLICADA do alvo ao lado de releases de outras versões. Um
+  // rascunho cairia no ramo de PARTIAL por rascunho, cujo motivo nomeia a tag e
+  // não a versão pedida — e o caso que a tarefa descreve é o de registros de
+  // outras versões convivendo com o registro do alvo.
+  const alvo = fixture('complete').releases[0];
+  const alheios = fixture('unrelated').releases;
   const { decisao } = await decidirSobre(
-    referenciaCom({ release: envelope([alvo, alheio]) }),
+    referenciaCom({ release: envelope([alvo, ...alheios]) }),
     mod,
   );
   assert.equal(decisao.classification.code, 'PARTIAL');
   assert.deepEqual(ids(decisao.classification.releases), [alvo.id]);
-  assert.deepEqual(ids(decisao.classification.unrelatedReleases), [alheio.id]);
+  assert.deepEqual(ids(decisao.classification.unrelatedReleases), alheios.map((r) => r.id));
   assert.match(decisao.classification.reason, /versão pedida/);
-  assert.doesNotMatch(decisao.classification.reason, new RegExp(alheio.tagName.replace(/\./g, '\\.')));
+  for (const alheio of alheios) {
+    assert.doesNotMatch(
+      decisao.classification.reason,
+      new RegExp(alheio.tagName.replace(/\./g, '\\.')),
+      `o motivo nomeia o registro alheio ${alheio.tagName}`,
+    );
+  }
 });
 
 it('o escopo de alvo retém os dois números de milestone que nomeiam a versão pedida', async () => {
   const mod = await moduloCom(['decide']);
-  const base = referencia();
-  const [primeira, segunda] = fixture('complete').milestones;
+  const [alvo, segunda] = duasMilestonesDoAlvo();
   const { decisao } = await decidirSobre(
-    referenciaCom({ milestones: envelope([primeira, segunda]) }),
+    referenciaCom({ milestones: envelope([alvo, segunda]) }),
     mod,
   );
   assert.deepEqual(
     numeros(decisao.classification.milestones),
-    [primeira.number, segunda.number],
+    [alvo.number, segunda.number],
     'uma das milestones do alvo foi descartada',
   );
   assert.deepEqual(decisao.classification.unrelatedMilestones, []);
@@ -585,7 +620,12 @@ it('uma conclusão cancelada na evidência congelada bloqueia com a família nom
   assert.equal(decisao.classification.ciCode, 'CI-CANCELLED');
   const plano = planoDo(mod, snapshot, decisao);
   assert.equal(plano.applyLiberado, false, 'uma CI cancelada liberou o apply');
-  assert.match(plano.bloqueio, /CI-CANCELLED/);
+  // A família é nomeada pelo campo `ciCode` da decisão, atravessado no plano. O
+  // texto PT-BR do bloqueio (`estado FAILED: …`) é a redação que o plano 09-03
+  // fixou e não é alterada aqui; a família em EN estável é o `ciCode`.
+  assert.equal(plano.classificacao.ciCode, 'CI-CANCELLED');
+  assert.match(plano.bloqueio, /^estado FAILED: /);
+  assert.match(plano.bloqueio, /concluiu como cancelled/);
 });
 
 it('o no-op concluído aparece como o par exato MISSING e COMPLETE_NOOP e ainda assim libera apply', async () => {
@@ -663,7 +703,10 @@ it('uma contagem medida diferente de zero recusa a execução com o motivo do in
   );
 
   // Família da medição corrompida: nunca reportada como escape, porque as duas
-  // pedem ações opostas do operador.
+  // pedem ações opostas do operador. A asserção é sobre a FAMÍLIA da recusa, não
+  // sobre a redação: um registro que existe mas não traz contador e um registro
+  // que não existe são o mesmo defeito de leitura, e as duas palavras do
+  // invariante ("ausente" e "inválida") descrevem essa família.
   const semMedicao = Object.freeze({
     getTagRef: () => {},
     getTagObject: () => {},
@@ -681,20 +724,31 @@ it('uma contagem medida diferente de zero recusa a execução com o motivo do in
       }),
     (erro) =>
       erro instanceof Error &&
-      /Medição de mutações ausente/.test(erro.message) &&
+      /Medição de mutações (ausente|inválida)/.test(erro.message) &&
       !/Efeito remoto escapou/.test(erro.message),
     'a medição ausente não recusou como medição corrompida, ou foi reportada como escape',
   );
 });
 
 it('o invariante compartilhado roda na decisão, antes de qualquer renderização', async () => {
-  const mod = await modulo();
+  const mod = await moduloCom(['decide']);
   const fonte = fonteDoModulo();
+  // O invariante compartilhado é chamado por um INVOLUCRO de módulo (a
+  // medição), e é essa função que a decisão precisa chamar. A ligação é
+  // resolvida estruturalmente — quem envolve a chamada a `assertNoMutation` —
+  // em vez de por nome literal, para que a prova não dependa de como a medição
+  // foi batizada e continue valendo quando o plano 09-08 reformatar o módulo.
+  const chamadorDoInvariante = funcaoQueContem(fonte, fonte.indexOf('assertNoMutation('));
+  assert.notEqual(
+    chamadorDoInvariante,
+    '<fora de função>',
+    'o invariante compartilhado é chamado no nível de topo do módulo, e não dentro da medição',
+  );
   const corpoDaDecisao = fatiarFuncao(fonte, 'decide');
   assert.match(
     corpoDaDecisao,
-    /assertNoMutation\(/,
-    'o invariante compartilhado não é chamado dentro da decisão de produção',
+    new RegExp(`\\b${chamadorDoInvariante}\\(`),
+    `a decisão de produção não chama ${chamadorDoInvariante}, que é quem valida a contagem medida`,
   );
   assert.doesNotMatch(
     corpoDaDecisao,
@@ -710,7 +764,7 @@ it('o invariante compartilhado roda na decisão, antes de qualquer renderizaçã
       .sort((a, b) => a - b)[0];
     assert.ok(posDecisao >= 0, `${verbo} não roda a decisão de produção`);
     assert.ok(
-      posDecidao < posPrimeiroRender,
+      posDecisao < posPrimeiroRender,
       `${verbo} renderiza antes de a decisão de produção medir a contagem de mutações`,
     );
   }
