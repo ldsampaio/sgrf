@@ -4,12 +4,12 @@ milestone: v0.1.2
 milestone_name: GitHub Release Reliability
 current_phase: 09
 current_phase_name: Release-Close Contract & Fixtures
-status: executing
-stopped_at: Completed 09-03-PLAN.md
-last_updated: "2026-09-25T14:47:35.912Z"
+status: gaps_found
+stopped_at: Phase 9 verification found gaps
+last_updated: "2026-09-25T15:17:02.652Z"
 last_activity: 2026-09-25
-last_activity_desc: Phase 09 plans 09-01, 09-02 and 09-03 executed — all four requirements covered
-state_head: bcd8663c0a02438d9a4a04147567ae7269a97428
+last_activity_desc: Phase 09 plans executed; verification found six fail-closed contract gaps
+state_head: 186b4ca48b9775f4fea8778c0b0e81aa4c3fdb13
 progress:
   total_phases: 5
   completed_phases: 0
@@ -30,10 +30,10 @@ See: `.planning/PROJECT.md` (updated 2026-09-25)
 
 Phase: 09 (Release-Close Contract & Fixtures) — PLANS COMPLETE (3 of 3)
 Plan: 3 of 3
-Status: All plans executed — ready for phase verification (`/gsd-verify-work`)
-Last activity: 2026-09-25 — 09-03 completed: double-locked apply gate, ordered plan display, SAFE-04 proof suite, API-coverage declaration
+Status: Verification gaps found — gap-closure planning required
+Last activity: 2026-09-25 — Independent verification found six fail-closed contract gaps
 
-Progress: [██████████] 100% (3/3 plans; OPS-01, OPS-02, SAFE-02, SAFE-04 all covered)
+Progress: [██████████] 100% plans executed; phase completion blocked pending gap closure
 
 ## Performance Metrics
 
@@ -88,8 +88,10 @@ None yet.
 
 ### Blockers/Concerns
 
-None. Explicit operator confirmation is a required Phase 13 gate, not a current roadmap blocker.
-- Watch item (09-03): the plan renderer's adoption (`adotar`) branch is unexercised — the CLI is bound to the reference fixture, where release and milestone are both absent, so only `criar`/`ler` markers render today. Phase 11 drives adoption over the state fixtures.
+- Phase 9 verification is `gaps_found`: strict tag peel, exact CI evidence, target-scoped Release/Milestone classification, real mutation accounting, human-visible reviewed-content apply gating, and production failure/re-read coverage must be corrected before completion.
+- Advisory code review additionally found permission/status normalization, CLI import safety, and TTY EOF handling gaps; see `09-REVIEW.md`.
+
+Explicit operator confirmation remains a required Phase 13 gate, not a current roadmap blocker.
 
 ## Deferred Items
 
@@ -99,13 +101,12 @@ None. Explicit operator confirmation is a required Phase 13 gate, not a current 
 
 ## Session Continuity
 
-Last session: 2026-09-25T14:47:35.900Z
-Stopped at: Completed 09-03-PLAN.md
-Resume file: None
+Last session: 2026-09-25T15:17:02.641Z
+Stopped at: Phase 9 verification found gaps
+Resume file: /home/lucas/Documentos/Projetos/sgrf/.planning/phases/09-release-close-contract-fixtures/09-VERIFICATION.md
 
 ## Operator Next Steps
 
-- Verify Phase 9 with `/gsd-verify-work 9` — all three plans executed, tool suite 57/57, backend 131/131, frontend build green.
-- Then plan Phase 10 (Read-Only Exact-SHA Preflight), the first phase allowed to issue live `gh api` reads behind the unchanged five-read client interface.
-- Phase 9 needs no operator action on any verb: `apply` has no write path and fails closed even after a fully accepted double confirmation.
-- Do not perform any live Release or Milestone mutation before the operator-confirmed Phase 13.
+- Plan the six verification gaps with `/gsd-plan-phase 09 --gaps`.
+- Re-run `/gsd-execute-phase 09 --gaps-only` after gap plans are created, then verify Phase 9 again.
+- Do not advance to Phase 10 or perform any live Release or Milestone mutation while Phase 9 has open verification gaps.
