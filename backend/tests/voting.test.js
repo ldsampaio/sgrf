@@ -1389,7 +1389,7 @@ describe('GA-VOT-05: TOCTOU race guard — concurrent balance mutations', () => 
     beforeEach(async () => {
       await resetBalance(100000, 0, 0); // 1000.00 available
       // Ensure annual limit does not interfere with balance TOCTOU test — set high limit so all 5 try to provision
-      await prisma.departmentSettings.update({ where: { id: 'default' }, data: { automaticApprovalLimitCents: 500000 } });
+      await prisma.departmentSettings.upsert({ where: { id: 'default' }, update: { automaticApprovalLimitCents: 500000 }, create: { id: 'default', automaticApprovalLimitCents: 500000 } });
     });
 
     it('N=5 concurrent submissions (30000 each, total 150000 > 100000) → only 3 succeed', async () => {
@@ -1432,7 +1432,7 @@ describe('GA-VOT-05: TOCTOU race guard — concurrent balance mutations', () => 
       });
       expect(txCount).toBe(expectedSuccess);
       // restore limit for subsequent tests
-      await prisma.departmentSettings.update({ where: { id: 'default' }, data: { automaticApprovalLimitCents: 100000 } });
+      await prisma.departmentSettings.upsert({ where: { id: 'default' }, update: { automaticApprovalLimitCents: 100000 }, create: { id: 'default', automaticApprovalLimitCents: 100000 } });
     });
   });
 
