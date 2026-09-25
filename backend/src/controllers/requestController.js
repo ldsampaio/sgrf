@@ -123,20 +123,79 @@ async function cancel(req, res, next) {
     const approved = ['APROVADO', 'APROVADO_AUTOMATICAMENTE', 'APROVADO_PARCIALMENTE'].includes(r.status);
     if (approved) {
       if (!isLeader) return res.status(403).json({ error: 'Sem permissão' });
-      // Phase 6 (VOT-04/06-04): compensating REVERSE here — estorno auditado
-      // dos efeitos de PROVISION (FinancialTransaction REVERSE). Phase 4:
-      // somente a troca de status auditada, sem writes financeiras.
+      // VOT-04: compensating REVERSE — atomic reversal of provision + audit
+      const approvedAmount = r.approvedAmountCents || 0;
+      if (approvedAmount > 0) {
+        await prisma.$transaction(async (tx) => {
+          // Conditional reversal: ensure provisionedCents >= approvedAmount
+          const bal = await tx.fundBalance.findUnique({ where: { referenceYear: r.referenceYear } });
+          if (!bal || bal.provisionedCents < approvedAmount) {
+            throw Object.assign(new Error('Provisionado insuficiente para estorno'), { status: 400 });
+          }
+          await tx.fundBalance.update({
+            where: { referenceYear: r.referenceYear },
+            data: {
+              provisionedCents: { decrement: approvedAmount },
+              availableCents: { increment: approvedAmount },
+              version: { increment: 1 },
+            },
+          });
+          await tx.financialTransaction.create({
+            data: {
+              requestId: r.id,
+              type: 'REVERSE',
+              amountCents: approvedAmount,
+              fromState: 'PROVISIONADO',
+              toState: 'DISPONIVEL',
+              performedBy: req.user.id,
+              metadata: JSON.stringify({
+                justification,
+                decidedBy: role,
+                action: 'cancellation_reversal',
+              }),
+            },
+          });
+          await tx.auditEvent.create({
+            data: {
+              actorId: req.user.id,
+              action: 'request_cancelled',
+              entityType: 'request',
+              entityId: r.id,
+              beforeData: JSON.stringify({ status: r.status }),
+              afterData: JSON.stringify({ status: 'CANCELADO', justification }),
+              ipAddress: req.ip,
+              userAgent: req.get('user-agent'),
+            },
+          });
+          await tx.resourceRequest.update({
+            where: { id: r.id },
+            data: { status: 'CANCELADO' },
+          });
+        });
+      } else {
+        // Approved but no approvedAmountCents (edge case) — just status change + audit
+        await prisma.resourceRequest.update({ where: { id: r.id }, data: { status: 'CANCELADO' } });
+        await audit({ actorId: req.user.id, action: 'request_cancelled', entityType: 'request', entityId: r.id, beforeData: { status: r.status }, afterData: { status: 'CANCELADO', justification }, req });
+      }
     } else if (role === 'ADMINISTRADOR') {
       // ADMIN: qualquer não-terminal (inclui INDEFERIDO como limpeza).
+      const updated = await prisma.resourceRequest.update({ where: { id: r.id }, data: { status: 'CANCELADO' } });
+      await audit({ actorId: req.user.id, action: 'request_cancelled', entityType: 'request', entityId: r.id, beforeData: { status: r.status }, afterData: { status: 'CANCELADO', justification }, req });
+      return res.json({ ok: true, request: updated });
     } else if (role === 'CHEFE_DEPARTAMENTO') {
       // CHEFE: antes de CONCLUIDO (CONCLUIDO/CANCELADO já barrados acima).
+      const updated = await prisma.resourceRequest.update({ where: { id: r.id }, data: { status: 'CANCELADO' } });
+      await audit({ actorId: req.user.id, action: 'request_cancelled', entityType: 'request', entityId: r.id, beforeData: { status: r.status }, afterData: { status: 'CANCELADO', justification }, req });
+      return res.json({ ok: true, request: updated });
     } else {
-      // RN-010: dono somente RASCUNHO/EM_VOTACAO.
+      // RN-010: dono somente RASCUNHO/EM_VOTACAO/SUBMETIDO.
       if (!isOwner) return res.status(403).json({ error: 'Sem permissão' });
-      if (!['RASCUNHO', 'EM_VOTACAO'].includes(r.status)) return res.status(403).json({ error: 'Sem permissão' });
+      if (!['RASCUNHO', 'EM_VOTACAO', 'SUBMETIDO'].includes(r.status)) return res.status(403).json({ error: 'Sem permissão' });
+      const updated = await prisma.resourceRequest.update({ where: { id: r.id }, data: { status: 'CANCELADO' } });
+      await audit({ actorId: req.user.id, action: 'request_cancelled', entityType: 'request', entityId: r.id, beforeData: { status: r.status }, afterData: { status: 'CANCELADO', justification }, req });
+      return res.json({ ok: true, request: updated });
     }
-    const updated = await prisma.resourceRequest.update({ where: { id: r.id }, data: { status: 'CANCELADO' } });
-    await audit({ actorId: req.user.id, action: 'request_cancelled', entityType: 'request', entityId: r.id, beforeData: { status: r.status }, afterData: { status: 'CANCELADO', justification }, req });
+    const updated = await prisma.resourceRequest.findUnique({ where: { id: r.id } });
     res.json({ ok: true, request: updated });
   } catch (e) { next(e); }
 }
