@@ -12,7 +12,7 @@ source:
   - 09-08-SUMMARY.md
   - 09-09-SUMMARY.md
 started: 2026-09-25T20:25:00Z
-updated: 2026-09-25T21:20:00Z
+updated: 2026-09-25T22:05:00Z
 ---
 
 UI checkpoints: 0 — a fase 09 é CLI pura em `tools/release-close/`, sem mudança em `frontend/`.
@@ -259,7 +259,7 @@ evidence: COVERAGE.md nomeia closeMarkers e failedRunIds.
 
 total: 29
 passed: 29
-issues: 2
+issues: 1
 pending: 0
 skipped: 0
 
@@ -268,6 +268,7 @@ skipped: 0
 - truth: "A suíte do release-close roda com o comando que os documentos da fase registram."
   status: fixed
   resolved: 2026-09-25
+  commit: fb7d15b
   reason: >
     As SUMMARYs, PLANs, RESEARCH, VALIDATION e REVIEW registravam
     `node --test tools/release-close/`, que falha com MODULE_NOT_FOUND no Node
@@ -288,6 +289,7 @@ skipped: 0
 - truth: "Uma falha de transporte ou um envelope fora de formato em getReleaseByTag/listMilestones chegam ao operador como recusa PT-BR com exit 1, nunca como crash e nunca liberando o apply."
   status: fixed
   resolved: 2026-09-25
+  commit: fb7d15b
   reason: >
     CORRIGIDO nesta sessão, depois de confirmado por execução. Havia DOIS defeitos na
     mesma função, ambos por `camadaDeDecisao` não guardar as duas leituras de evidência
@@ -316,6 +318,7 @@ skipped: 0
   status: deferred
   deferred_to: phase-10
   decided: 2026-09-25
+  commit: 0578c2d
   reason: >
     DECISÃO DO OPERADOR: empurrado para a Fase 10, onde a evidência de CI real
     existe e pode ser a fonte da chave. Até lá, o contrato do classificador
