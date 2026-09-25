@@ -288,6 +288,199 @@ it('identidade estrita: chama o segundo salto com o SHA exato do objeto da tag',
   assert.deepEqual(segundo.args, [snap.tagRef.data.object.sha]);
 });
 
+// ── Normalização de falha: ausência nunca é inferida de uma falha ───────────
+// Somente o status 404 prova ausência. Permissão negada, estado remoto
+// indeterminado, formato malformado e leitura interrompida recebem código
+// próprio, e nenhum deles pode escapar como rejeição (D-11).
+
+// Executa o predicado capturando tanto a decisão quanto um eventual escape de
+// erro, para que a família que rejeita falhe na asserção e não como exceção.
+const tentar = async (client, expectedSha) => {
+  try {
+    return { decisao: await checkTagEligibility(client, { version: VERSION, expectedSha }) };
+  } catch (erro) {
+    return { erro };
+  }
+};
+
+it('normalização: 404 no primeiro salto é a única ausência', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagRef = { ok: false, status: 404, data: null };
+  const { decisao, erro } = await tentar(makeFakeClient(snap), snap.expectedSha);
+  assert.equal(erro, undefined, `401 deveria devolver decisão, não rejeitar: ${erro?.message}`);
+  assert.equal(decisao.code, 'MISSING');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('normalização: 401 vira PERMISSION e não ausência', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagRef = { ok: false, status: 401, data: null };
+  const { decisao, erro } = await tentar(makeFakeClient(snap), snap.expectedSha);
+  assert.equal(erro, undefined, `401 deveria devolver decisão, não rejeitar: ${erro?.message}`);
+  assert.equal(decisao.code, 'PERMISSION');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+  assert.ok(decisao.reason.includes('401'), `o motivo não nomeia o status: ${decisao.reason}`);
+});
+
+it('normalização: 403 vira PERMISSION e não ausência', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagRef = { ok: false, status: 403, data: null };
+  const { decisao, erro } = await tentar(makeFakeClient(snap), snap.expectedSha);
+  assert.equal(erro, undefined, `403 deveria devolver decisão, não rejeitar: ${erro?.message}`);
+  assert.equal(decisao.code, 'PERMISSION');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+  assert.ok(decisao.reason.includes('403'), `o motivo não nomeia o status: ${decisao.reason}`);
+});
+
+it('normalização: 409 roteirizado vira UNAVAILABLE', async () => {
+  const snap = clone(fixture('reference'));
+  const { decisao, erro } = await tentar(
+    makeFakeClient(snap, { getTagRef: ['status-409'] }),
+    snap.expectedSha,
+  );
+  assert.equal(erro, undefined, `409 deveria devolver decisão, não rejeitar: ${erro?.message}`);
+  assert.equal(decisao.code, 'UNAVAILABLE');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+  assert.ok(decisao.reason.includes('409'), `o motivo não nomeia o status: ${decisao.reason}`);
+});
+
+it('normalização: 422 roteirizado vira UNAVAILABLE', async () => {
+  const snap = clone(fixture('reference'));
+  const { decisao, erro } = await tentar(
+    makeFakeClient(snap, { getTagRef: ['status-422'] }),
+    snap.expectedSha,
+  );
+  assert.equal(erro, undefined, `422 deveria devolver decisão, não rejeitar: ${erro?.message}`);
+  assert.equal(decisao.code, 'UNAVAILABLE');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+  assert.ok(decisao.reason.includes('422'), `o motivo não nomeia o status: ${decisao.reason}`);
+});
+
+it('normalização: 429 roteirizado vira UNAVAILABLE', async () => {
+  const snap = clone(fixture('reference'));
+  const { decisao, erro } = await tentar(
+    makeFakeClient(snap, { getTagRef: ['status-429'] }),
+    snap.expectedSha,
+  );
+  assert.equal(erro, undefined, `429 deveria devolver decisão, não rejeitar: ${erro?.message}`);
+  assert.equal(decisao.code, 'UNAVAILABLE');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+  assert.ok(decisao.reason.includes('429'), `o motivo não nomeia o status: ${decisao.reason}`);
+});
+
+it('normalização: 5xx roteirizado vira UNAVAILABLE', async () => {
+  const snap = clone(fixture('reference'));
+  const { decisao, erro } = await tentar(
+    makeFakeClient(snap, { getTagRef: ['status-5xx'] }),
+    snap.expectedSha,
+  );
+  assert.equal(erro, undefined, `500 deveria devolver decisão, não rejeitar: ${erro?.message}`);
+  assert.equal(decisao.code, 'UNAVAILABLE');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+  assert.ok(decisao.reason.includes('500'), `o motivo não nomeia o status: ${decisao.reason}`);
+});
+
+it('normalização: envelope ok sem data.object é MALFORMED', async () => {
+  const snap = clone(fixture('reference'));
+  delete snap.tagRef.data.object;
+  const { decisao, erro } = await tentar(makeFakeClient(snap), snap.expectedSha);
+  assert.equal(erro, undefined, `envelope sem objeto deveria devolver decisão: ${erro?.message}`);
+  assert.equal(decisao.code, 'MALFORMED');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('normalização: data.object de tipo errado no segundo salto é MALFORMED', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagObject.data.object = 'apenas uma string';
+  const { decisao, erro } = await tentar(makeFakeClient(snap), snap.expectedSha);
+  assert.equal(erro, undefined, `envelope torto deveria devolver decisão: ${erro?.message}`);
+  assert.equal(decisao.code, 'MALFORMED');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('normalização: status não numérico é MALFORMED', async () => {
+  const snap = clone(fixture('reference'));
+  snap.tagRef.status = 'duzentos';
+  const { decisao, erro } = await tentar(makeFakeClient(snap), snap.expectedSha);
+  assert.equal(erro, undefined, `status torto deveria devolver decisão: ${erro?.message}`);
+  assert.equal(decisao.code, 'MALFORMED');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('normalização: getTagRef com tempo esgotado devolve TRANSPORT', async () => {
+  const snap = clone(fixture('reference'));
+  const { decisao, erro } = await tentar(
+    makeFakeClient(snap, { getTagRef: ['timeout'] }),
+    snap.expectedSha,
+  );
+  assert.equal(erro, undefined, `leitura interrompida não pode escapar: ${erro?.message}`);
+  assert.equal(decisao.code, 'TRANSPORT');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('normalização: getBranchHead com resposta perdida devolve TRANSPORT', async () => {
+  const snap = clone(fixture('reference'));
+  const { decisao, erro } = await tentar(
+    makeFakeClient(snap, { getBranchHead: ['lost-response'] }),
+    snap.expectedSha,
+  );
+  assert.equal(erro, undefined, `leitura interrompida não pode escapar: ${erro?.message}`);
+  assert.equal(decisao.code, 'TRANSPORT');
+  assert.equal(decisao.eligible, false);
+  assert.equal(decisao.writeAction, null);
+});
+
+it('normalização: nenhuma família de falha escapa como rejeição', async () => {
+  const base = () => clone(fixture('reference'));
+  const familias = [
+    ['404', () => { const s = base(); s.tagRef = { ok: false, status: 404, data: null }; return makeFakeClient(s); }],
+    ['401', () => { const s = base(); s.tagRef = { ok: false, status: 401, data: null }; return makeFakeClient(s); }],
+    ['403', () => { const s = base(); s.tagRef = { ok: false, status: 403, data: null }; return makeFakeClient(s); }],
+    ['409', () => makeFakeClient(base(), { getTagRef: ['status-409'] })],
+    ['422', () => makeFakeClient(base(), { getTagRef: ['status-422'] })],
+    ['429', () => makeFakeClient(base(), { getTagRef: ['status-429'] })],
+    ['5xx', () => makeFakeClient(base(), { getTagRef: ['status-5xx'] })],
+    ['sem objeto', () => { const s = base(); delete s.tagRef.data.object; return makeFakeClient(s); }],
+    ['objeto torto', () => { const s = base(); s.tagObject.data.object = 'string'; return makeFakeClient(s); }],
+    ['status torto', () => { const s = base(); s.tagRef.status = 'duzentos'; return makeFakeClient(s); }],
+    ['timeout', () => makeFakeClient(base(), { getTagRef: ['timeout'] })],
+    ['resposta perdida', () => makeFakeClient(base(), { getBranchHead: ['lost-response'] })],
+  ];
+  const esperado = {
+    404: 'MISSING',
+    401: 'PERMISSION',
+    403: 'PERMISSION',
+    409: 'UNAVAILABLE',
+    422: 'UNAVAILABLE',
+    429: 'UNAVAILABLE',
+    '5xx': 'UNAVAILABLE',
+    'sem objeto': 'MALFORMED',
+    'objeto torto': 'MALFORMED',
+    'status torto': 'MALFORMED',
+    timeout: 'TRANSPORT',
+    'resposta perdida': 'TRANSPORT',
+  };
+  for (const [nome, fabrica] of familias) {
+    const { decisao, erro } = await tentar(fabrica(), base().expectedSha);
+    assert.equal(erro, undefined, `a família ${nome} escapou como rejeição: ${erro?.message}`);
+    assert.equal(decisao.code, esperado[nome], `código errado na família ${nome}`);
+    assert.equal(decisao.eligible, false, `a família ${nome} ficou elegível`);
+    assert.equal(decisao.writeAction, null, `a família ${nome} carregou writeAction`);
+    assert.ok(decisao.reason.length > 0, `a família ${nome} ficou sem motivo`);
+  }
+});
+
 it('CLI concorda com o predicado: verify --json sai zero com ELIGIBLE e não zero com SAFE-02', () => {
   const baseline = runCli(['verify', '--json']);
   assert.equal(baseline.status, 0);
