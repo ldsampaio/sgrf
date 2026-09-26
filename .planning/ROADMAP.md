@@ -20,7 +20,7 @@ Phase numbering continues from the completed v0.1.1 milestone. Decimal phases ap
 
 |- [x] **Phase 9: Release-Close Contract & Fixtures** - Define the Node 22 operator contract and prove pure ref, CI, and reconciliation decisions with deterministic tests (✅ complete — G-2/G-3 closed, G-1 deferred to Phase 10)
 |- [x] **Phase 10: Read-Only Exact-SHA Preflight** - Prove repository, tag, main, target-SHA CI, Release, and Milestone state without mutations (✅ complete — 8 plans, 228 tests)
-- [ ] **Phase 11: Guarded Idempotent Reconciliation** - Rehearse ordered apply, adoption, retry, conflict, and concurrency behavior without touching the live repository
+|- [x] **Phase 11: Guarded Idempotent Reconciliation** - Apply path recovers from partial, ambiguous, conflicting, concurrent states (✅ complete — 5 plans, 240 tests)
 - [ ] **Phase 12: CI Race Rehearsal & Operator Runbook** - Prove bounded CI settlement and immediate safety fences, and document the complete recovery procedure
 - [ ] **Phase 13: v0.1.1 Live Release & Milestone Recovery** - After explicit operator approval, publish and verify the missing v0.1.1 GitHub Release and Milestone
 
@@ -104,11 +104,19 @@ Plans:
 
   1. Rehearsal adopts a matching published Release, matching owned draft Release, or open/closed Milestone; it creates only a genuinely missing object and always identifies objects by their natural GitHub keys and stable IDs.
   2. A fresh recovery sequence is observably ordered as Release draft → readback → publish → readback → Milestone open → readback → close → final readback, with a fresh snapshot reconstructed after every transition.
-  3. After a timeout, lost response, `409`, `422`, `429`, or server failure, the tool re-reads GitHub before adopting, retrying, or reporting a partial state and never blindly repeats a write.
+  3. After a timeout, lost response, 409, 422, 429, or server failure, the tool re-reads GitHub before adopting, retrying, or reporting a partial state and never blindly repeats a write.
   4. Duplicate or materially conflicting Release/Milestone objects stop the rehearsal with an actionable conflict and are never overwritten or deleted.
-  5. Concurrent invocations for one repository/version on the same workstation are blocked by a local lock, while historical `resume` rejects a target without recorded prior partial-state evidence; all rehearsal writes remain on fake clients or disposable fixtures rather than `ldsampaio/sgrf`.
+  5. Concurrent invocations for one repository/version on the same workstation are blocked by a local lock, while historical resume rejects a target without recorded prior partial-state evidence; all rehearsal writes remain on fake clients or disposable fixtures rather than ldsampaio/sgrf.
 
-**Plans**: TBD
+**Plans**: 11-01 through 11-05 (all executed)
+
+| Plan | Artifact | Status |
+|------|----------|--------|
+| 11-01 | tools/release-close/apply-gate.js — reconciliation sequence | ✅ |
+| 11-02 | tools/release-close/apply-gate.js — retry with re-read | ✅ |
+| 11-03 | tools/release-close/apply-gate.js — conflict detection | ✅ |
+| 11-04 | tools/release-close/apply-gate.js — local lock | ✅ |
+| 11-05 | tools/release-close/apply.test.js — full test suite | ✅ |
 
 ### Phase 12: CI Race Rehearsal & Operator Runbook
 
