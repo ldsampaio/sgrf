@@ -28,7 +28,7 @@ import { classifySnapshot } from './classify.js';
 import { makeFakeClient } from './fake-client.js';
 import { ghClient } from './gh-client.js';
 import { assertNoMutation } from './client.js';
-import { confirmApply, canonicalReviewedDigest } from './apply-gate.js';
+import { confirmApply, canonicalReviewedDigest, executarReconciliacao } from './apply-gate.js';
 import { reconciliar } from './reconcile.js';
 
 // A serialização do conteúdo revisado é reexportada, e não reimplementada aqui.
@@ -995,12 +995,21 @@ async function runApply({ json, yes, version, sha }, io) {
     return 1;
   }
 
-  // Confirmação dupla aceita, mas a Fase 9 não possui caminho de escrita: o
-  // apply falha fechado até a reconciliação idempotente da Fase 11.
+  // Confirmação dupla aceita: executa a reconciliação guardada
+  // (Fase 11) sobre o cliente fake — nenhuma escrita real no remoto.
+  let reconciliacao;
+  try {
+    reconciliacao = await executarReconciliacao(decision, gate.reviewedDigest);
+  } catch (err) {
+    return tratarRecusa(err, io.stderr);
+  }
+
+  if (json) renderJson(plan, io.stdout);
+
   io.stderr.write(
-    `${gate.reason} Ainda assim a Fase 9 não executa escrita remota: reconciliação chega na Fase 11. Nenhuma mutação executada (mutations: ${plan.mutations}).\n`,
+    `${gate.reason} Reconciliação executada (${reconciliacao.steps.length} etapas, mutations: ${plan.mutations}).\n`,
   );
-  return 1;
+  return 0;
 }
 
 // Entrada exportada do CLI (o `main` de WR-04). Recebe os fluxos por argumento

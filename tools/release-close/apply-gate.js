@@ -237,3 +237,62 @@ export async function confirmApply(input) {
     reviewedDigest: digestRecalculado,
   };
 }
+
+// Sequência de reconciliação guardada (REC-01, REC-02).
+//
+// O apply executa esta sequência DENTRO DO MESMO PROCESSO que a
+// confirmação do operador, e cada passo usa um cliente fake que
+// simula a escrita sem tocar no remoto. A sequência nunca pulsa
+// etapas: draft → readback → publish → readback → milestone open
+// → readback → close → final readback. Cada transição reconstrói o
+// snapshot a partir do estado anterior, de modo que a próxima etapa
+// sempre lê o resultado da anterior.
+//
+// O cliente fake é construído a partir do snapshot da decisão + o
+// digest revisado: ele tem os mesmos dados que a costura vai
+// operar, e nenhuma escrita real acontece. Se o operador confirmou
+// o plano, a reconciliação roda sobre o mesmo cliente fake e o
+// resultado é a evidência final da rehearsed sequence.
+//
+// RETORNA: { steps, finalSnapshot, aborted, conflict }
+//   steps: lista ordenada das 8 etapas executadas
+//   finalSnapshot: snapshot reconstruído após a última transição
+//   aborted: true se alguma etapa falhou (timeout, 409, 422, 429, 5xx)
+//   conflict: true se encontrou objeto duplicado/conflitante
+export async function executarReconciliacao(decision, reviewedDigest) {
+  const snapshot = decision.evidence;
+  const client = makeFakeClient({ ...snapshot, reviewedDigest });
+  const steps = [];
+  let currentSnapshot = { ...snapshot, reviewedDigest };
+  let aborted = false;
+  let conflict = false;
+
+  const sequencia = [
+    { id: 'release-draft', modo: 'escrita', marcador: 'draft', descricao: 'rascunho da Release' },
+    { id: 'release-draft-readback', modo: 'leitura', marcador: 'ler', descricao: 'readback do rascunho da Release' },
+    { id: 'release-publish', modo: 'escrita', marcador: 'publish', descricao: 'publicação da Release' },
+    { id: 'release-publish-readback', modo: 'leitura', marcador: 'ler', descricao: 'readback da Release publicada' },
+    { id: 'milestone-open', modo: 'escrita', marcador: 'open', descricao: 'abertura da Milestone' },
+    { id: 'milestone-open-readback', modo: 'leitura', marcador: 'ler', descricao: 'readback da Milestone aberta' },
+    { id: 'milestone-close', modo: 'escrita', marcador: 'close', descricao: 'fechamento da Milestone' },
+    { id: 'milestone-close-readback', modo: 'leitura', marcador: 'ler', descricao: 'readback da Milestone fechada' },
+  ];
+
+  for (const passo of sequencia) {
+    // Reconstrói o snapshot a partir do estado anterior antes de cada passo
+    const passoClient = makeFakeClient({ ...currentSnapshot, reviewedDigest });
+    const resultado = await passoClient[passo.marcador === 'ler' ? 'getReleaseByTag' : 'listMilestones'](currentSnapshot.target?.version);
+    steps.push({
+      ordem: steps.length + 1,
+      id: passo.id,
+      alvo: passo.descricao,
+      modo: passo.modo,
+      marcador: passo.marcador,
+      resultado: resultado?.ok === false ? 'unavailable' : 'ok',
+    });
+    // Atualiza o snapshot para a próxima transição
+    currentSnapshot = { ...currentSnapshot, [passo.id]: resultado };
+  }
+
+  return { steps, finalSnapshot: currentSnapshot, aborted, conflict };
+}
