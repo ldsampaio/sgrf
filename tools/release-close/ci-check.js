@@ -83,6 +83,11 @@ export async function awaitCIRuns(options) {
       return evidence;
     }
 
+    // If either run exists but is not successful, wait for it to settle
+    // (pending, failed, or unknown status — retry until timeout).
+    // Only abort if both runs are missing AND we've already waited
+    // past the timeout (handled by the loop exit below).
+
     // Pending — wait and retry
     await sleep(pollIntervalMs);
   }

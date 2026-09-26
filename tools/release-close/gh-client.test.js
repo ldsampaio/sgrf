@@ -10,7 +10,7 @@ const LIVE = JSON.parse(readFileSync(new URL('./fixtures/live-baseline.json', im
 describe('live-baseline.json fixture shape', () => {
   it('matches the assertClientShape contract for ghClient', () => {
     const shape = Object.keys(ghClient).sort();
-    assert.deepEqual(shape, ['getBranchHead', 'getReleaseByTag', 'getTagObject', 'getTagRef', 'listCiRuns', 'listMilestones', 'mutations'].sort());
+    assert.deepEqual(shape, ['getBranchHead', 'getMainCIRun', 'getMainRef', 'getReleaseByTag', 'getTagCIRun', 'getTagObject', 'getTagRef', 'listCiRuns', 'listMilestones', 'mutations'].sort());
   });
 
   it('has a mutations getter that returns 0', () => {

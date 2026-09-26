@@ -68,28 +68,34 @@ function listarFontesDeProducao() {
   return achadas;
 }
 
-// Cliente mínimo que satisfaz a superfície: exatamente as seis leituras.
+// Cliente mínimo que satisfaz a superfície: exatamente as nove leituras.
 const LEITURAS = () => ({
   getTagRef: async () => null,
+  getMainRef: async () => null,
   getTagObject: async () => null,
   getBranchHead: async () => null,
   getReleaseByTag: async () => null,
   listMilestones: async () => null,
   listCiRuns: async () => null,
+  getMainCIRun: async () => null,
+  getTagCIRun: async () => null,
 });
 
 // ── Grupo A.1: a superfície declarada ───────────────────────────────────────
 
-it('contrato: READ_METHODS mantém os seis nomes na ordem original', () => {
+it('contrato: READ_METHODS mantém os nove nomes na ordem original', () => {
   assert.deepEqual(contrato.READ_METHODS, [
     'getTagRef',
+    'getMainRef',
     'getTagObject',
     'getBranchHead',
     'getReleaseByTag',
     'listMilestones',
     'listCiRuns',
+    'getMainCIRun',
+    'getTagCIRun',
   ]);
-  assert.equal(contrato.READ_METHODS.length, 6, 'a superfície declarada tem exatamente seis leituras');
+  assert.equal(contrato.READ_METHODS.length, 9, 'a superfície declarada tem exatamente nove leituras');
 });
 
 it('superfície exata: aceita os cinco métodos com contabilidade não chamável', () => {
@@ -525,10 +531,10 @@ it('arapuca: a numeração de sequência começa em um e sobe de um em um', asyn
   }
   assert.deepEqual(
     fake.calls.map((c) => c.seq),
-    [1, 2, 3, 4, 5, 6],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9],
   );
   assert.equal(fake.calls[0].method, 'getTagRef');
-  assert.equal(fake.calls[5].method, 'listCiRuns');
+  assert.equal(fake.calls[8].method, 'getTagCIRun');
 });
 
 it('arapuca: a ordem das leituras é ref, objeto da tag, cabeça, release, milestones', async () => {
@@ -538,7 +544,7 @@ it('arapuca: a ordem das leituras é ref, objeto da tag, cabeça, release, miles
   }
   assert.deepEqual(
     fake.calls.map((c) => c.method),
-    ['getTagRef', 'getTagObject', 'getBranchHead', 'getReleaseByTag', 'listMilestones', 'listCiRuns'],
+    ['getTagRef', 'getMainRef', 'getTagObject', 'getBranchHead', 'getReleaseByTag', 'listMilestones', 'listCiRuns', 'getMainCIRun', 'getTagCIRun'],
   );
 });
 

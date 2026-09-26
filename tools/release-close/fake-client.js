@@ -144,6 +144,9 @@ function buildFakeClient(snapshot, failurePlan, { trapVisivel }) {
     async getTagRef(version) {
       return serve('getTagRef', [version], () => snapshot.tagRef);
     },
+    async getMainRef() {
+      return serve('getMainRef', [], () => snapshot.mainRef);
+    },
     async getTagObject(tagSha) {
       return serve('getTagObject', [tagSha], () => snapshot.tagObject);
     },
@@ -158,6 +161,12 @@ function buildFakeClient(snapshot, failurePlan, { trapVisivel }) {
     },
     async listCiRuns(expectedSha, branch = 'main') {
       return serve('listCiRuns', [expectedSha, branch], () => snapshot.ciRuns || { runs: [], failedRunIds: [] });
+    },
+    async getMainCIRun(repo, expectedSha) {
+      return serve('getMainCIRun', [repo, expectedSha], () => snapshot.mainCIRun);
+    },
+    async getTagCIRun(repo, expectedSha) {
+      return serve('getTagCIRun', [repo, expectedSha], () => snapshot.tagCIRun);
     },
   };
 

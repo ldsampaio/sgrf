@@ -6,7 +6,7 @@
     {
       "number": "9",
       "name": "Release-Close Contract & Fixtures",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "10",
@@ -30,9 +30,9 @@
     }
   ],
   "next": {
-    "command": "/gsd:progress",
-    "label": "Show progress",
-    "reason": "Unsure of state — showing progress"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 09 of 5 · executing"
   },
-  "updated_at": "2026-09-25T13:32:05.233Z"
+  "updated_at": "2026-09-25T16:41:00.297Z"
 }

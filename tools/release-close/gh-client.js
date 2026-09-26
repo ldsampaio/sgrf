@@ -76,13 +76,40 @@ export async function listCiRuns(expectedSha, branch = 'main') {
   return { ok: true, status: 200, data: { runs: records, failedRunIds } };
 }
 
+export async function getMainRef() {
+  const data = await ghApi(`/repos/${REPO}/git/refs/heads/main`);
+  if (!data || data.status === 404) return { ok: false, status: 404, data: null };
+  return { ok: true, status: 200, data: { sha: data.object.sha } };
+}
+
+export async function getMainCIRun(repo, expectedSha) {
+  const data = await ghApi(`/repos/${REPO}/actions/runs?event=push&per_page=1&branch=main&head_sha=${expectedSha}`);
+  if (!data || data.status === 404) return { ok: false, status: 404, data: null };
+  const records = Array.isArray(data.workflow_runs) ? data.workflow_runs : (Array.isArray(data) ? data : []);
+  const run = records[0] || null;
+  if (!run) return { ok: false, status: 404, data: null };
+  return { ok: true, status: 200, data: { id: run.id, status: run.status, conclusion: run.conclusion, headSha: run.head_sha, url: run.html_url } };
+}
+
+export async function getTagCIRun(repo, expectedSha) {
+  const data = await ghApi(`/repos/${REPO}/actions/runs?event=push&per_page=1&branch=main&head_sha=${expectedSha}`);
+  if (!data || data.status === 404) return { ok: false, status: 404, data: null };
+  const records = Array.isArray(data.workflow_runs) ? data.workflow_runs : (Array.isArray(data) ? data : []);
+  const run = records[0] || null;
+  if (!run) return { ok: false, status: 404, data: null };
+  return { ok: true, status: 200, data: { id: run.id, status: run.status, conclusion: run.conclusion, headSha: run.head_sha, url: run.html_url } };
+}
+
 export const ghClient = {
   getTagRef,
+  getMainRef,
   getTagObject,
   getBranchHead,
   getReleaseByTag,
   listMilestones,
   listCiRuns,
+  getMainCIRun,
+  getTagCIRun,
   get mutations() { return 0; },
 };
 

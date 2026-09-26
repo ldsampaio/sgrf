@@ -30,11 +30,14 @@
 
 export const READ_METHODS = [
   'getTagRef',
+  'getMainRef',
   'getTagObject',
   'getBranchHead',
   'getReleaseByTag',
   'listMilestones',
   'listCiRuns',
+  'getMainCIRun',
+  'getTagCIRun',
 ];
 
 export function assertClientShape(client) {

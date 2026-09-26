@@ -1,0 +1,59 @@
+{
+  "phase": "10",
+  "phase_name": "Read-Only Exact-SHA Preflight",
+  "timestamp": "2026-09-25T22:40:00Z",
+  "areas_completed": ["Runs de CI", "Fonte do G-1"],
+  "areas_remaining": ["404 vs 403", "verify 09 vs 10"],
+  "decisions": {
+    "Runs de CI": [
+      {
+        "question": "Como o preflight descobre os dois IDs de execucao canonicos?",
+        "answer": "Descoberta por propriedade (branch + event=push + SHA exato), sem flag nova. A mais simples: o operador nao precisa saber nenhum ID; requiredRunIds vira resultado da descoberta, nao entrada.",
+        "options_presented": [
+          "Descobrir por propriedade (branch + event + SHA)",
+          "Allowlist explicita do operador (--runs)",
+          "Descoberta com override opcional",
+          "Voce decide"
+        ]
+      },
+      {
+        "question": "Se o CI foi re-executado no mesmo branch+SHA, qual execucao vale como canonica?",
+        "answer": "Regra de conjunto, nao de membro: para cada branch+SHA, o run MAIS RECENTE deve estar verde. A CI nao pode ser idempotente (on: [push, pull_request] cria run novo a cada push); o que se garante e idempotencia do VEREDITO da ferramenta, que e funcao do conjunto. Monotonico: re-run verde recupera, re-run vermelho bloqueia.",
+        "options_presented": [
+          "Vale o verde mais recente de cada branch",
+          "Nenhum run nao-verde em nenhum momento",
+          "Algum verde basta; vermelhos antigos sao historico",
+          "Voce decide"
+        ]
+      }
+    ],
+    "Fonte do G-1": [
+      {
+        "question": "failedRunIds hoje e top-level e so aparece nos fixtures. Onde a fase 10 deve Produzi-la?",
+        "answer": "Derivar de ci.records, com o classificador lendo ci.records diretamente. Remove a chave failedRunIds top-level por completo. Nenhuma leitura nova (superficie de 09-06 intacta). Consequencia aceita: os testes de 09 que fixavam o fail-open como expectativa (evidence.test.js, safe04.test.js) vao precisar mudar — o vermelho e o sinal correto.",
+        "options_presented": [
+          "Derivar de ci.records, entregar em failedRunIds",
+          "Adicionar uma leitura sexta de runs vermelhos",
+          "Manter chave separada mas preencher no buildCloseEvidence",
+          "Voce decide"
+        ]
+      }
+    ]
+  },
+  "deferred_ideas": [
+    "Tornar a CI idempotente foi considerado e rejeitado como impossivel: on: [push, pull_request] cria um run novo a cada push, para sempre. A idempotencia foi posta no veredito da ferramenta (funcao do conjunto), que e o que a fase entrega."
+  ],
+  "canonical_refs": [
+    ".planning/ROADMAP.md",
+    ".planning/REQUIREMENTS.md",
+    ".planning/PROJECT.md",
+    ".planning/phases/09-release-close-contract-fixtures/09-CONTEXT.md",
+    ".planning/phases/09-release-close-contract-fixtures/09-UAT.md",
+    ".planning/phases/09-release-close-contract-fixtures/COVERAGE.md",
+    "tools/release-close/classify.js",
+    "tools/release-close/release-close.js",
+    "tools/release-close/gh-client.js",
+    "tools/release-close/client.js",
+    ".github/workflows/ci.yml"
+  ]
+}

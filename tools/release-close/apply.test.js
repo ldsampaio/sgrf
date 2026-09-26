@@ -4,8 +4,12 @@ import { executarReconciliacao, executarReconciliacaoComRetry, detectarConflito,
 import { makeFakeClient } from './fake-client.js';
 
 const SNAPSHOT = {
-  target: { version: 'v0.1.1', expectedSha: '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf' },
+  target: { version: 'v0.1.1', expectedSha: '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf', tagName: 'v0.1.1' },
+  mainRef: { sha: '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf' },
+  tagRef: { sha: '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf' },
   ci: { event: 'push', targetSha: '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf', requiredRunIds: [36095855139, 36095872529], records: [] },
+  mainCIRun: { id: 36095855139, status: 'completed', conclusion: 'success', headSha: '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf' },
+  tagCIRun: { id: 36095872529, status: 'completed', conclusion: 'success', headSha: '10c62ac85fd3ab275b8926c89f5f34ba4116e2cf' },
   releases: [],
   milestones: [],
   closeMarkers: [],
@@ -13,14 +17,14 @@ const SNAPSHOT = {
 
 describe('executarReconciliacao', () => {
   it('executa a sequência completa de 8 etapas', async () => {
-    const resultado = await executarReconciliacao(SNAPSHOT, 'digest123');
+    const resultado = await executarReconciliacao({ evidence: SNAPSHOT }, 'digest123');
     assert.equal(resultado.steps.length, 8);
     assert.equal(resultado.aborted, false);
     assert.equal(resultado.conflict, false);
   });
 
   it('sequência ordenada: draft → readback → publish → readback → open → readback → close → readback', async () => {
-    const resultado = await executarReconciliacao(SNAPSHOT, 'digest123');
+    const resultado = await executarReconciliacao({ evidence: SNAPSHOT }, 'digest123');
     const ids = resultado.steps.map((s) => s.id);
     assert.deepEqual(ids, [
       'release-draft',
