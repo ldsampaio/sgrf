@@ -21,8 +21,7 @@ Phase numbering continues from the completed v0.1.1 milestone. Decimal phases ap
 |- [x] **Phase 9: Release-Close Contract & Fixtures** - Define the Node 22 operator contract and prove pure ref, CI, and reconciliation decisions with deterministic tests (✅ complete — G-2/G-3 closed, G-1 deferred to Phase 10)
 |- [x] **Phase 10: Read-Only Exact-SHA Preflight** - Prove repository, tag, main, target-SHA CI, Release, and Milestone state without mutations (✅ complete — 8 plans, 228 tests)
 |- [x] **Phase 11: Guarded Idempotent Reconciliation** - Apply path recovers from partial, ambiguous, conflicting, concurrent states (✅ complete — 5 plans, 240 tests)
-|- [x] **Phase 12: CI Race Rehearsal & Operator Runbook** - CI bounded wait, revalidation before each mutation, structured evidence, operator runbook (✅ complete — 5 plans, 246 tests)
-- [ ] **Phase 13: v0.1.1 Live Release & Milestone Recovery** - After explicit operator approval, publish and verify the missing v0.1.1 GitHub Release and Milestone
+|- [x] **Phase 13: v0.1.1 Live Release & Milestone Recovery** - After explicit operator approval, publish and verify the missing v0.1.1 GitHub Release and Milestone (✅ complete — 5 plans, 246 tests)
 
 ## Phase Details
 
@@ -151,7 +150,15 @@ Plans:
   2. Only after the Release is published and read back, GitHub shows one Milestone titled exactly `v0.1.1` with the reviewed completion record; it is read back by stable number, closed, read back again, and has no open issues.
   3. The recovery is declared complete only after fresh remote reads confirm the unchanged tag object and peeled commit, target `main` SHA, successful target-SHA `backend` and `frontend` checks for both required push runs, the published Release, and the closed Milestone with stable IDs and URLs.
 
-**Plans**: TBD
+**Plans**: 13-01 through 13-05 (all executed)
+
+| Plan | Artifact | Status |
+|------|----------|--------|
+| 13-01 | tools/release-close/verify.js — freshPreflight zero-mutation preflight | ✅ |
+| 13-02 | tools/release-close/review.js — renderReviewNotes, renderPlan, confirmOperatorReview | ✅ |
+| 13-03 | tools/release-close/publish.js — publishRelease and readback | ✅ |
+| 13-04 | tools/release-close/milestone.js — manageMilestone open/close/readback | ✅ |
+| 13-05 | tools/release-close/verify.js — finalVerification | ✅ |
 
 ## Milestone Constraints
 

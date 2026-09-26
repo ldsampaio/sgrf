@@ -4,13 +4,13 @@ milestone: v0.1.2
 milestone_name: GitHub Release Reliability
 status: executing
 last_updated: "2026-09-25T22:48:50.728Z"
-last_activity: 2026-09-25 — Phase 12 complete (5 plans, 246 tests pass)
+last_activity: 2026-09-25 — Phase 13 complete (5 plans, 246 tests pass)
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 27
-  completed_plans: 27
-  percent: 80
+  completed_phases: 5
+  total_plans: 32
+  completed_plans: 32
+  percent: 100
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: `.planning/PROJECT.md` (updated 2026-09-25)
 
 ## Current Position
 
-Phase: 12 (CI Race Rehearsal & Operator Runbook) — COMPLETE
+Phase: 13 (v0.1.1 Live Release & Milestone Recovery) — COMPLETE
 Plan: all 5 plans executed
-Status: Phase 12 complete
-Last activity: 2026-09-25 — Phase 12 complete (5 plans, 246 tests pass)
+Status: Phase 13 complete
+Last activity: 2026-09-25 — Phase 13 complete (5 plans, 246 tests pass)
 
-Progress: [████████████] 80% (4/5 phases; Phase 09, 10, 11, 12 complete)
+Progress: [████████████] 100% (5/5 phases; Phase 09, 10, 11, 12, 13 complete)
 
 ## Performance Metrics
 
