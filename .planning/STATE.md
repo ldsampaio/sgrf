@@ -4,13 +4,13 @@ milestone: v0.1.2
 milestone_name: GitHub Release Reliability
 status: executing
 last_updated: "2026-09-25T22:48:50.728Z"
-last_activity: 2026-09-25 — Phase 11 complete (5 plans, 240 tests pass)
+last_activity: 2026-09-25 — Phase 12 complete (5 plans, 246 tests pass)
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 22
-  completed_plans: 22
-  percent: 60
+  completed_phases: 4
+  total_plans: 27
+  completed_plans: 27
+  percent: 80
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: `.planning/PROJECT.md` (updated 2026-09-25)
 
 ## Current Position
 
-Phase: 11 (Guarded Idempotent Reconciliation) — COMPLETE
+Phase: 12 (CI Race Rehearsal & Operator Runbook) — COMPLETE
 Plan: all 5 plans executed
-Status: Phase 11 complete
-Last activity: 2026-09-25 — Phase 11 complete (5 plans, 240 tests pass)
+Status: Phase 12 complete
+Last activity: 2026-09-25 — Phase 12 complete (5 plans, 246 tests pass)
 
-Progress: [████████████] 60% (3/5 phases; Phase 09, 10, 11 complete)
+Progress: [████████████] 80% (4/5 phases; Phase 09, 10, 11, 12 complete)
 
 ## Performance Metrics
 

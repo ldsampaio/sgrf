@@ -21,7 +21,7 @@ Phase numbering continues from the completed v0.1.1 milestone. Decimal phases ap
 |- [x] **Phase 9: Release-Close Contract & Fixtures** - Define the Node 22 operator contract and prove pure ref, CI, and reconciliation decisions with deterministic tests (✅ complete — G-2/G-3 closed, G-1 deferred to Phase 10)
 |- [x] **Phase 10: Read-Only Exact-SHA Preflight** - Prove repository, tag, main, target-SHA CI, Release, and Milestone state without mutations (✅ complete — 8 plans, 228 tests)
 |- [x] **Phase 11: Guarded Idempotent Reconciliation** - Apply path recovers from partial, ambiguous, conflicting, concurrent states (✅ complete — 5 plans, 240 tests)
-- [ ] **Phase 12: CI Race Rehearsal & Operator Runbook** - Prove bounded CI settlement and immediate safety fences, and document the complete recovery procedure
+|- [x] **Phase 12: CI Race Rehearsal & Operator Runbook** - CI bounded wait, revalidation before each mutation, structured evidence, operator runbook (✅ complete — 5 plans, 246 tests)
 - [ ] **Phase 13: v0.1.1 Live Release & Milestone Recovery** - After explicit operator approval, publish and verify the missing v0.1.1 GitHub Release and Milestone
 
 ## Phase Details
@@ -126,11 +126,19 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
   1. The tool waits only within a bounded window for the canonical target-SHA main and tag CI runs, and pending, contradictory, wrong-SHA, failed, or newly divergent evidence aborts without a remote write.
-  2. Ref and CI evidence are revalidated immediately before each mutation; a delayed tag run resets the fence, while a simulated `main` advance or late failure prevents the next write.
+  2. Ref and CI evidence are revalidated immediately before each mutation; a delayed tag run resets the fence, while a simulated main advance or late failure prevents the next write.
   3. Structured output and optional evidence contain action results, timestamps, full SHAs, run/job/check IDs, Release ID/URL, Milestone number/URL, and a partial-state next action without exposing credentials or authorization headers.
   4. A checked-in operator runbook covers authentication, permissions, read-only preflight, reviewed plan, explicit apply confirmation, safe rerun, partial-state recovery, conflict resolution, rollback boundaries, and the live v0.1.1 procedure.
 
-**Plans**: TBD
+**Plans**: 12-01 through 12-05 (all executed)
+
+| Plan | Artifact | Status |
+|------|----------|--------|
+| 12-01 | tools/release-close/ci-check.js — bounded CI wait window | ✅ |
+| 12-02 | tools/release-close/apply-gate.js — revalidation before each mutation | ✅ |
+| 12-03 | tools/release-close/evidence.js — structured evidence output | ✅ |
+| 12-04 | docs/12-operator-runbook.md — operator runbook | ✅ |
+| 12-05 | tools/release-close/ci-check.test.js — CI race tests | ✅ |
 
 ### Phase 13: v0.1.1 Live Release & Milestone Recovery
 
