@@ -52,6 +52,8 @@
 // a fechadura de sink fecha.
 
 import { createHash } from 'node:crypto';
+import { makeFakeClient } from './fake-client.js';
+import { revalidateBeforeMutation } from './ci-check.js';
 
 export const CONFIRMATION_WORD = 'sim';
 
@@ -280,6 +282,33 @@ export async function executarReconciliacao(decision, reviewedDigest) {
   ];
 
   for (const passo of sequencia) {
+    // Revalida ref e CI antes de cada passo de escrita (REC-05).
+    // Se a evidência mudou (tag atrasada, main avançou, falha tardia),
+    // a cerca é resetada e a sequência para com próxima ação clara.
+    if (passo.modo === 'escrita') {
+      const revalid = await revalidateBeforeMutation({
+        ghClient: makeFakeClient({ ...currentSnapshot, reviewedDigest }),
+        repo: decision.repo || 'ldsampaio/sgrf',
+        targetSha: currentSnapshot.target?.expectedSha,
+        currentStep: passo.id,
+        evidence: currentSnapshot,
+      });
+      if (revalid.aborted) {
+        aborted = true;
+        steps.push({
+          ordem: steps.length + 1,
+          id: passo.id,
+          alvo: passo.descricao,
+          modo: passo.modo,
+          marcador: passo.marcador,
+          resultado: 'aborted',
+          abortReason: revalid.abortReason,
+          nextAction: revalid.nextAction,
+        });
+        break;
+      }
+    }
+
     // Reconstrói o snapshot a partir do estado anterior antes de cada passo
     const passoClient = makeFakeClient({ ...currentSnapshot, reviewedDigest });
     const resultado = await passoClient[passo.marcador === 'ler' ? 'getReleaseByTag' : 'listMilestones'](currentSnapshot.target?.version);

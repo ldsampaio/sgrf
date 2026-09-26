@@ -26,6 +26,25 @@ export async function awaitCIRuns(options) {
     nextAction: null,
   };
 
+  // timeoutMs === 0 means "check current state once, no waiting" —
+  // used by revalidation before mutation.
+  if (timeoutMs === 0) {
+    const [mainRun, tagRun] = await Promise.all([
+      ghClient.getMainCIRun(repo, targetSha),
+      ghClient.getTagCIRun(repo, targetSha),
+    ]);
+    if (mainRun && mainRun.status === 'completed' && mainRun.conclusion === 'success' &&
+        tagRun && tagRun.status === 'completed' && tagRun.conclusion === 'success') {
+      evidence.runs = [mainRun, tagRun];
+      evidence.nextAction = 'proceed to mutation';
+      return evidence;
+    }
+    evidence.aborted = true;
+    evidence.abortReason = 'CI not settled in current state';
+    evidence.nextAction = 'wait for CI and retry';
+    return evidence;
+  }
+
   while (Date.now() - start < timeoutMs) {
     const [mainRun, tagRun] = await Promise.all([
       ghClient.getMainCIRun(repo, targetSha),
@@ -95,14 +114,16 @@ export async function revalidateBeforeMutation(options) {
     nextAction: null,
   };
 
-  // Re-read the tag ref
-  const tagRef = await ghClient.getTagRef(repo, evidence.target.tagName);
-  if (!tagRef || tagRef.sha !== evidence.target.expectedSha) {
-    revalidation.refValid = false;
-    revalidation.aborted = true;
-    revalidation.abortReason = `tag ${evidence.target.tagName} SHA changed or missing`;
-    revalidation.nextAction = 're-verify tag and restart preflight';
-    return revalidation;
+  // Re-read the tag ref (skip if tagName not in evidence).
+  if (evidence.target?.tagName) {
+    const tagRef = await ghClient.getTagRef(repo, evidence.target.tagName);
+    if (!tagRef || tagRef.sha !== evidence.target.expectedSha) {
+      revalidation.refValid = false;
+      revalidation.aborted = true;
+      revalidation.abortReason = `tag ${evidence.target.tagName} SHA changed or missing`;
+      revalidation.nextAction = 're-verify tag and restart preflight';
+      return revalidation;
+    }
   }
 
   // Re-read main ref
