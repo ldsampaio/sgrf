@@ -1,0 +1,45 @@
+# Release: na tag v* (ex: v0.1.2), builda a imagem única e publica no GHCR
+# como ghcr.io/ldsampaio/sgrf:<versão> e :latest.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/ldsampaio/sgrf
+          tags: |
+            # {{raw}} preserva o prefixo "v" da tag (imagem: ghcr.io/ldsampaio/sgrf:v0.1.2).
+            # {{version}} publicaria como :0.1.2 e quebraria o SGRF_IMAGE do compose.
+            type=semver,pattern={{raw}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
