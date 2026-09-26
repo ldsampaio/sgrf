@@ -95,10 +95,11 @@ No TypeScript anywhere; no lint/typecheck tooling configured (per `AGENTS.md` �
 
 **Build:**
 
-- `frontend/vite.config.js` — Vue plugin, dev port 5173, proxy `/api` → `http://localhost:3000`
-- `Dockerfile` — two-stage: SPA build → backend install + `npx prisma generate`, non-root `app` user, `ENTRYPOINT docker-entrypoint.sh` (runs `prisma migrate deploy` + `prisma/seed.js`)
-- `compose.yaml` — single image, `SERVE_FRONTEND=true`, SPA fallback route in `backend/src/app.js`
-- No ESLint/Prettier/Biome config, no `tsconfig`, no CI config (`.github/` absent), no `vitest.config.*`
+|- `frontend/vite.config.js` — Vue plugin, dev port 5173, proxy `/api` → `http://localhost:3000`
+|- `Dockerfile` — two-stage: SPA build → backend install + `npx prisma generate`, non-root `app` user, `ENTRYPOINT docker-entrypoint.sh` (runs `prisma migrate deploy` + `prisma/seed.js`)
+|- `compose.yaml` — single image, `SERVE_FRONTEND=true`, SPA fallback route in `backend/src/app.js`
+|- CI: `.github/workflows/ci.yml` — backend (`npx vitest run`) + frontend (`npm run build`) gates on `main`
+|- `tools/release-close/` — release-close CLI: verify/plan/apply verbs, gh-client.js real `gh` reads, fake-client.js stub, evidence/classifier/eligibility modules
 
 ## Platform Requirements
 

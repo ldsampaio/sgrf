@@ -81,7 +81,8 @@ last_mapped_at: 2026-09-23
 
 **CI Pipeline:**
 
-- None — no `.github/`, no CI config files; verification is manual (`AGENTS.md`: backend `npx vitest run`, frontend `npm run build`)
+- `.github/workflows/ci.yml` — backend (`cd backend && npx vitest run`) + frontend (`cd frontend && npm run build`) gates on `main`
+- Git remote: `https://github.com/ldsampaio/sgrf.git`
 
 ## Environment Configuration
 

@@ -1,125 +1,112 @@
 ---
-gsd_state_version: "1.0"
-milestone: v0.1.1
-status: Awaiting next milestone
-stopped_at: Completed Phase 8 — all 4 plans executed
-last_updated: "2026-09-25T04:36:25.448Z"
-last_activity: 2026-09-25
-last_activity_desc: Milestone v0.1.1 completed and archived
-state_head: c739c1da32aef5a1295579535e6348295b372887
+gsd_state_version: 1.0
+milestone: v0.1.2
+milestone_name: GitHub Release Reliability
+status: executing
+last_updated: "2026-09-25T22:48:50.728Z"
+last_activity: 2026-09-25 — Phase 13 complete (5 plans, 246 tests pass)
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 29
-  completed_plans: 29
-current_phase: 08
-current_phase_name: Reports/Audit & Auth Polish
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 32
+  completed_plans: 32
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-24)
+See: `.planning/PROJECT.md` (updated 2026-09-25)
 
 **Core value:** Requests are decided correctly and funds cannot leak — the right people approve the right amounts, every state change is authorized and auditable, and the ledger always balances.
-**Current focus:** Phase 08 — Reports/Audit & Auth Polish
+**Current focus:** Phase 10 — Read-Only Exact-SHA Preflight
 
 ## Current Position
 
-Phase: Milestone v0.1.1 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-09-25 — Milestone v0.1.1 completed and archived
+Phase: 13 (v0.1.1 Live Release & Milestone Recovery) — COMPLETE
+Plan: all 5 plans executed
+Status: Phase 13 complete
+Last activity: 2026-09-25 — Phase 13 complete (5 plans, 246 tests pass)
+
+Progress: [████████████] 100% (5/5 phases; Phase 09, 10, 11, 12, 13 complete)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 14
-- Average duration: — min
-- Total execution time: 0 hours
+- Plans completed in v0.1.2: 9
+- Plans completed in v0.1.1: 29
+- Average duration: 11 min
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1 | 3 | - | - |
-| 03 | 4 | - | - |
-| 04 | 3 | - | - |
-| 05 | 4 | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: —
-- Trend: —
+|| Phase | Plans | Completed | Avg/Plan |
+||-------|-------|-----------|----------|
+|| 9 | 9 | 9 | 11 min |
+|| 10 | TBD | 0 | - |
+|| 11 | TBD | 0 | - |
+|| 12 | TBD | 0 | - |
+|| 13 | TBD | 0 | - |
 
 *Updated after each plan completion*
 **Per-Plan Metrics:**
 
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
-| Phase 01-ci-regression-gate P01 | 2min | 2 tasks | 1 files |
-| Phase 01-ci-regression-gate P02 | 3min | 2 tasks | 1 files |
-| Phase 01-ci-regression-gate P03 | 4min | 2 tasks | 1 files |
-| Phase 05 P01 | 3min | 3 tasks | 3 files |
-| Phase 05 P03 | 2min | 2 tasks | 0 files |
-| Phase 6 P1 | 15 | 3 tasks | 2 files |
-| Phase 6 P2 | 7 | 2 tasks | 2 files |
-| Phase 06 P03 | 25 | 4 tasks | 6 files |
-| Phase 06 P04 | 35 | 3 tasks | 3 files |
+|| Plan | Duration | Tasks | Files |
+||------|----------|-------|-------|
+|| Phase 09 P01 | 12min | 3 tasks | 7 files |
+|| Phase 09 P02 | 15min | 3 tasks | 11 files |
+|| Phase 09 P03 | 6min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+Decisions are logged in `PROJECT.md`; current milestone constraints are summarized here:
 
-- [Roadmap] Scheduler conflict resolved: plain `setInterval` in `jobs/scheduler.js` (ARCHITECTURE.md) chosen over node-cron 4 (STACK.md) — two fixed-period jobs, zero new deps; recorded in Phase 7
-- [Roadmap] CI action versions: `checkout@v7`/`setup-node@v7` (registry-verified STACK.md wins); ARCHITECTURE.md's v4 snippet is illustrative
-- [Roadmap] SEC-03 kept atomic — trust proxy + rate limits + uniform 401 land together in Phase 8 (trust proxy never splits from rate-limit expansion)
-- [Roadmap] Ordering locked: CI (P1) → docs/14 decisions (P2) → VOT-03/04 implementation (P6); VOT-01 (P6) before JOB-02 (P7); JOB-01 (P7) before SES-02 (P8)
-- [Phase 1]: Protection PUT via JSON body: gh form fields serialize enforce_admins as string and 422; use gh api --input with real booleans/nulls
-- [Phase 1]: Under required checks, land via PR: direct pushes to protected main are declined before CI can run on the SHA (gate working as designed); future phases must use PR flow
-- [Phase 05]: 05-01: proactive form-side draft persist (Requests writes own snapshot; interceptor only bounces, no cross-module hook)
-- [Phase 05]: 05-03 regression pass clean — no defects against 05-01; pre-existing backend/package-lock.json version bump is ambient state, not phase drift
-- [Phase 05]: WR-01/WR-02/WR-03 closed (auth-endpoint bypass, bounce guards, TYPES allowlist); bounce-loop fixed via doBounce no-op on /login (reload resets module flag); logout best-effort + bypassed (WR-04); 05-02 manual protocol 9/9 PASS, verification 8/8
-- [Phase 6]: Chefe can change vote during AGUARDANDO_DESEMPATE to break tie (VOT-01)
-- [Phase 6]: Only CHEFE_DEPARTAMENTO eligible in AGUARDANDO_DESEMPATE (prevents double-vote)
-- [Phase 6]: changeMyVote auto-closes voting after tie-break vote change
-- [Phase 6]: Existing canVote logic for AGUARDANDO_DESEMPATE was already correct per D-01/D-02
-- [Phase 6]: Grep audit documented in code: no other status guards need adjustment for VOT-01
-- [Phase 6]: CONCLUIDO added to annualTotalCents status.in array (VOT-02) — prevents cap bypass via mark-spent cycling; characterization-then-flip tests verify fix
-- [Phase 6]: AGUARDANDO_ARBITRAGEM is a logical state using APROVADO_PARCIALMENTE + decisionReason='AGUARDANDO_ARBITRAGEM' + collegiateMinutes metadata (per Assumption A1)
-- [Phase 6]: Inline compensating REVERSE transaction in requestController.cancel for atomicity with audit
-- [Phase 6]: Mandatory justification for ALL cancellations per RN-010, stored in FinancialTransaction.metadata and AuditEvent.afterData
-- [Phase 6]: Frontend cancel modal shows role-aware warning for approved requests explaining admin/chefe requirement and financial reversal
+- Continuous numbering continues at Phase 9; v0.1.2 uses Phases 9–13 only.
+- Delivery order is fixed: pure contract/fixtures → read-only exact-SHA preflight → guarded idempotent reconciliation → CI/race rehearsal and runbook → live v0.1.1 recovery.
+- The annotated `v0.1.1` tag is immutable; current `main`, peeled tag, and full target SHA all resolve to `10c62ac85fd3ab275b8926c89f5f34ba4116e2cf`.
+- Remote truth comes from fresh GitHub readback; the red backend run on another SHA does not gate recovery, while target-SHA main/tag runs `36095855139` and `36095872529` do.
+- Phase 13 requires fresh verify, reviewed content, displayed plan, and explicit operator confirmation. No live mutation occurs earlier.
+- Application, database, Docker, frontend, and CI test/build commands are unchanged; v2 policy work remains deferred.
+- [Phase 09]: 09-01: eligibility codes fixed as MISSING/LIGHTWEIGHT/SAFE-02/ELIGIBLE (EN codes, PT-BR reasons)
+- [Phase 09]: 09-01: CLI exit contract 0 eligible-or-help, 1 ineligible-or-refusal-or-invalid-input, 2 usage-error
+- [Phase 09]: 09-03: confirmApply is the lock-ordered gate (plan -> flag -> tty -> prompt -> answer) and it writes the rendered plan itself, so plan-visible-before-prompt is executable proof
+- [Phase 09]: 09-03: apply refuses on FAILED/CONCURRENT/CONFLICTING/DUPLICATE after showing the plan and before any prompt; plan exits 1 in the same states so exit 0 never reads as apply-ready
+- [Phase 09]: 09-03: apply --json prints the plan structure before the human text while the gate verdict stays PT-BR text, so an unattended consumer cannot parse its way to a decision
+- [Phase 09]: 09-03: the emitted mutations value is the fake's own write counter, making the zero-mutation claim an implication of the write trap rather than a literal
+- [Phase 09]: 09-03: Phase 9 declares no external API integration — in-memory fake plus throwing gh stub only; live gh api calls land in Phase 10
+- [Phase 09]: G-1 deferred to Phase 10: `failedRunIds` not carried by evidence builder; two suites pin the fail-open as an expectation; wiring a source turns them red — correct signal, must update in same change as Phase 10
 
 ### Pending Todos
 
-None yet.
+- Phase 10: gather context (discuss-phase)
+- Phase 10: plan (9 plans for read-only exact-SHA preflight)
+- Phase 10: execute
 
 ### Blockers/Concerns
 
-- [Phase 6] TOCTOU/concurrency fix (plan 06-05) not explicitly listed in REQUIREMENTS.md — research argues Core Value "funds cannot leak" requires it; orchestrator must confirm scope before planning
-- [Phase 4] supertest DB story (mock Prisma vs test Postgres) undecided — changes CI workflow shape; spike at plan time
-- [Phase 3] HTTPS topology decided: Cloudflare Tunnel is the official TLS termination (no Caddy); cookie/HTTPS story resolved via COOKIE_SECURE env var; trust proxy + rate-limit stays atomic in Phase 8 (D-11) — planned and verified
+- Phase 9 verification gaps G-2 and G-3 closed in follow-up commits (fb7d15b, b196ee0); G-1 deferred to Phase 10 by operator decision.
+- Phase 10 context not yet gathered.
+
+Explicit operator confirmation remains a required Phase 13 gate, not a current roadmap blocker.
 
 ## Deferred Items
 
-Items acknowledged and deferred at milestone close, most recent first:
-
-| Category | Item | Status | Deferred At | Milestone |
-|----------|------|--------|-------------|-----------|
-| *(none)* | | | | |
+|| Category | Item | Status | Deferred At | Milestone |
+||----------|------|--------|-------------|-----------|
+|| Future release hardening | Thin hosted wrapper, immutable releases/rulesets, attestations/assets, distributed locking, automatic publishing, and unrestricted historical publication | Deferred | 2026-09-25 | v0.1.2 |
+|| Phase 9 gap | `failedRunIds` evidence builder key | Deferred to Phase 10 | 2026-09-25 | v0.1.2 |
 
 ## Session Continuity
 
-Last session: 2026-09-25T01:31:28.194Z
-Stopped at: Completed 06-04-PLAN.md
-Resume file: None
+Last session: 2026-09-25T22:48:50.724Z
+Stopped at: Phase 09 verification passed, G-2/G-3 closed, G-1 deferred
+Resume file: .planning/phases/10-read-only-exact-sha-preflight/10-CONTEXT.md
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Phase 09: complete — verification passed (G-2/G-3 fixed, G-1 deferred).
+- Phase 10: run discuss-phase to gather context, then plan → execute → verify.
+- Do not advance to Phase 11 until Phase 10 verification passes.

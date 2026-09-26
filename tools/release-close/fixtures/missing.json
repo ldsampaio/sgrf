@@ -1,0 +1,54 @@
+{
+  "version": "v0.1.1",
+  "expectedSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
+  "tagSha": "0a68d6f0c55e7be07d13a0bbc4ed36d4af772630",
+  "commitSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
+  "releases": [],
+  "milestones": [],
+  "closeMarkers": [],
+  "target": {
+    "version": "v0.1.1",
+    "expectedSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf"
+  },
+  "ci": {
+    "event": "push",
+    "targetSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
+    "requiredRunIds": [36095855139, 36095872529],
+    "records": [
+      {
+        "runId": 36095855139,
+        "job": "backend",
+        "headSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "runId": 36095855139,
+        "job": "frontend",
+        "headSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "runId": 36095872529,
+        "job": "backend",
+        "headSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "runId": 36095872529,
+        "job": "frontend",
+        "headSha": "10c62ac85fd3ab275b8926c89f5f34ba4116e2cf",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "eligibility": {
+    "eligible": true,
+    "code": "ELIGIBLE"
+  },
+  "frozenAt": "2026-09-25T00:00:00.000Z",
+  "runs": [36095855139, 36095872529]
+}
