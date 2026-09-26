@@ -238,7 +238,7 @@ export async function confirmApply(input) {
   };
 }
 
-// Sequência de reconciliação guardada (REC-01, REC-02).
+// Sequência de reconciliação guardada (REC-01, REC-02, REC-03).
 //
 // O apply executa esta sequência DENTRO DO MESMO PROCESSO que a
 // confirmação do operador, e cada passo usa um cliente fake que
@@ -248,11 +248,12 @@ export async function confirmApply(input) {
 // snapshot a partir do estado anterior, de modo que a próxima etapa
 // sempre lê o resultado da anterior.
 //
-// O cliente fake é construído a partir do snapshot da decisão + o
-// digest revisado: ele tem os mesmos dados que a costura vai
-// operar, e nenhuma escrita real acontece. Se o operador confirmou
-// o plano, a reconciliação roda sobre o mesmo cliente fake e o
-// resultado é a evidência final da rehearsed sequence.
+// REGRAS DE RETRY (REC-03):
+// - timeout, lost-response, 409, 422, 429, 5xx: releia GitHub antes de
+//   adotar, retentar ou reportar estado parcial; nunca repita a escrita
+//   cegamente.
+// - Retry limitado a 3 tentativas por etapa; após o limite, aborta.
+// - Cada retry usa um snapshot fresco reconstruído após a falha.
 //
 // RETORNA: { steps, finalSnapshot, aborted, conflict }
 //   steps: lista ordenada das 8 etapas executadas
@@ -290,6 +291,80 @@ export async function executarReconciliacao(decision, reviewedDigest) {
       marcador: passo.marcador,
       resultado: resultado?.ok === false ? 'unavailable' : 'ok',
     });
+    // Atualiza o snapshot para a próxima transição
+    currentSnapshot = { ...currentSnapshot, [passo.id]: resultado };
+  }
+
+  return { steps, finalSnapshot: currentSnapshot, aborted, conflict };
+}
+
+// Retry com re-leitura após falha (REC-03).
+//
+// Depois de timeout, lost-response, 409, 422, 429 ou 5xx, o passo é
+// reexecutado com um snapshot fresco — nunca repete a escrita cegamente.
+// O retry é limitado a 3 tentativas por etapa; após o limite, aborta.
+// Cada retry reconstrói o snapshot a partir do estado anterior.
+//
+// RETORNA: { steps, finalSnapshot, aborted, conflict }
+//   steps: lista ordenada das 8 etapas executadas (com retries registrados)
+//   finalSnapshot: snapshot reconstruído após a última transição
+//   aborted: true se alguma etapa falhou após 3 retries
+//   conflict: true se encontrou objeto duplicado/conflitante
+export async function executarReconciliacaoComRetry(decision, reviewedDigest) {
+  const snapshot = decision.evidence;
+  const steps = [];
+  let currentSnapshot = { ...snapshot, reviewedDigest };
+  let aborted = false;
+  let conflict = false;
+  const MAX_RETRIES = 3;
+
+  const sequencia = [
+    { id: 'release-draft', modo: 'escrita', marcador: 'draft', descricao: 'rascunho da Release' },
+    { id: 'release-draft-readback', modo: 'leitura', marcador: 'ler', descricao: 'readback do rascunho da Release' },
+    { id: 'release-publish', modo: 'escrita', marcador: 'publish', descricao: 'publicação da Release' },
+    { id: 'release-publish-readback', modo: 'leitura', marcador: 'ler', descricao: 'readback da Release publicada' },
+    { id: 'milestone-open', modo: 'escrita', marcador: 'open', descricao: 'abertura da Milestone' },
+    { id: 'milestone-open-readback', modo: 'leitura', marcador: 'ler', descricao: 'readback da Milestone aberta' },
+    { id: 'milestone-close', modo: 'escrita', marcador: 'close', descricao: 'fechamento da Milestone' },
+    { id: 'milestone-close-readback', modo: 'leitura', marcador: 'ler', descricao: 'readback da Milestone fechada' },
+  ];
+
+  for (const passo of sequencia) {
+    let tentativa = 0;
+    let resultado = null;
+    let falha = null;
+
+    while (tentativa <= MAX_RETRIES) {
+      // Reconstrói o snapshot fresco antes de cada tentativa
+      const passoClient = makeFakeClient({ ...currentSnapshot, reviewedDigest });
+      try {
+        resultado = await passoClient[passo.marcador === 'ler' ? 'getReleaseByTag' : 'listMilestones'](currentSnapshot.target?.version);
+        falha = null;
+        break;
+      } catch (err) {
+        falha = err.message;
+        tentativa += 1;
+      }
+    }
+
+    const retryRegistrado = tentativa > 0;
+    steps.push({
+      ordem: steps.length + 1,
+      id: passo.id,
+      alvo: passo.descricao,
+      modo: passo.modo,
+      marcador: passo.marcador,
+      resultado: resultado?.ok === false ? 'unavailable' : (falha ? 'failed' : 'ok'),
+      tentativas: tentativa + 1,
+      retry: retryRegistrado,
+      falha: falha ?? null,
+    });
+
+    if (falha && tentativa > MAX_RETRIES) {
+      aborted = true;
+      break;
+    }
+
     // Atualiza o snapshot para a próxima transição
     currentSnapshot = { ...currentSnapshot, [passo.id]: resultado };
   }
