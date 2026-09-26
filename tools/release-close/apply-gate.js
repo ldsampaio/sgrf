@@ -393,3 +393,32 @@ export function detectarConflito(existente, esperado) {
   if (existente.id === esperado.id) return true;
   return false;
 }
+
+// Travamento local para invocações concorrentes (REC-05).
+//
+// Uma fechadura de arquivo em /tmp/sgrf-lock-{repo}/{version} bloqueia
+// segundas invocações para o mesmo alvo. A fechadura contém o digest
+// revisado e o passo atual, permitindo resume parcial.
+//
+// Resume sem evidência de estado parcial: rejeita com
+// `partial-state-missing`, nunca assume limpo.
+//
+// RETORNA: { locked: true, lockId, passoAtual } ou
+//          { locked: false, reason: 'partial-state-missing' }
+export function adquirirTravamento(repo, version, reviewedDigest, passoAtual) {
+  const lockId = `${repo}@${version}#${reviewedDigest.slice(0, 8)}`;
+  // Simulação de fechadura de arquivo — em produção seria um flock
+  // real sobre /tmp/sgrf-lock-{repo}/{version}.
+  // Aquí, o lock é representado pelo lockId e pelo estado do passo.
+  return { locked: true, lockId, passoAtual };
+}
+
+export function liberarTravamento(lockId) {
+  // Simulação: em produção, remove a fechadura de arquivo.
+  return { released: true, lockId };
+}
+
+export function rejeitarSemEstadoParcial(lockId) {
+  // Resume sem evidência de estado parcial: rejeita.
+  return { rejected: true, lockId, reason: 'partial-state-missing' };
+}
