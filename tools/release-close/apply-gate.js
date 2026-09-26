@@ -365,9 +365,31 @@ export async function executarReconciliacaoComRetry(decision, reviewedDigest) {
       break;
     }
 
+    // Detecção de conflito (REC-04): se o readback revela objeto
+    // duplicado/conflitante, aborta sem sobrescrever.
+    if (resultado && resultado.ok === false && resultado.status === 409) {
+      conflict = true;
+      aborted = true;
+      break;
+    }
+
     // Atualiza o snapshot para a próxima transição
     currentSnapshot = { ...currentSnapshot, [passo.id]: resultado };
   }
 
   return { steps, finalSnapshot: currentSnapshot, aborted, conflict };
+}
+
+// Detecta conflito material entre dois objetos GitHub (REC-04).
+//
+// Dois objetos são conflitantes se compartilham a mesma natural key
+// (release ID ou milestone number) mas divergem em SHA ou ID estável.
+// Um objeto duplicado com o mesmo SHA e ID NÃO é conflito.
+//
+// RETORNA: true se houver conflito material, false caso contrário.
+export function detectarConflito(existente, esperado) {
+  if (!existente || !esperado) return false;
+  if (existente.id === esperado.id && existente.sha === esperado.sha) return false;
+  if (existente.id === esperado.id) return true;
+  return false;
 }
