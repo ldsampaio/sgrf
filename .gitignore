@@ -7,6 +7,7 @@ backend/dist/
 
 # Env
 .env
+.env.deploy          # secrets de deploy (gerado via openssl, nunca versionar)
 backend/.env
 frontend/.env.local
 frontend/.env.*.local
