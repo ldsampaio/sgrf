@@ -11,6 +11,6 @@ router.patch('/balance', requirePermission('settings:financial:edit'), c.patchBa
 router.get('/transactions', requirePermission('settings:transactions:view'), c.transactions);
 // Stubs
 router.patch('/email', requirePermission('settings:email:edit'), (req, res) => res.json({ ok: true, note: 'SMTP via .env nesta versão MVP' }));
-router.post('/email/test', requirePermission('settings:email:edit'), (req, res) => res.json({ ok: true }));
+router.post('/email/test', requirePermission('settings:email:edit'), c.testEmail);
 
 module.exports = router;
