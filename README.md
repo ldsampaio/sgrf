@@ -47,7 +47,7 @@ Nenhum verbo escreve no remoto nesta fase. `--fixture` ativa cliente fake.
 - Solicitações (equipamento, publicação, viagem, auxílio): `totalAnual <= limite` aprova e provisiona automaticamente; acima vai a votação (maioria simples, desempate do chefe, vista +24h, suspensão read-only).
 - Gastos idempotentes (`mark-spent` / `reverse-provision`); relatórios CSV/PDF em `/api/reports/*` e telas `/council`, `/reports`.
 
-## Deploy (v0.1.1, Docker)
+## Deploy (v0.1.3, Docker)
 
 Imagem única: o Express serve o build do Vite + API na mesma porta (`SERVE_FRONTEND=true`).
 Banco e uploads persistem nos volumes `pgdata` e `app-uploads`. Código sem SQL raw
