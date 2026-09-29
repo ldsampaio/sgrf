@@ -70,7 +70,7 @@ info "--- Configuração do deploy ---"
 APP_PORT=$(prompt "Porta de entrada (APP_PORT) — configure o cloudflared para encaminhar para esta porta" "8081")
 FRONTEND_URL=$(prompt "URL pública do site (FRONTEND_URL) — ex: https://sgrf.seudominio.edu.br" "http://localhost:${APP_PORT}")
 ADMIN_EMAIL=$(prompt "E-mail do admin inicial" "ldsampaio@utfpr.edu.br")
-IMAGE_TAG=$(prompt "Tag da imagem GHCR" "v0.1.3")
+IMAGE_TAG=$(prompt "Tag da imagem GHCR" "v0.1.4")
 
 # COOKIE_SECURE
 echo
@@ -93,6 +93,23 @@ cat <<EOF
 EOF
 warn "SALVE a senha temporária do admin acima. Expira em 24h, exige troca no primeiro login."
 
+# ── SMTP Configuration ─────────────────────────────────────────────────────
+echo
+info "--- Configuração SMTP (e-mail institucional) ---"
+read -rp "$(echo -e "${CYAN}?${NC} Servidor SMTP [smtp.utfpr.edu.br]: \")" SMTP_HOST
+SMTP_HOST="${SMTP_HOST:-smtp.utfpr.edu.br}"
+read -rp "$(echo -e "${CYAN}?${NC} Porta SMTP [587]: \")" SMTP_PORT
+SMTP_PORT="${SMTP_PORT:-587}"
+read -rp "$(echo -e "${YELLOW}?${NC} Usar conexão segura TLS (porta 465)? [y/N]: \")" smtp_tls
+SMTP_SECURE="false"
+case "${smtp_tls:-N}" in
+  [Yy]|[Yy][Ee][Ss]) SMTP_SECURE="true"; SMTP_PORT="465" ;;
+esac
+SMTP_USER="sistemas-dacom-cp@utfpr.edu.br"
+read -s -p "$(echo -e "${YELLOW}?${NC} Senha do e-mail SMTP (${SMTP_USER}): \")" SMTP_PASS
+echo
+info "SMTP configurado para envio de e-mails institucionais (${SMTP_USER})."
+
 # ── Write .env ──────────────────────────────────────────────────────────
 info "--- Criando .env ---"
 cat > .env <<EOF
@@ -106,6 +123,15 @@ JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 INITIAL_ADMIN_EMAIL=${ADMIN_EMAIL}
 INITIAL_ADMIN_TEMPORARY_PASSWORD=${ADMIN_PASS}
 
+# SMTP (e-mail institucional)
+SMTP_ENABLED=true
+SMTP_HOST=${SMTP_HOST}
+SMTP_PORT=${SMTP_PORT}
+SMTP_SECURE=${SMTP_SECURE}
+SMTP_USER=${SMTP_USER}
+SMTP_PASS=${SMTP_PASS}
+SMTP_FROM=SGRD <${SMTP_USER}>
+
 SGRF_IMAGE_TAG=${IMAGE_TAG}
 EOF
 ok ".env criado (não versionado — já está no .gitignore)"
@@ -118,7 +144,7 @@ cat > compose.prod.yaml <<'EOF'
 services:
   app:
     build: null
-    image: ghcr.io/ldsampaio/sgrf:${SGRF_IMAGE_TAG:-v0.1.3}
+    image: ghcr.io/ldsampaio/sgrf:${SGRF_IMAGE_TAG:-v0.1.4}
 EOF
 ok "compose.prod.yaml criado"
 
@@ -165,6 +191,7 @@ echo "  App:         http://localhost:${APP_PORT}"
 echo "  Health:      http://localhost:${APP_PORT}/health"
 echo "  Admin email: ${ADMIN_EMAIL}"
 echo "  Admin senha: ${ADMIN_PASS}"
+echo "  SMTP:        ${SMTP_USER} @ ${SMTP_HOST}:${SMTP_PORT} (TLS: ${SMTP_SECURE})"
 echo "  Image:       ghcr.io/ldsampaio/sgrf:${IMAGE_TAG}"
 echo
 echo "  Cloudflare Tunnel deve encaminhar para a porta ${APP_PORT}."

@@ -1,4 +1,4 @@
-# SGRF/SGRD v0.1.3 — deploy: app (imagem única, API + SPA) + Postgres.
+# SGRF/SGRD v0.1.4 — deploy: app (imagem única, API + SPA) + Postgres.
 # Porta externa via APP_PORT (default 8081). Segredos via ambiente (ver backend/.env.example).
 name: sgrf
 
