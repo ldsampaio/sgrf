@@ -24,7 +24,7 @@ import { computed } from 'vue';
 const props = defineProps({
   name: { type: String, required: true },
   size: { type: [Number, String], default: 20 },
-  strokeWidth: { type: [Number, String], default: 1.8 },
+  strokeWidth: { type: [Number, String], default: 2 },
   title: { type: String, default: '' },
 });
 
@@ -77,6 +77,8 @@ const ICONS = {
   banknote: ['M2 6h20v12H2z', 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', 'M6 12h.01', 'M18 12h.01'],
   scale: ['M12 3v18', 'M5 7h14', 'M5 7 2 14h6L5 7z', 'M19 7l-3 7h6l-3-7z', 'M8 21h8'],
   vote: ['m9 12 2 2 4-4', 'M5 4h14v16H5z'],
+  pause: ['M8 4v16', 'M16 4v16'],
+  flag: ['M4 15v6', 'M4 15c8 0 8-6 16-6v6c-8 0-8 6-16 6'],
   package: ['M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z', 'm3.3 7 8.7 5 8.7-5', 'M12 22V12'],
   plane: ['M17.8 19.2 16 11l3.5-3.5a2.12 2.12 0 0 0-3-3L13 8 4.8 6.2a1 1 0 0 0-1 1.6l5.6 3.6-3 3-2.2-.4a1 1 0 0 0-.9 1.6l2.4 2.4 2.4 2.4a1 1 0 0 0 1.6-.9l-.4-2.2 3-3 3.6 5.6a1 1 0 0 0 1.6-1z'],
   graduation: ['M22 10 12 5 2 10l10 5 10-5z', 'M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5'],

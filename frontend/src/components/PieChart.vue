@@ -44,8 +44,20 @@ const emit = defineEmits(['ready']);
 const cv = ref(null);
 let chart = null;
 
-// Amber ramp + neutrals: the only palette allowed by the brand.
-const PALETTE = ['#FBBA00', '#DB8800', '#FFD466', '#F9F9F9', '#B3B3B3', '#9A7400', '#8C8C8C', '#5C5C5C', '#3A3A3A'];
+// Tiles pastel vibrantes + tints indigo — a paleta clay do projeto (MASTER.md §1.1).
+// Exceção registrada: cores de gráfico ficam em constantes JS (Chart.js não lê CSS vars).
+const PALETTE = [
+  '#BFDBFE', // sky
+  '#FDE68A', // amber
+  '#C4B5FD', // lilac
+  '#A7E8C3', // mint
+  '#C7D2FE', // indigo tint
+  '#FED7AA', // orange tint
+  '#E7E5E4', // stone
+  '#93C5FD', // sky deep
+  '#DDD6FE', // lilac deep
+  '#86EFAC', // mint deep
+];
 
 const total = computed(() => props.values.reduce((sum, value) => sum + Number(value || 0), 0));
 const colorAt = (index) => PALETTE[index % PALETTE.length];
@@ -72,7 +84,7 @@ function render() {
       datasets: [{
         data: props.values.map((value) => Number(value || 0)),
         backgroundColor: props.labels.map((_, i) => colorAt(i)),
-        borderColor: '#171717',
+        borderColor: '#1B1B2F',
         borderWidth: 3,
         hoverOffset: 6,
         spacing: 2,
@@ -87,11 +99,11 @@ function render() {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#0F0F0F',
-          borderColor: '#2A2A2A',
-          borderWidth: 1,
-          titleColor: '#F9F9F9',
-          bodyColor: '#B3B3B3',
+          backgroundColor: '#FFFFFF',
+          borderColor: '#1B1B2F',
+          borderWidth: 2,
+          titleColor: '#1B1B2F',
+          bodyColor: '#5B6270',
           padding: 12,
           displayColors: true,
           boxPadding: 4,
@@ -114,7 +126,7 @@ function toImage() {
   out.width = source.width;
   out.height = source.height;
   const ctx = out.getContext('2d');
-  ctx.fillStyle = '#0F0F0F';
+  ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, out.width, out.height);
   ctx.drawImage(source, 0, 0);
   return out.toDataURL('image/png');

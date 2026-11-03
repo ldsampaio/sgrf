@@ -18,18 +18,18 @@
         <p class="eyebrow">Gestão departamental</p>
         <h1>Recursos com <span class="accent">rastreabilidade</span> do pedido ao gasto.</h1>
         <p>Solicitações, aprovação automática, votação auditável e prestação de contas em um só lugar.</p>
-        <ul class="auth__features">
-          <li class="auth__feature">
-            <Icon name="shield" :size="18" />
-            <span><b>Votação auditável</b> — cada voto registra autor, papel e horário de Brasília.</span>
+        <ul class="chips-features" aria-label="Destaques do SGRD">
+          <li class="chip-clay">
+            <Icon name="shield" :size="16" />
+            Votação auditável
           </li>
-          <li class="auth__feature">
-            <Icon name="wallet" :size="18" />
-            <span><b>Saldo sob controle</b> — disponível, provisionado e gasto sempre visíveis.</span>
+          <li class="chip-clay">
+            <Icon name="wallet" :size="16" />
+            Saldo sob controle
           </li>
-          <li class="auth__feature">
-            <Icon name="receipt" :size="18" />
-            <span><b>Prestação de contas</b> — relatórios em CSV e PDF para cada etapa do fluxo.</span>
+          <li class="chip-clay">
+            <Icon name="receipt" :size="16" />
+            Prestação de contas
           </li>
         </ul>
       </div>

@@ -72,6 +72,39 @@
     </div>
   </section>
 
+  <section class="page-section" aria-labelledby="progress-title">
+    <article class="card">
+      <div class="card__head">
+        <div>
+          <p class="eyebrow" style="margin-bottom: var(--space-2)">Progresso</p>
+          <h2 id="progress-title" class="card__title">Execução do exercício</h2>
+          <p class="card__sub">Andamento do gasto sobre o saldo total e distribuição das solicitações por status.</p>
+        </div>
+      </div>
+
+      <ul class="medidores">
+        <li v-for="meter in meters" :key="meter.label" class="medidor" :class="`medidor-${meter.cls}`">
+          <span class="medidor-rotulo">{{ meter.label }}</span>
+          <span
+            class="medidor-trilha"
+            role="meter"
+            :aria-label="meter.label"
+            :aria-valuenow="meter.now"
+            aria-valuemin="0"
+            :aria-valuemax="meter.max"
+          >
+            <span class="medidor-fill" :style="{ width: meter.pct + '%' }"></span>
+          </span>
+          <span class="medidor-valor">{{ meter.value }}</span>
+        </li>
+      </ul>
+
+      <p v-if="!totalReqs" class="hint" style="margin-top: var(--space-3)">
+        Nenhuma solicitação registrada ainda — os medidores mostram o andamento assim que houver pedidos.
+      </p>
+    </article>
+  </section>
+
   <section class="page-section" aria-labelledby="charts-title">
     <div class="section-head">
       <div>
@@ -284,9 +317,46 @@ const recentRequests = computed(() => reqs.value.slice(0, 5));
 const draftCount = computed(() => reqs.value.filter((request) => request.status === 'RASCUNHO').length);
 const votingCount = computed(() => reqs.value.filter((request) => ['EM_VOTACAO', 'AGUARDANDO_DESEMPATE'].includes(request.status)).length);
 const approvedCount = computed(() => reqs.value.filter((request) => String(request.status).startsWith('APROVADO')).length);
+const rejectedCount = computed(() => reqs.value.filter((request) => ['INDEFERIDO', 'CANCELADO'].includes(request.status)).length);
 const deadlines = computed(() => reqs.value.filter(
   (request) => ['EM_VOTACAO', 'AGUARDANDO_DESEMPATE'].includes(request.status) && request.votingDeadlineAt,
 ));
+
+const totalReqs = computed(() => reqs.value.length);
+const executionPct = computed(() => {
+  const s = dash.value?.bySaldo || {};
+  const total = Number(s.disponivel || 0) + Number(s.provisionado || 0) + Number(s.gasto || 0);
+  if (!total) return 0;
+  return Math.round((Number(s.gasto || 0) / total) * 100);
+});
+
+// Medidores clay: valor numérico sempre ao lado da barra (cor nunca é o único portador).
+const meters = computed(() => {
+  const total = totalReqs.value;
+  const pct = (count) => (total ? Math.round((count / total) * 100) : 0);
+  const row = (label, cls, count) => ({
+    label,
+    cls,
+    now: count,
+    max: Math.max(total, 1),
+    pct: pct(count),
+    value: String(count),
+  });
+  return [
+    {
+      label: 'Execução do gasto',
+      cls: 'aprovado',
+      now: executionPct.value,
+      max: 100,
+      pct: executionPct.value,
+      value: `${executionPct.value}%`,
+    },
+    row('Rascunhos', 'rascunho', draftCount.value),
+    row('Em votação', 'votacao', votingCount.value),
+    row('Aprovadas', 'aprovado', approvedCount.value),
+    row('Indeferidas · canceladas', 'indeferido', rejectedCount.value),
+  ];
+});
 
 async function loadBalance() {
   errBal.value = '';
