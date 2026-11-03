@@ -1,47 +1,170 @@
+/* ==========================================================================
+   SGRD · Design tokens
+   Three-layer architecture: primitive → semantic → component.
+   Brand source: docs/DESIGN.md (dark studio, Spark Yellow, precision meets
+   mentorship). Never reference primitives directly from components.
+   ========================================================================== */
+
 :root {
-  /* Brand — Codemaster / DESIGN.md */
-  --spark: #fbba00;
-  --offline: #0f0f0f;
-  --online: #f9f9f9;
-  --suntech-from: #fbba00;
-  --suntech-to: #db8800;
-  /* Supporting neutrals */
-  --deep: #050505;
-  --raised: #171717;
-  --ember: #db8800;
-  --bright: #ffd466;
-  --fog: #b3b3b3;
-  --graphite: #2a2a2a;
-  --ghost-watermark: #1a1a1a;
-  /* Semantic */
-  --text-on-dark: #f9f9f9;
-  --text-on-light: #0f0f0f;
-  --danger: #ff6b6b;
-  --danger-bg: rgba(255, 107, 107, 0.1);
-  --success: #ffd466;
-  --success-bg: rgba(251, 186, 0, 0.12);
-  /* Glow (elevation on dark) */
-  --glow-1: rgba(251, 186, 0, 0.15) 0px 4px 16px;
-  --glow-2: rgba(251, 186, 0, 0.25) 0px 12px 32px;
-  --glow-3: rgba(251, 186, 0, 0.35) 0px 40px 80px;
-  /* Shape + spacing */
-  --radius-sm: 16px;
-  --radius-card: 20px;
-  --radius-lg: 28px;
+  color-scheme: dark;
+
+  /* ——— Primitive: brand ——— */
+  --spark-500: #fbba00;
+  --spark-300: #ffd466;
+  --spark-700: #db8800;
+  --offline-950: #050505;
+  --offline-900: #0f0f0f;
+  --offline-850: #141414;
+  --offline-800: #171717;
+  --offline-700: #1f1f1f;
+  --offline-600: #2a2a2a;
+  --offline-500: #3a3a3a;
+  --online-100: #f9f9f9;
+  --fog-400: #b3b3b3;
+  --fog-500: #8c8c8c;
+  --fog-600: #6f6f6f;
+  --danger-500: #ff6b6b;
+  --danger-300: #ff9b9b;
+
+  /* ——— Semantic: color roles ——— */
+  --bg: var(--offline-900);
+  --bg-deep: var(--offline-950);
+  --surface: var(--offline-800);
+  --surface-raised: var(--offline-850);
+  --surface-sunken: var(--offline-950);
+  --surface-hover: var(--offline-700);
+  --border: var(--offline-600);
+  --border-strong: var(--offline-500);
+  --border-subtle: rgba(249, 249, 249, 0.08);
+
+  --text: var(--online-100);
+  --text-muted: var(--fog-400);
+  --text-faint: var(--fog-500);
+  --text-on-light: var(--offline-900);
+
+  --accent: var(--spark-500);
+  --accent-hover: var(--spark-300);
+  --accent-deep: var(--spark-700);
+  --accent-contrast: var(--offline-900);
+  --accent-soft: rgba(251, 186, 0, 0.12);
+  --accent-softer: rgba(251, 186, 0, 0.06);
+
+  --danger: var(--danger-500);
+  --danger-soft: rgba(255, 107, 107, 0.1);
+  --danger-border: rgba(255, 107, 107, 0.45);
+  --warning: var(--spark-300);
+  --warning-soft: rgba(255, 212, 102, 0.12);
+  --success: var(--spark-500);
+  --success-soft: rgba(251, 186, 0, 0.14);
+  --info: var(--online-100);
+  --info-soft: rgba(249, 249, 249, 0.08);
+
+  --focus-ring: 0 0 0 3px rgba(251, 186, 0, 0.38);
+  --focus-ring-danger: 0 0 0 3px rgba(255, 107, 107, 0.32);
+
+  /* ——— Semantic: typography ——— */
+  --font-sans: "Readex Pro", "Segoe UI", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font: var(--font-sans);
+
+  --text-xs: 0.75rem;    /* 12px · eyebrow, labels */
+  --text-sm: 0.8125rem;  /* 13px · captions, table meta */
+  --text-base: 0.9375rem;/* 15px · UI copy, buttons */
+  --text-md: 1rem;       /* 16px · body */
+  --text-lg: 1.125rem;   /* 18px · card titles */
+  --text-xl: 1.375rem;   /* 22px · section titles */
+  --text-2xl: clamp(1.6rem, 1.25rem + 1.4vw, 2rem);
+  --text-3xl: clamp(2rem, 1.35rem + 3vw, 3.5rem);
+
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --leading-tight: 1.1;
+  --leading-snug: 1.3;
+  --leading-normal: 1.6;
+
+  /* ——— Semantic: space (8px base, 4px half-step) ——— */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+  --space-11: 80px;
+  --space-12: 96px;
+  --space-13: 128px;
+
+  /* ——— Semantic: shape ——— */
+  --radius-sm: 14px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
   --radius-pill: 999px;
-  --font: "Readex Pro", Arial, sans-serif;
-  /* Legacy aliases (compat with existing templates) */
-  --black: #0f0f0f;
-  --black-2: #171717;
-  --amber: #fbba00;
-  --amber-hover: #db8800;
-  --amber-soft: rgba(251, 186, 0, 0.12);
-  --white: #f9f9f9;
-  --gray-100: #171717;
-  --gray-200: #2a2a2a;
-  --gray-300: #2a2a2a;
-  --gray-500: #b3b3b3;
-  --gray-700: #b3b3b3;
-  --gray-900: #f9f9f9;
-  --radius: 20px;
+  --radius: var(--radius-md);
+
+  /* ——— Semantic: elevation (Spark glow, not black shadow) ——— */
+  --glow-1: 0 4px 18px rgba(251, 186, 0, 0.14);
+  --glow-2: 0 14px 36px rgba(251, 186, 0, 0.22);
+  --glow-3: 0 34px 72px rgba(251, 186, 0, 0.3);
+  --shadow-float: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --topbar-shadow: 0 1px 0 rgba(15, 15, 15, 0.08), 0 10px 30px rgba(0, 0, 0, 0.18);
+
+  /* ——— Semantic: layout ——— */
+  --content-max: 1240px;
+  --content-narrow: 760px;
+  --topbar-height: 72px;
+  --sidebar-width: 288px;
+
+  /* ——— Semantic: motion ——— */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 140ms;
+  --dur: 220ms;
+  --dur-slow: 420ms;
+
+  /* ——— Component tokens ——— */
+  --btn-height: 44px;
+  --btn-padding-x: 24px;
+  --btn-radius: var(--radius-pill);
+  --input-height: 46px;
+  --card-padding: var(--space-6);
+  --focus-width: 2px;
+
+  /* ——— Legacy aliases (keeps older snippets working) ——— */
+  --black: var(--offline-900);
+  --black-2: var(--offline-800);
+  --amber: var(--spark-500);
+  --amber-hover: var(--spark-700);
+  --amber-soft: var(--accent-soft);
+  --white: var(--online-100);
+  --gray-100: var(--offline-800);
+  --gray-200: var(--offline-600);
+  --gray-300: var(--offline-600);
+  --gray-500: var(--fog-400);
+  --gray-700: var(--fog-400);
+  --gray-900: var(--online-100);
+  --spark: var(--spark-500);
+  --offline: var(--offline-900);
+  --online: var(--online-100);
+  --suntech-from: var(--spark-500);
+  --suntech-to: var(--spark-700);
+  --deep: var(--offline-950);
+  --raised: var(--offline-800);
+  --ember: var(--spark-700);
+  --bright: var(--spark-300);
+  --fog: var(--fog-400);
+  --graphite: var(--offline-600);
+  --ghost-watermark: #1a1a1a;
+  --text-on-dark: var(--online-100);
+  --text-on-light: var(--offline-900);
+  --radius-sm-legacy: 16px;
+  --radius-card: var(--radius-md);
+  --radius-lg-legacy: 28px;
+  --radius-pill-legacy: var(--radius-pill);
 }
