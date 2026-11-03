@@ -1,47 +1,251 @@
+/* ==========================================================================
+   SGRD · Design tokens — Light Clay (playful educational)
+   Three-layer architecture: primitive → semantic → component.
+   Source de verdade: design-system/sgrd/MASTER.md (estilo Light Clay copiado
+   de SGOA — claymorphism institucional, cream + ink + indigo + CTA orange,
+   tiles pastel, contrastes AA verificados).
+   Never reference primitives directly from components.
+   ========================================================================== */
+
+/* === PRIMITIVES === */
 :root {
-  /* Brand — Codemaster / DESIGN.md */
-  --spark: #fbba00;
-  --offline: #0f0f0f;
-  --online: #f9f9f9;
-  --suntech-from: #fbba00;
-  --suntech-to: #db8800;
-  /* Supporting neutrals */
-  --deep: #050505;
-  --raised: #171717;
-  --ember: #db8800;
-  --bright: #ffd466;
-  --fog: #b3b3b3;
-  --graphite: #2a2a2a;
-  --ghost-watermark: #1a1a1a;
-  /* Semantic */
-  --text-on-dark: #f9f9f9;
-  --text-on-light: #0f0f0f;
-  --danger: #ff6b6b;
-  --danger-bg: rgba(255, 107, 107, 0.1);
-  --success: #ffd466;
-  --success-bg: rgba(251, 186, 0, 0.12);
-  /* Glow (elevation on dark) */
-  --glow-1: rgba(251, 186, 0, 0.15) 0px 4px 16px;
-  --glow-2: rgba(251, 186, 0, 0.25) 0px 12px 32px;
-  --glow-3: rgba(251, 186, 0, 0.35) 0px 40px 80px;
-  /* Shape + spacing */
-  --radius-sm: 16px;
-  --radius-card: 20px;
-  --radius-lg: 28px;
-  --radius-pill: 999px;
-  --font: "Readex Pro", Arial, sans-serif;
-  /* Legacy aliases (compat with existing templates) */
-  --black: #0f0f0f;
-  --black-2: #171717;
-  --amber: #fbba00;
-  --amber-hover: #db8800;
-  --amber-soft: rgba(251, 186, 0, 0.12);
-  --white: #f9f9f9;
-  --gray-100: #171717;
-  --gray-200: #2a2a2a;
-  --gray-300: #2a2a2a;
-  --gray-500: #b3b3b3;
-  --gray-700: #b3b3b3;
-  --gray-900: #f9f9f9;
-  --radius: 20px;
+  color-scheme: light;
+
+  --primitive-color-cream: #FFF8EE;
+  --primitive-color-canvas: #F4F1FA;
+  --primitive-color-white: #FFFFFF;
+  --primitive-color-ink: #1B1B2F;
+  --primitive-color-ink-muted: #5B6270;
+  --primitive-color-ink-soft: #525866;
+  --primitive-color-divider: #CDC5B8;
+
+  --primitive-color-indigo-50: #EEF2FF;
+  --primitive-color-indigo-100: #C7D2FE;
+  --primitive-color-indigo-500: #6366F1;
+  --primitive-color-indigo-600: #4F46E5;
+  --primitive-color-indigo-700: #4338CA;
+  --primitive-color-lilac-50: #EDE7F6;
+  --primitive-color-lilac-300: #C4B5FD;
+  --primitive-color-mint-200: #BBE8D2;
+  --primitive-color-mint-300: #A7E8C3;
+  --primitive-color-sky: #BFDBFE;
+  --primitive-color-amber: #FDE68A;
+  --primitive-color-stone: #E7E5E4;
+  --primitive-color-orange-500: #EA580C;
+  --primitive-color-orange-600: #C2410C;
+  --primitive-color-orange-700: #9A3412;
+  --primitive-color-red-100: #FEE2E2;
+  --primitive-color-red-600: #DC2626;
+  --primitive-color-red-700: #B91C1C;
+  --primitive-color-red-800: #991B1B;
+
+  --primitive-font-display: 'Space Grotesk', 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --primitive-font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  --primitive-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --primitive-space-1: 4px;
+  --primitive-space-2: 8px;
+  --primitive-space-3: 12px;
+  --primitive-space-4: 16px;
+  --primitive-space-5: 20px;
+  --primitive-space-6: 24px;
+  --primitive-space-7: 32px;
+  --primitive-space-8: 40px;
+  --primitive-space-9: 48px;
+  --primitive-space-10: 64px;
+
+  --primitive-radius-sm: 14px;
+  --primitive-radius-md: 20px;
+  --primitive-radius-lg: 26px;
+  --primitive-radius-xl: 32px;
+  --primitive-radius-pill: 999px;
+
+  --primitive-shadow-clay-flat: inset -2px -2px 6px rgba(27, 27, 47, 0.04), 3px 3px 10px rgba(27, 27, 47, 0.1);
+  --primitive-shadow-clay-lift: inset -2px -2px 8px rgba(27, 27, 47, 0.06), 6px 6px 16px rgba(27, 27, 47, 0.14);
+  --primitive-shadow-cta: 0 4px 0 rgba(27, 27, 47, 0.9);
+  --primitive-shadow-cta-press: 0 1px 0 rgba(27, 27, 47, 0.9);
+  --primitive-shadow-flat: 2px 2px 0 rgba(27, 27, 47, 0.85);
+
+  --primitive-duration-hover: 180ms;
+  --primitive-duration-press: 200ms;
+  --primitive-duration-enter: 220ms;
+  --primitive-duration-exit: 150ms;
+  --primitive-duration-spin: 0.9s;
+  --primitive-easing-clay: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --primitive-easing-out: ease-out;
+  --primitive-easing-in-out: ease-in-out;
+}
+
+/* === SEMANTIC === */
+:root {
+  /* Cor (roles) — Light Clay, contrastes verificados AA */
+  --bg: var(--primitive-color-cream);
+  --bg-deep: var(--primitive-color-canvas);
+  --surface: var(--primitive-color-white);
+  --surface-raised: var(--primitive-color-white);
+  --surface-sunken: var(--primitive-color-canvas);
+  --surface-hover: var(--primitive-color-lilac-50);
+
+  --text: var(--primitive-color-ink);            /* 16.0 : 1 no cream */
+  --text-muted: var(--primitive-color-ink-muted); /* 5.8 : 1 */
+  --text-faint: var(--primitive-color-ink-soft);  /* ≥ 6 : 1 — hierarquia sem perder AA */
+  --text-on-light: var(--primitive-color-ink);
+  --text-on-cta: var(--primitive-color-white);
+
+  --accent: var(--primitive-color-indigo-700);    /* links, valores, foco */
+  --accent-hover: var(--primitive-color-indigo-600);
+  --accent-soft: var(--primitive-color-indigo-50);
+  --accent-tint: var(--primitive-color-indigo-100);
+
+  --cta: var(--primitive-color-orange-600);       /* 5.2 : 1 branco — botão primário */
+  --cta-hover: var(--primitive-color-orange-700);
+  --brand: var(--primitive-color-orange-500);     /* decorativo/tiles apenas */
+
+  --danger: var(--primitive-color-red-700);       /* 6.5 : 1 branco */
+  --danger-strong: var(--primitive-color-red-800);
+  --danger-soft: var(--primitive-color-red-100);
+
+  /* Status (cor + ícone + rótulo — nunca só cor) */
+  --success: var(--primitive-color-mint-300);
+  --success-soft: var(--primitive-color-mint-200);
+  --success-strong: #15803D;
+  --warning: var(--primitive-color-amber);
+  --warning-soft: var(--primitive-color-amber);
+  --info: var(--primitive-color-lilac-300);
+  --info-soft: var(--primitive-color-lilac-50);
+
+  --color-status-rascunho: var(--primitive-color-stone);
+  --color-status-votacao: var(--primitive-color-sky);
+  --color-status-desempate: var(--primitive-color-amber);
+  --color-status-aprovado: var(--primitive-color-mint-300);
+  --color-status-indeferido: var(--primitive-color-red-700);
+  --color-status-cancelado: var(--primitive-color-stone);
+  --color-status-suspenso: var(--primitive-color-lilac-300);
+
+  /* Tiles pastel — ícones KPI, avatares, chips (sempre ink em cima) */
+  --accent-sky: var(--primitive-color-sky);
+  --accent-amber: var(--primitive-color-amber);
+  --accent-lilac: var(--primitive-color-lilac-300);
+  --accent-mint: var(--primitive-color-mint-300);
+  --neutral-tint: var(--primitive-color-stone);
+
+  --border: var(--primitive-color-ink);           /* bordões clay 2–3px */
+  --border-strong: var(--primitive-color-ink);
+  --border-soft: var(--primitive-color-divider);
+  --border-subtle: var(--primitive-color-divider);
+  --ring: var(--primitive-color-indigo-600);
+
+  --focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.4);
+  --focus-ring-danger: 0 0 0 3px rgba(185, 28, 28, 0.35);
+
+  /* Tipografia */
+  --font-display: var(--primitive-font-display);
+  --font-sans: var(--primitive-font-body);
+  --font-mono: var(--primitive-font-mono);
+
+  --text-xs: 0.72rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.95rem;
+  --text-md: 1rem;
+  --text-lg: 1.15rem;
+  --text-xl: 1.45rem;
+  --text-2xl: 1.85rem;
+  --text-3xl: 2.3rem;
+
+  --weight-light: 400;   /* clay: corpo nunca abaixo de 400 */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.6;
+
+  /* Espaço (ritmo 4/8) */
+  --space-1: var(--primitive-space-1);
+  --space-2: var(--primitive-space-2);
+  --space-3: var(--primitive-space-3);
+  --space-4: var(--primitive-space-4);
+  --space-5: var(--primitive-space-5);
+  --space-6: var(--primitive-space-6);
+  --space-7: var(--primitive-space-7);
+  --space-8: var(--primitive-space-8);
+  --space-9: var(--primitive-space-9);
+  --space-10: var(--primitive-space-10);
+
+  /* Forma */
+  --radius-sm: var(--primitive-radius-sm);
+  --radius-md: var(--primitive-radius-md);
+  --radius-lg: var(--primitive-radius-lg);
+  --radius-xl: var(--primitive-radius-xl);
+  --radius-pill: var(--primitive-radius-pill);
+  --radius: var(--radius-md);
+
+  /* Sombra clay (double shadow + offset de pressed) */
+  --shadow-flat: var(--primitive-shadow-clay-flat);
+  --shadow-lift: var(--primitive-shadow-clay-lift);
+  --shadow-cta: var(--primitive-shadow-cta);
+  --shadow-cta-press: var(--primitive-shadow-cta-press);
+  --shadow-hard: var(--primitive-shadow-flat);
+  --shadow-float: var(--primitive-shadow-clay-lift);
+  --topbar-shadow: var(--primitive-shadow-clay-flat);
+
+  /* Movimento */
+  --ease-out: var(--primitive-easing-out);
+  --ease-spring: var(--primitive-easing-clay);
+  --dur-fast: var(--primitive-duration-hover);
+  --dur: var(--primitive-duration-press);
+  --dur-slow: var(--primitive-duration-enter);
+  --duration-spin: var(--primitive-duration-spin);
+
+  /* Layout */
+  --content-max: 1280px;
+  --content-narrow: 760px;
+  --topbar-height: 64px;
+  --sidebar-width: 300px;
+
+  /* Componentes (dimensões de peça promovidas a tokens) */
+  --btn-height: 44px;
+  --btn-padding-x: 22px;
+  --btn-radius: var(--radius-pill);
+  --input-height: 46px;
+  --card-padding: var(--space-6);
+  --focus-width: 3px;
+  --touch-min-target: 44px;
+  --spinner-size: 28px;
+  --meter-height: 16px;
+  --pill-height: 26px;
+  --avatar-size: 40px;
+
+  /* Legados (mantidos para snippets existentes) */
+  --accent-contrast: var(--text-on-cta);
+  --accent-softer: var(--accent-soft);
+  --text-on-dark: var(--text);
+  --text-on-light-legacy: var(--text);
+}
+
+/* === COMPONENTS === */
+:root {
+  --card-bg: var(--surface);
+  --card-fg: var(--text);
+  --card-border: 3px solid var(--border);
+  --card-radius: var(--radius-md);
+  --card-shadow: var(--shadow-flat);
+  --card-shadow-hover: var(--shadow-lift);
+  --button-bg: var(--surface);
+  --button-fg: var(--text);
+  --button-border: 2.5px solid var(--border);
+  --button-primary-bg: var(--cta);
+  --button-primary-fg: var(--text-on-cta);
+  --button-primary-bg-hover: var(--cta-hover);
+  --pill-fg: var(--text);
+  --pill-border: 2px solid var(--border);
+  --input-bg: var(--surface);
+  --input-fg: var(--text);
+  --input-border-soft: 2px solid var(--border-soft);
+  --input-ring: 0 0 0 3px rgba(79, 70, 229, 0.25);
+  --navbar-bg: var(--surface);
+  --navbar-border: 3px solid var(--border);
+  --navbar-radius: var(--radius-md);
 }

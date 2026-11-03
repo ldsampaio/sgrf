@@ -45,3 +45,6 @@ Thumbs.db
 .gsd/
 .planning/research/.cache/
 state.json.tmp
+
+# UI/UX Skills
+.opencode

@@ -1,39 +1,142 @@
 <template>
-  <div class="grid" style="max-width:440px;margin:4rem auto">
-    <div class="card accent">
-      <p class="eyebrow">Acesso institucional</p>
-      <h1 style="margin:0">SGRD <span class="spark-text">·</span> Login</h1>
-      <p class="hint">Acesso institucional @utfpr.edu.br</p>
-      <div class="alert warn" v-if="expiredNotice" role="status">Sua sessão expirou. Entre novamente para continuar.</div>
-      <div class="alert error" v-if="err" role="alert">{{ err }}</div>
-      <div class="field"><label>E-mail</label><input class="input" v-model="email" placeholder="voce@utfpr.edu.br" autocomplete="username" /></div>
-      <div class="field"><label>Senha</label><input class="input" v-model="password" type="password" placeholder="••••••••" autocomplete="current-password" /></div>
-      <button class="btn" style="width:100%" @click="doLogin" :disabled="loading">{{ loading ? 'Entrando…' : 'Entrar' }}</button>
-    </div>
+  <div class="auth">
+    <section class="auth__art" aria-label="Sobre o SGRD">
+      <router-link to="/login" class="brand" aria-label="SGRD UTFPR">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round">
+            <path d="M4.5 5 10 12l-5.5 7" />
+            <path d="M12.5 5 18 12l-5.5 7" />
+          </svg>
+        </span>
+        <span class="brand__text">
+          <span class="brand__name">SGRD</span>
+          <span class="brand__sub">UTFPR</span>
+        </span>
+      </router-link>
+
+      <div class="auth__art-content">
+        <p class="eyebrow">Gestão departamental</p>
+        <h1>Recursos com <span class="accent">rastreabilidade</span> do pedido ao gasto.</h1>
+        <p>Solicitações, aprovação automática, votação auditável e prestação de contas em um só lugar.</p>
+        <ul class="chips-features" aria-label="Destaques do SGRD">
+          <li class="chip-clay">
+            <Icon name="shield" :size="16" />
+            Votação auditável
+          </li>
+          <li class="chip-clay">
+            <Icon name="wallet" :size="16" />
+            Saldo sob controle
+          </li>
+          <li class="chip-clay">
+            <Icon name="receipt" :size="16" />
+            Prestação de contas
+          </li>
+        </ul>
+      </div>
+
+      <p class="auth__art-foot">Uso institucional · apenas e-mails @utfpr.edu.br · horário de Brasília</p>
+    </section>
+
+    <section class="auth__panel">
+      <div class="auth__card">
+        <p class="eyebrow">Acesso institucional</p>
+        <h2>Entrar no SGRD</h2>
+        <p class="auth__intro">Use seu e-mail institucional e a senha cadastrada.</p>
+
+        <div v-if="expiredNotice" class="alert alert--warning" role="status" style="margin-bottom: var(--space-4)">
+          <Icon class="alert__icon" name="clock" :size="18" />
+          <div class="alert__body">Sua sessão expirou. Entre novamente para continuar.</div>
+        </div>
+
+        <div v-if="err" class="alert alert--error" role="alert" style="margin-bottom: var(--space-4)">
+          <Icon class="alert__icon" name="alert-circle" :size="18" />
+          <div class="alert__body">{{ err }}</div>
+        </div>
+
+        <form class="stack" @submit.prevent="doLogin">
+          <div class="field">
+            <label class="field__label" for="login-email">E-mail institucional</label>
+            <input
+              id="login-email"
+              v-model="email"
+              class="input"
+              type="email"
+              placeholder="voce@utfpr.edu.br"
+              autocomplete="username"
+              inputmode="email"
+              required
+              autofocus
+            />
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="login-password">Senha</label>
+            <div class="input-wrap input-wrap--suffix">
+              <input
+                id="login-password"
+                v-model="password"
+                class="input"
+                :type="showPassword ? 'text' : 'password'"
+                placeholder="••••••••"
+                autocomplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                class="input-wrap__suffix"
+                :aria-label="showPassword ? 'Ocultar senha' : 'Mostrar senha'"
+                :aria-pressed="showPassword"
+                @click="showPassword = !showPassword"
+              >
+                <Icon :name="showPassword ? 'eye-off' : 'eye'" :size="18" />
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn--block btn--lg" :disabled="loading" style="margin-top: var(--space-2)">
+            <span v-if="loading" class="spinner" aria-hidden="true"></span>
+            {{ loading ? 'Entrando…' : 'Entrar' }}
+          </button>
+        </form>
+
+        <p class="auth__foot">Problemas para acessar? Procure a administração do departamento.</p>
+      </div>
+    </section>
   </div>
 </template>
+
 <script setup>
-import { ref, onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import Icon from '../components/Icon.vue';
 import { useAuth } from '../stores/auth';
-const email = ref(''); const password = ref(''); const err = ref(''); const loading = ref(false);
-const auth = useAuth(); const router = useRouter();
+
+const email = ref('');
+const password = ref('');
+const showPassword = ref(false);
+const err = ref('');
+const loading = ref(false);
+const auth = useAuth();
+const router = useRouter();
+
 // Session-expiry bounce context (D-02): the interceptor lands here with
 // ?reason=session-expired&redirect=<origin>. Plain /login visits carry no
 // params and keep the default post-login push('/') (D-03).
 const expiredNotice = ref(false);
 const redirectTarget = ref('');
+
 // Open-redirect protection (D-04): internal-path-only — single leading slash,
 // reject double-slash prefix, reject scheme/host patterns. Anything else is
 // discarded and falls back to '/'.
-function isInternalPath(p) {
+function isInternalPath(path) {
   return (
-    typeof p === 'string' &&
-    p.startsWith('/') &&
-    !p.startsWith('//') &&
-    !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(p)
+    typeof path === 'string' &&
+    path.startsWith('/') &&
+    !path.startsWith('//') &&
+    !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)
   );
 }
+
 onMounted(() => {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -49,13 +152,21 @@ onMounted(() => {
     }
   } catch { /* location/history unavailable → plain login, no notice */ }
 });
+
 async function doLogin() {
-  err.value = ''; loading.value = true;
+  err.value = '';
+  if (!email.value.trim() || !password.value) {
+    err.value = 'Informe e-mail e senha para continuar.';
+    return;
+  }
+  loading.value = true;
   try {
     await auth.login(email.value.trim().toLowerCase(), password.value);
     router.push(redirectTarget.value || '/');
+  } catch (e) {
+    err.value = e.response?.data?.error || 'Falha no login. Verifique seus dados e tente novamente.';
+  } finally {
+    loading.value = false;
   }
-  catch (e) { err.value = e.response?.data?.error || 'Falha no login'; }
-  finally { loading.value = false; }
 }
 </script>
