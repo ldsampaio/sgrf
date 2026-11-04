@@ -7,7 +7,7 @@
 const env = require('../config/env');
 const redis = require('../config/redis');
 const { verifyAccessToken } = require('../utils/tokens');
-const { findRoleRow } = require('../services/identityRepository');
+const { ensureRole } = require('../services/identityRepository');
 
 const RETRY_AFTER = 30;
 
@@ -46,7 +46,7 @@ function unauthorized(res, req, code, message) {
 function createAuthMiddleware(deps = {}) {
   const client = deps.redis || redis;
   const verify = deps.verifyAccessToken || verifyAccessToken;
-  const resolveRole = deps.resolveRole || findRoleRow;
+  const resolveRole = deps.resolveRole || ensureRole;
   const loginUrlFor = deps.buildLoginUrl || buildLoginUrl;
 
   return async function authJwt(req, res, next) {
@@ -98,9 +98,11 @@ function createAuthMiddleware(deps = {}) {
     };
 
     // 6. papel por sistema: sgrf.user_roles — nunca o claim `role` do JWT.
+    //    Sem linha, deriva ALUNO/PROFESSOR do role_base do saga (find-or-create);
+    //    os demais papéis só a gestão atribui.
     let roleRow = null;
     try {
-      roleRow = await resolveRole(req.user.id);
+      roleRow = await resolveRole(req.user.id, req.user.roleBase);
     } catch (e) {
       return next(e);
     }

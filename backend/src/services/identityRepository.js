@@ -12,9 +12,34 @@ function isUuid(value) {
 }
 
 // Papel por sistema. `null` quando o usuário ainda não tem papel no sgrf.
-async function findRoleRow(userId) {
+async function findRoleRow(userId, repo = prisma) {
   if (!isUuid(userId)) return null;
-  return prisma.userRole.findUnique({ where: { userId: String(userId) } });
+  return repo.userRole.findUnique({ where: { userId: String(userId) } });
+}
+
+// Só ALUNO e PROFESSOR são deriváveis do `role_base` do saga — é a inferência que
+// o saga faz (`^a\d+$` → ALUNO) e nada mais. ADMINISTRADOR, CHEFE_DEPARTAMENTO e
+// CONSELHEIRO continuam sendo atribuídos pela gestão: aqui não se inventa papel.
+const PAPEL_DERIVADO = { ALUNO: 'ALUNO', PROFESSOR: 'PROFESSOR' };
+
+// Find-or-create do papel do sgrf. Sem isto o usuário logado entra e não tem papel
+// nenhum: `req.user.role` fica null e toda rota deny-by-default responde 403.
+// A linha existente manda — o serviço só cria quando não há papel, nunca sobrescreve.
+async function ensureRole(userId, roleBase, repo = prisma) {
+  const existente = await findRoleRow(userId, repo);
+  if (existente) return existente;
+
+  const role = PAPEL_DERIVADO[String(roleBase || '').toUpperCase()];
+  if (!role || !isUuid(userId)) return null;
+
+  try {
+    return await repo.userRole.create({ data: { userId: String(userId), role, status: 'ATIVO' } });
+  } catch (e) {
+    // Corrida entre dois requests: `userId` é chave primária. Quem perde relê,
+    // não sobrescreve o papel do outro.
+    if (e?.code === 'P2002') return await findRoleRow(userId, repo);
+    throw e;
+  }
 }
 
 async function findIdentity(id) {
@@ -89,4 +114,4 @@ async function listUsers() {
   });
 }
 
-module.exports = { findIdentity, findIdentitiesByIds, findIdentitiesByEmails, findRoleRow, listUsers, isUuid };
+module.exports = { findIdentity, findIdentitiesByIds, findIdentitiesByEmails, findRoleRow, ensureRole, listUsers, isUuid };

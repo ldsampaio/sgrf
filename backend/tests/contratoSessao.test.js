@@ -57,6 +57,7 @@ _require.cache[_require.resolve('../src/config/redis.js')] = {
 
 const { createAuthMiddleware, buildLoginUrl } = _require('../src/middlewares/auth.js');
 const { rejectCredentialFields } = _require('../src/middlewares/noCredentialFields.js');
+const { ensureRole } = _require('../src/services/identityRepository.js');
 
 const CHAVES = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const OUTRA_CHAVE = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -109,7 +110,13 @@ const ENV_TESTE = {
   portalAllowedRedirectHosts: ['localhost'],
 };
 
-function ambiente({ redis, papel = null, resolver } = {}) {
+// `ensureRole` exige o formato UUID de `auth.users`, então os ids destes testes
+// precisam bater — `u1` não passa em `isUuid`.
+const USR_ALUNO = '11111111-1111-4111-8111-111111111111';
+const USR_INDEF = '22222222-2222-4222-8222-222222222222';
+const USR_PAPEL = '33333333-3333-4333-8333-333333333333';
+
+function ambiente({ redis, papel = null, resolver, resolveRole } = {}) {
   return {
     redis: redis || new RedisFake(),
     verifyAccessToken: async (tokenString) => {
@@ -118,8 +125,24 @@ function ambiente({ redis, papel = null, resolver } = {}) {
       const chave = await (resolver || resolverCacheado(CHAVES.publicKey))(header.kid);
       return jwt.verify(tokenString, chave, { algorithms: ['ES256'] });
     },
-    resolveRole: async () => papel,
+    resolveRole: resolveRole || (async () => papel),
     buildLoginUrl: (req) => buildLoginUrl(req, ENV_TESTE),
+  };
+}
+
+// Repositório em memória com a forma mínima que `ensureRole` usa. Sem banco: o que
+// se prova aqui é a decisão de derivação, não o Postgres.
+function repoFake(linhas = new Map()) {
+  return {
+    linhas,
+    userRole: {
+      findUnique: async ({ where }) => linhas.get(String(where.userId)) || null,
+      create: async ({ data }) => {
+        const linha = { userId: String(data.userId), role: data.role, status: data.status };
+        linhas.set(linha.userId, linha);
+        return linha;
+      },
+    },
   };
 }
 
@@ -271,18 +294,66 @@ describe('5–6. req.user do Redis e papel do sistema', () => {
     expect(usuario.role).toBe('CONSELHEIRO'); // claim `role` dizia outra coisa
   });
 
-  it('usuário sem papel no sgrf chega com role null (o mapa de permissão barra)', async () => {
+  it('sem linha em sgrf.user_roles, o papel deriva do role_base (find-or-create)', async () => {
     const redis = new RedisFake();
     redis.set('saga:heartbeat', '1');
-    redis.set('saga:sess:sidtest0008:meta', { user_id: 'u2', login: 'a1', role_base: 'ALUNO', gen: '1' });
+    redis.set('saga:sess:sidtest0008:meta', { user_id: USR_ALUNO, login: 'a1', role_base: 'ALUNO', gen: '1' });
 
+    const repo = repoFake();
     let usuario = null;
-    const middleware = createAuthMiddleware(ambiente({ redis, papel: null }));
-    const req = requisicao(token({ iss: 'saga', sub: 'u2', sid: 'sidtest0008', gen: 1 }));
+    const middleware = createAuthMiddleware(ambiente({ redis, resolveRole: (id, roleBase) => ensureRole(id, roleBase, repo) }));
+    const req = requisicao(token({ iss: 'saga', sub: USR_ALUNO, sid: 'sidtest0008', gen: 1 }));
     await middleware(req, respostaCapturada(), () => {
       usuario = req.user;
     });
+
+    // Antes o middleware só lia, e sem linha o papel chegava null — toda rota
+    // deny-by-default respondia 403 para um usuário recém-chegado do saga.
+    expect(usuario.role).toBe('ALUNO');
+    expect(usuario.status).toBe('ATIVO');
+    expect(repo.linhas.get(USR_ALUNO)).toEqual({ userId: USR_ALUNO, role: 'ALUNO', status: 'ATIVO' });
+  });
+
+  it('UNDEFINIDO não inventa papel — o mapa de permissão barra', async () => {
+    const redis = new RedisFake();
+    redis.set('saga:heartbeat', '1');
+    redis.set('saga:sess:sidtest0010:meta', { user_id: USR_INDEF, login: 'ldsampaio', role_base: 'UNDEFINIDO', gen: '1' });
+
+    const repo = repoFake();
+    let usuario = null;
+    const middleware = createAuthMiddleware(ambiente({ redis, resolveRole: (id, roleBase) => ensureRole(id, roleBase, repo) }));
+    const req = requisicao(token({ iss: 'saga', sub: USR_INDEF, sid: 'sidtest0010', gen: 1 }));
+    await middleware(req, respostaCapturada(), () => {
+      usuario = req.user;
+    });
+
+    // Só ALUNO e PROFESSOR são deriváveis. Chefe/Conselheiro/Administrador continuam
+    // sendo atribuídos pela gestão — aqui não se inventa papel.
     expect(usuario.role).toBe(null);
+    expect(repo.linhas.size).toBe(0);
+  });
+
+  it('linha existente nunca é sobrescrita pela derivação', async () => {
+    const repo = repoFake();
+    repo.linhas.set(USR_PAPEL, { userId: USR_PAPEL, role: 'CONSELHEIRO', status: 'INATIVO' });
+
+    const papel = await ensureRole(USR_PAPEL, 'PROFESSOR', repo);
+    expect(papel.role).toBe('CONSELHEIRO');
+    expect(papel.status).toBe('INATIVO');
+  });
+
+  it('corrida de criação (unique) relê, nunca sobrescreve', async () => {
+    const repo = repoFake();
+    repo.userRole.create = async ({ data }) => {
+      // O outro request venceu a corrida e escreveu primeiro.
+      repo.linhas.set(String(data.userId), { userId: String(data.userId), role: 'PROFESSOR', status: 'ATIVO' });
+      const erro = new Error('Unique constraint failed');
+      erro.code = 'P2002';
+      throw erro;
+    };
+
+    const papel = await ensureRole(USR_ALUNO, 'ALUNO', repo);
+    expect(papel.role).toBe('PROFESSOR');
   });
 });
 
