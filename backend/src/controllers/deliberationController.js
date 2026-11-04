@@ -1,6 +1,7 @@
 const prisma = require('../config/db');
 const { audit } = require('../services/auditService');
 const { canViewRequest } = require('../middlewares/visibility');
+const { findIdentitiesByIds } = require('../services/identityRepository');
 
 function suspended(r) {
   return r && r.status === 'SUSPENSO_REUNIAO_ORDINARIA';
@@ -8,9 +9,8 @@ function suspended(r) {
 
 async function enrichMessages(msgs) {
   const ids = [...new Set(msgs.map((m) => m.authorId).filter(Boolean))];
-  const users = ids.length
-    ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, role: true } })
-    : [];
+  // Identidade em auth.users (leitura); papel em sgrf.user_roles.
+  const users = ids.length ? await findIdentitiesByIds(ids) : [];
   const map = new Map(users.map((u) => [u.id, u]));
   return msgs.map((m) => {
     const u = map.get(m.authorId);

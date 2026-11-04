@@ -50,7 +50,7 @@ describe('GET /api/requests/:id — papel então visibilidade', () => {
     });
     usersById = Object.fromEntries([owner, otherProf, aluno, admin].map((u) => [u.id, u]));
     requestsById = { [draftReq.id]: draftReq, [openReq.id]: openReq };
-    prisma.user.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
+    prisma.authUser.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
     prisma.resourceRequest.findUnique.mockImplementation(async ({ where }) => requestsById[where.id] || null);
   });
 
@@ -188,7 +188,7 @@ describe('POST /api/requests/:id/cancel — matriz RN-010', () => {
     );
     const usersByIdLocal = Object.fromEntries(Object.values(users).map((u) => [u.id, u]));
     usersById = usersByIdLocal;
-    prisma.user.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
+    prisma.authUser.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
     prisma.resourceRequest.findUnique.mockImplementation(async ({ where }) => requestsById[where.id] || null);
     prisma.resourceRequest.update.mockImplementation(async ({ where }) => ({
       ...requestsById[where.id],
@@ -300,8 +300,8 @@ describe('DELETE /api/messages/:mid + GET /:id/messages — guardas de discussã
     msgsById = { [msg.id]: msg };
     const usersById = Object.fromEntries([author, outsider, aluno, chefe, conselheiro].map((u) => [u.id, u]));
     const requestsById = { [openReq.id]: openReq, [draftReq.id]: draftReq };
-    prisma.user.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
-    prisma.user.findMany.mockImplementation(async () => Object.values(usersById));
+    prisma.authUser.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
+    prisma.authUser.findMany.mockImplementation(async () => Object.values(usersById));
     prisma.resourceRequest.findUnique.mockImplementation(async ({ where }) => requestsById[where.id] || null);
     prisma.deliberationMessage.findUnique.mockImplementation(async ({ where }) => msgsById[where.id] || null);
     prisma.deliberationMessage.findMany.mockImplementation(async () => Object.values(msgsById));
@@ -387,7 +387,7 @@ describe('GET /api/requests — invisibilidade de rascunho × visibilidade abert
     open = makeRequest({ status: 'EM_VOTACAO', requesterId: other.id });
     const store = [ownDraft, otherDraft, consDraft, open];
     const usersById = Object.fromEntries([owner, aluno, admin, conselheiro, other].map((u) => [u.id, u]));
-    prisma.user.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
+    prisma.authUser.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
     prisma.resourceRequest.findMany.mockImplementation(async ({ where = {} }) =>
       store.filter((r) => matches(where, r, null)),
     );
@@ -454,8 +454,8 @@ describe('GET /api/requests/:id/votes — escopo de visão com detalhe', () => {
     votes = [makeVote(openReq.id, conselheiro.id)];
     const usersById = Object.fromEntries([conselheiro, aluno, owner, outsider].map((u) => [u.id, u]));
     const requestsById = { [openReq.id]: openReq, [draftReq.id]: draftReq };
-    prisma.user.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
-    prisma.user.findMany.mockImplementation(async () => Object.values(usersById));
+    prisma.authUser.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
+    prisma.authUser.findMany.mockImplementation(async () => Object.values(usersById));
     prisma.resourceRequest.findUnique.mockImplementation(async ({ where }) => requestsById[where.id] || null);
     prisma.vote.findMany.mockImplementation(async ({ where }) =>
       votes.filter((v) => String(v.requestId) === String(where.requestId)),
@@ -503,7 +503,7 @@ describe('GET /api/settings/transactions × PATCH /api/settings/financial', () =
       aluno: makeUser('ALUNO'),
     };
     const usersById = Object.fromEntries(Object.values(users).map((u) => [u.id, u]));
-    prisma.user.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
+    prisma.authUser.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
     prisma.financialTransaction.findMany.mockImplementation(async () => []);
     prisma.departmentSettings.findUnique.mockImplementation(async () => ({
       id: 'default',
@@ -541,44 +541,38 @@ describe('GET /api/settings/transactions × PATCH /api/settings/financial', () =
 });
 
 // Users force-reset: chefe→admin 403 (D-11); admin→professor 200.
-describe('POST /api/users/:id/force-password-reset — guarda de alvo', () => {
+// T10 no sgrf: não existe rota de credencial. Identidade e senha são do saga;
+// o sgrf só atribui papel em `sgrf.user_roles`. Este bloco é a forma executável
+// da remoção — se alguém reintroduzir a rota, a suíte falha.
+describe('Rotas de credencial não existem no sgrf (T10)', () => {
   let admin;
-  let chefe;
   let professor;
-  let target;
 
   beforeEach(() => {
     vi.clearAllMocks();
     admin = makeUser('ADMINISTRADOR');
-    chefe = makeUser('CHEFE_DEPARTAMENTO');
     professor = makeUser('PROFESSOR');
-    target = professor;
-    const usersById = Object.fromEntries([admin, chefe, professor].map((u) => [u.id, u]));
-    prisma.user.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
-    prisma.user.update.mockImplementation(async ({ where, data }) => ({
-      ...usersById[where.id],
-      ...data,
-    }));
-    prisma.emailQueue.create.mockImplementation(async () => ({ id: 'mail-1' }));
+    const usersById = Object.fromEntries([admin, professor].map((u) => [u.id, u]));
+    prisma.authUser.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
   });
 
-  it('CHEFE não reseta ADMIN (403, D-11)', async () => {
+  it('POST /api/users/:id/force-password-reset responde 404 (rota removida)', async () => {
     const res = await request(app)
-      .post(`/api/users/${admin.id}/force-password-reset`)
-      .set('Cookie', cookieFor(chefe));
-    expect(res.status).toBe(403);
-  });
-
-  it('ADMIN reseta PROFESSOR (200, fluxo intacto)', async () => {
-    const res = await request(app)
-      .post(`/api/users/${target.id}/force-password-reset`)
+      .post(`/api/users/${professor.id}/force-password-reset`)
       .set('Cookie', cookieFor(admin));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
   });
 
-  it('PROFESSOR é barrado no mapa (403)', async () => {
+  it('nenhum handler de usuário escreve credencial', async () => {
+    const mod = await import('../../src/controllers/userController.js');
+    const nomes = Object.keys(mod);
+    expect(nomes.some((n) => /password|senha/i.test(n))).toBe(false);
+  });
+
+  it('PROFESSOR não atribui papel (403 no mapa)', async () => {
     const res = await request(app)
-      .post(`/api/users/${target.id}/force-password-reset`)
+      .patch(`/api/users/${professor.id}/role`)
+      .send({ role: 'CONSELHEIRO' })
       .set('Cookie', cookieFor(professor));
     expect(res.status).toBe(403);
   });
@@ -604,7 +598,7 @@ describe('GET /api/reports/voting — escopo por pedido', () => {
     openVote = makeVote(openReq.id, professor.id);
     draftVote = makeVote(draftReq.id, owner.id);
     const usersById = Object.fromEntries([aluno, owner, professor].map((u) => [u.id, u]));
-    prisma.user.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
+    prisma.authUser.findUnique.mockImplementation(async ({ where }) => usersById[where.id] || null);
     prisma.vote.findMany.mockImplementation(async () => [openVote, draftVote]);
     prisma.viewRequest.findMany.mockImplementation(async () => []);
     prisma.resourceRequest.findMany.mockImplementation(async () => [openReq, draftReq]);

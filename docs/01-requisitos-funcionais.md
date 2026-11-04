@@ -1,45 +1,45 @@
 # Requisitos funcionais
 
-## RF-001 — Autenticação
+## RF-001 — Verificação de sessão (não autenticação)
 
-O sistema deve permitir autenticação mediante:
+O sgrf **não autentica credencial**: ele confirma no Redis que a sessão criada pelo saga
+está viva (`docs/session-contract.md`). Login, senha, rate limit e bloqueio de conta são do
+saga. O sgrf não tem tabela de credencial nem rota de credencial.
 
-- e-mail institucional;
-- senha;
-- domínio obrigatório @utfpr.edu.br.
+O sistema deve:
 
-O sistema deve rejeitar:
-
-- e-mails de domínios externos;
-- usuários inexistentes;
-- usuários inativos;
-- senha incorreta.
+- aceitar o cookie compartilhado `saga_session` (JWT-ponteiro ES256) sem novo login;
+- resolver o papel por sistema em `sgrf.user_roles`, nunca no claim `role` do JWT;
+- rejeitar corpo com campo de credencial (`src/middlewares/noCredentialFields.js`).
 
 ### Critérios de aceite
 
-- usuario@utfpr.edu.br pode ser aceito.
-- usuario@gmail.com deve ser rejeitado.
-- O e-mail deve ser normalizado para letras minúsculas.
-- A senha nunca deve ser armazenada em texto puro.
-- Após cinco tentativas consecutivas inválidas, a conta deve ser temporariamente bloqueada.
+- sessão válida do saga → `GET /api/auth/me` responde 200 sem novo login;
+- sem cookie → 401 `NO_SESSION` com `login_url` do saga;
+- assinatura, `kid` ou `exp` inválidos → 401 `BAD_TOKEN`;
+- sessão revogada no Redis → 401 `SESSION_DEAD`; `gen` divergente → 401 `SESSION_STALE`;
+- sem `saga:heartbeat` → **503** `IDENTITY_UNAVAILABLE` mesmo com token válido e JWKS
+  cacheado, e **sem** `login_url`: o frontend serve a página de erro própria, não
+  redireciona para o serviço que caiu;
+- nenhuma credencial em log, banco, store ou resposta de erro (T10);
+- o `redirect` de `login_url` só é montado quando o host de origem está na allowlist
+  (anti open-redirect).
 
-## RF-002 — Usuário administrador inicial
+## RF-002 — Papel do administrador inicial
 
-O primeiro usuário do sistema deve ser criado durante o deploy por configuração segura de ambiente:
+O sgrf não cria usuário nem credencial. O seed de deploy grava **só o papel** em
+`sgrf.user_roles`:
 
 ```
-INITIAL_ADMIN_EMAIL=ldsampaio@utfpr.edu.br
-INITIAL_ADMIN_TEMPORARY_PASSWORD=<valor-fornecido-no-deploy>
+INITIAL_ADMIN_LOGIN=ldsampaio
 ```
 
 Regras:
 
-- o usuário inicial deve possuir papel ADMINISTRADOR;
-- a senha deve ser temporária;
-- a troca deve ser obrigatória no primeiro login;
-- a senha temporária não deve aparecer em logs;
-- o sistema não deve recriar o usuário se ele já existir;
-- a senha inicial não deve ser embutida no código-fonte.
+- a identidade (`auth.users`) é criada pelo saga no primeiro login — o sgrf não cria;
+- se a identidade ainda não existe, o seed avisa e não escreve;
+- o papel gravado é ADMINISTRADOR em `sgrf.user_roles`;
+- não há senha temporária, nem troca obrigatória, nem `must_change_password`.
 
 ## RF-003 — Papéis de usuário
 
@@ -68,28 +68,18 @@ Recomendação inicial: utilizar um papel principal com permissões derivadas, e
 
 O administrador deve poder:
 
-- criar usuários;
-- informar nome completo;
-- informar e-mail institucional;
+- atribuir papel a uma identidade já existente (o sgrf não cria usuário: a identidade é do
+  saga e nasce no primeiro login);
+- importar papéis em lote (JSON, até 200) com preview dry-run em
+  `POST /api/users/batch/preview` e `POST /api/users/batch/confirm`;
+- informar nome completo e e-mail institucional;
 - selecionar a classe;
 - ativar ou desativar usuários;
-- reenviar convite;
-- forçar redefinição de senha;
 - consultar data do último acesso.
 
-Ao criar um usuário:
-
-- o sistema gera uma senha temporária aleatória;
-- salva somente o hash da senha;
-- envia e-mail de convite;
-- marca must_change_password = true.
-
-A senha temporária deve:
-
-- ser aleatória;
-- ter validade configurável;
-- ser usada uma única vez;
-- não ser exibida novamente após o envio.
+Removido: geração de senha temporária, hash de senha, convite por e-mail e
+`must_change_password` — credencial é do saga (T10). O batch grava só a linha de papel em
+`sgrf.user_roles`; se a identidade não existe em `auth.users`, o item vira erro no resultado.
 
 ## RF-005 — Alteração de papéis
 

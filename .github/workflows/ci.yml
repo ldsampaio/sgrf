@@ -23,11 +23,13 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://user:pass@localhost:5432/sgrd
-      # Dummy secrets to prevent production gate from tripping CI
-      JWT_ACCESS_SECRET: ci-dummy-access-secret-random-1234567890123456789012
-      JWT_REFRESH_SECRET: ci-dummy-refresh-secret-random-1234567890123456789012
-      INITIAL_ADMIN_EMAIL: admin@utfpr.edu.br
-      INITIAL_ADMIN_TEMPORARY_PASSWORD: ci-secure-password-random-12345678901234567890
+      # Contrato de sessão. O gate SEC-02 só dispara em NODE_ENV=production, então estes
+      # valores de teste passam; não há mais segredos de JWT próprios nem senha de admin.
+      REDIS_URL: redis://saga_readonly:ci-dummy@localhost:6379/0
+      SAGA_JWKS_URL: http://localhost:8000/.well-known/jwks.json
+      SAGA_LOGIN_URL: http://localhost:8000/login
+      PORTAL_ALLOWED_REDIRECT_HOSTS: localhost
+      INITIAL_ADMIN_LOGIN: ci-admin
     defaults:
       run:
         working-directory: backend
@@ -41,6 +43,10 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npx prisma migrate deploy
+      # O schema `auth` é do saga: a migração do Prisma cobre só o schema `sgrf`. Em CI o
+      # saga não roda, então o fixture cria `auth` no banco de teste (mesma DDL de
+      # saga/db/schema.sql). Sem isso as suítes que montam identidades falham com P2021.
+      - run: psql "$DATABASE_URL" -f tests/fixtures/auth-schema.sql
       - run: npx vitest run
   frontend:
     name: frontend

@@ -1,6 +1,7 @@
 const prisma = require('../config/db');
 const { audit } = require('../services/auditService');
 const { enqueue } = require('../services/emailService');
+const { findIdentity } = require('../services/identityRepository');
 
 function suspended(r) {
   return r && r.status === 'SUSPENSO_REUNIAO_ORDINARIA';
@@ -37,8 +38,8 @@ async function markSpent(req, res, next) {
       await tx.resourceRequest.update({ where: { id: r.id }, data: { status: 'CONCLUIDO' } });
     });
     await audit({ actorId: req.user.id, action: 'marked_spent', entityType: 'request', entityId: r.id, req });
-    const requester = await prisma.user.findUnique({ where: { id: r.requesterId } });
-    if (requester) await enqueue(requester.email, '[SGRD] Pedido marcado como gasto', `Pedido ${r.title} concluído.`);
+    const requester = await findIdentity(r.requesterId);
+    if (requester?.email) await enqueue(requester.email, '[SGRD] Pedido marcado como gasto', `Pedido ${r.title} concluído.`);
     res.json({ ok: true });
   } catch (e) { next(e); }
 }

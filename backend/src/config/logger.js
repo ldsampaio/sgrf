@@ -2,7 +2,17 @@ const pino = require('pino');
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  redact: ['req.headers.cookie', 'password', 'pass', 'SMTP_PASS', 'token'],
+  // T10: o token de sessão (cookie compartilhado) nunca é escrito em log.
+  redact: [
+    'req.headers.cookie',
+    'req.headers.authorization',
+    'password',
+    'pass',
+    'SMTP_PASS',
+    'token',
+    'saga_session',
+    'sid',
+  ],
 });
 
 module.exports = logger;

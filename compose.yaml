@@ -1,5 +1,9 @@
 # SGRF/SGRD v0.1.4 — deploy: app (imagem única, API + SPA) + Postgres.
 # Porta externa via APP_PORT (default 8081). Segredos via ambiente (ver backend/.env.example).
+#
+# Redis e saga NÃO estão neste compose: são a infra compartilhada (`../compose.dev.yml`
+# e o deploy do saga). O sgrf é verifier — sem Redis (liveness) ele rejeita com 503,
+# então os defaults de REDIS_URL/SAGA_* apontam para essa infra.
 name: sgrf
 
 services:
@@ -34,11 +38,14 @@ services:
       SERVE_FRONTEND: "true"
       FRONTEND_DIST: /app/frontend-dist
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:${APP_PORT:-8081}}
-      COOKIE_SECURE: ${COOKIE_SECURE:-true}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?defina JWT_ACCESS_SECRET no ambiente}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?defina JWT_REFRESH_SECRET no ambiente}
-      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:?defina INITIAL_ADMIN_EMAIL no ambiente}
-      INITIAL_ADMIN_TEMPORARY_PASSWORD: ${INITIAL_ADMIN_TEMPORARY_PASSWORD:?defina INITIAL_ADMIN_TEMPORARY_PASSWORD no ambiente}
+      # Contrato de sessão (docs/session-contract.md). O sgrf não assina token nem
+      # define cookie próprio: a sessão é o cookie compartilhado do saga.
+      REDIS_URL: ${REDIS_URL:-redis://saga_readonly:saga-dev-ro@redis:6379/0}
+      SAGA_JWKS_URL: ${SAGA_JWKS_URL:-http://saga:8000/.well-known/jwks.json}
+      SAGA_LOGIN_URL: ${SAGA_LOGIN_URL:-http://saga:8000/login}
+      PORTAL_ALLOWED_REDIRECT_HOSTS: ${PORTAL_ALLOWED_REDIRECT_HOSTS:-localhost}
+      # Seed: só o papel. A identidade é criada pelo saga no primeiro login.
+      INITIAL_ADMIN_LOGIN: ${INITIAL_ADMIN_LOGIN:-ldsampaio}
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

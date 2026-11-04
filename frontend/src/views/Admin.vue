@@ -84,7 +84,6 @@
               <th>Papel</th>
               <th>Status</th>
               <th>Último acesso</th>
-              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -118,17 +117,6 @@
                 </span>
               </td>
               <td class="nowrap">{{ user.lastLoginAt ? isoToBR(user.lastLoginAt) : 'Nunca acessou' }}</td>
-              <td>
-                <button
-                  type="button"
-                  class="btn btn--ghost btn--sm"
-                  :disabled="userBusy === user.id || !canManage(user)"
-                  @click="resendInvite(user)"
-                >
-                  <Icon name="mail" :size="16" />
-                  Reenviar convite
-                </button>
-              </td>
             </tr>
           </tbody>
         </table>
@@ -471,20 +459,6 @@ async function changeRole(user, event) {
   } catch (e) {
     event.target.value = user.role;
     usersErr.value = e.response?.data?.error || 'Falha ao alterar o papel.';
-  } finally {
-    userBusy.value = '';
-  }
-}
-
-async function resendInvite(user) {
-  if (!window.confirm(`Reenviar convite para ${user.email}? Uma nova senha temporária será gerada.`)) return;
-  userBusy.value = user.id;
-  usersErr.value = '';
-  try {
-    await api.post(`/users/${user.id}/resend-invite`);
-    showFlash(`Convite reenviado para ${user.email}.`);
-  } catch (e) {
-    usersErr.value = e.response?.data?.error || 'Falha ao reenviar convite.';
   } finally {
     userBusy.value = '';
   }

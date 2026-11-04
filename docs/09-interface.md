@@ -3,10 +3,11 @@
 ## Telas obrigatórias
 
 ### Autenticação
-- login;
-- troca obrigatória de senha;
-- recuperação de senha;
-- confirmação de redefinição.
+- página de redirecionamento para o portal do saga (`/login`): o sgrf não autentica
+  credencial, então não há formulário de login, troca de senha nem recuperação de senha;
+- página de erro própria para indisponibilidade do saga (`/unavailable`), renderizada pelo
+  sgrf **sem redirect** — redirecionar para o serviço que caiu é o loop que se quer evitar;
+- 401 e 503 são caminhos distintos: 401 → `login_url` do corpo; 503 → página própria.
 
 ### Dashboard
 - cartões financeiros;

@@ -1,16 +1,16 @@
 const multer = require('multer');
-const prisma = require('../config/db');
-const { hashPassword } = require('../utils/password');
-const { randomTempPassword } = require('../utils/helpers');
-const { parseBatch, validateBatch } = require('../utils/batchUsers');
 const { audit } = require('../services/auditService');
-const { enqueue } = require('../services/emailService');
+const { parseBatch, validateBatch } = require('../utils/batchUsers');
+const { findIdentitiesByEmails } = require('../services/identityRepository');
+const prisma = require('../config/db');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 } });
 
+// Lido, nunca escrito: `auth.users` é do saga. O lote do sgrf não cria usuário —
+// ele atribui papel por sistema em `sgrf.user_roles` a quem já existe no saga.
 async function existingEmailSet(emails) {
-  const rows = await prisma.user.findMany({ where: { email: { in: emails } }, select: { email: true } });
-  return new Set(rows.map((r) => r.email));
+  const identities = await findIdentitiesByEmails(emails);
+  return new Set(identities.filter((u) => u.role).map((u) => u.email));
 }
 
 async function preview(req, res, next) {
@@ -34,23 +34,27 @@ async function confirm(req, res, next) {
     const { valid, invalid } = validateBatch(arr, existing);
     const created = [];
     const errors = [...invalid];
+
+    const byEmail = new Map((await findIdentitiesByEmails(valid.map((r) => r.email))).map((u) => [u.email, u]));
     for (const item of valid) {
+      const identity = byEmail.get(item.email);
+      if (!identity) {
+        // O sgrf não cria identidade: ela nasce no primeiro login pelo saga.
+        errors.push({ email: item.email, error: 'Usuário ainda não existe no saga (faça o primeiro login)' });
+        continue;
+      }
       try {
-        const temp = randomTempPassword();
-        const u = await prisma.user.create({
-          data: {
-            name: item.name, email: item.email, role: item.role,
-            passwordHash: await hashPassword(temp),
-            mustChangePassword: true,
-            temporaryPasswordExpiresAt: new Date(Date.now() + 24 * 3600 * 1000),
-          },
+        const row = await prisma.userRole.upsert({
+          where: { userId: identity.id },
+          update: { role: item.role },
+          create: { userId: identity.id, role: item.role, status: 'ATIVO' },
         });
-        await enqueue(item.email, '[SGRD] Convite de acesso', `Olá ${item.name}, sua senha temporária: ${temp}\nVálida por 24h.`);
-        created.push({ email: u.email, id: u.id });
-      } catch (e) {
-        errors.push({ email: item.email, error: String(e.message).includes('Unique') ? 'E-mail já cadastrado' : 'Falha ao criar' });
+        created.push({ email: item.email, id: identity.id, role: row.role });
+      } catch {
+        errors.push({ email: item.email, error: 'Falha ao atribuir papel' });
       }
     }
+
     await audit({ actorId: req.user.id, action: 'users_batch_created', entityType: 'user_batch', afterData: { created: created.length, errors: errors.length }, req });
     res.status(201).json({ created, errors, summary: { total: arr.length, created: created.length, errors: errors.length } });
   } catch (e) { next(e); }

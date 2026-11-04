@@ -57,10 +57,6 @@
                   <div class="dropdown__name">{{ auth.user.name || 'Conta institucional' }}</div>
                   <div class="dropdown__email">{{ auth.user.email }}</div>
                 </div>
-                <router-link to="/change-password" class="dropdown__item" role="menuitem" @click="menuOpen = false">
-                  <Icon name="lock" :size="17" />
-                  Alterar senha
-                </router-link>
                 <div class="dropdown__sep" role="separator"></div>
                 <button type="button" class="dropdown__item dropdown__item--danger" role="menuitem" @click="logout">
                   <Icon name="logout" :size="17" />
@@ -136,10 +132,6 @@
             <Icon :name="item.icon" :size="22" />
             {{ item.label }}
           </router-link>
-          <router-link to="/change-password" class="mobile-nav__link" @click="mobileOpen = false">
-            <Icon name="lock" :size="22" />
-            Alterar senha
-          </router-link>
         </nav>
 
         <div class="mobile-nav__user">
@@ -159,13 +151,12 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import Icon from './Icon.vue';
 import { useAuth } from '../stores/auth';
 import { initials as initialsOf, roleLabel } from '../utils/labels';
 
 const auth = useAuth();
-const router = useRouter();
 const route = useRoute();
 
 const menuOpen = ref(false);
@@ -219,10 +210,11 @@ onBeforeUnmount(() => {
   document.body.classList.remove('is-locked');
 });
 
+// O logout é do saga (derruba a sessão no Redis e remove o cookie compartilhado).
+// O sgrf não tem rota de logout: limpa o estado local e volta para o portal.
 async function logout() {
   menuOpen.value = false;
   mobileOpen.value = false;
-  await auth.logout();
-  router.push('/login');
+  auth.redirectToSaga();
 }
 </script>

@@ -1,7 +1,9 @@
 require('dotenv').config();
 
-// Production gate: fail fast if insecure secrets are configured (SEC-02)
-// This gate runs before module.exports to prevent insecure values from escaping
+// Production gate (SEC-02): o sgrf NÃO autentica credencial — ele verifica a
+// sessão compartilhada do saga. Não existem mais segredos de JWT próprios nem
+// senha de admin: o que precisa ser seguro é o acesso ao Redis (ACL read-only)
+// e o JWKS do saga.
 function isInsecureSecret(value) {
   const trimmed = (value || '').trim();
   // Empty or whitespace-only
@@ -13,11 +15,6 @@ function isInsecureSecret(value) {
   return false;
 }
 
-function validateDevPrefix(value) {
-  const lower = (value || '').toLowerCase();
-  return lower.startsWith('dev-');
-}
-
 // Skip production gate when SKIP_GW_ENV is true (used for testing)
 const skipProductionGate = process.env.SKIP_GW_ENV === 'true';
 const isProduction = !skipProductionGate && process.env.NODE_ENV === 'production';
@@ -25,58 +22,32 @@ const isProduction = !skipProductionGate && process.env.NODE_ENV === 'production
 if (isProduction) {
   const offenders = [];
 
-  // Check JWT_ACCESS_SECRET
-  if (isInsecureSecret(process.env.JWT_ACCESS_SECRET)) {
-    offenders.push('JWT_ACCESS_SECRET');
+  for (const key of ['REDIS_URL', 'SAGA_JWKS_URL', 'SAGA_LOGIN_URL', 'PORTAL_ALLOWED_REDIRECT_HOSTS']) {
+    if (isInsecureSecret(process.env[key])) offenders.push(key);
   }
 
-  // Check JWT_REFRESH_SECRET
-  if (isInsecureSecret(process.env.JWT_REFRESH_SECRET)) {
-    offenders.push('JWT_REFRESH_SECRET');
-  }
-
-  // Check INITIAL_ADMIN_TEMPORARY_PASSWORD
-  if (isInsecureSecret(process.env.INITIAL_ADMIN_TEMPORARY_PASSWORD)) {
-    offenders.push('INITIAL_ADMIN_TEMPORARY_PASSWORD');
-  }
-
-  // Check INITIAL_ADMIN_EMAIL for institutional suffix
-  const email = process.env.INITIAL_ADMIN_EMAIL;
-  if (email) {
-    if (isInsecureSecret(email)) {
-      offenders.push('INITIAL_ADMIN_EMAIL');
-    } else {
-      const emailLower = email.toLowerCase().trim();
-      if (!emailLower.endsWith('@utfpr.edu.br') && !emailLower.endsWith('@utfpr.edu.com')) {
-        offenders.push('INITIAL_ADMIN_EMAIL (missing institutional suffix @utfpr.edu.br)');
-      }
-    }
-  } else {
-    offenders.push('INITIAL_ADMIN_EMAIL');
-  }
+  // A ACL read-only é parte do contrato: o sgrf não pode escrever no store de
+  // sessões. Em produção o REDIS_URL precisa usar o usuário saga_readonly.
+  const redisUrl = (process.env.REDIS_URL || '').trim();
+  if (redisUrl && !redisUrl.includes('saga_readonly')) offenders.push('REDIS_URL (ACL)');
 
   if (offenders.length > 0) {
     throw new Error(
       `SEC-02: Production boot refused - insecure or invalid value(s) found in: ${offenders.join(', ')}. ` +
-      `For JWT_ACCESS_SECRET and JWT_REFRESH_SECRET: use secure random strings (no 'change-me' placeholder, no 'dev-' prefix). ` +
-      `For INITIAL_ADMIN_TEMPORARY_PASSWORD: use 24+ character random strings (same rules). ` +
-      `For INITIAL_ADMIN_EMAIL: use a UTF-PR email address (@utfpr.edu.br or @utfpr.edu.com). ` +
+      `REDIS_URL must use the read-only ACL user (saga_readonly) — the sgrf never writes session state. ` +
+      `SAGA_JWKS_URL and SAGA_LOGIN_URL must be the real saga endpoints (no 'change-me', no 'dev-' prefix). ` +
+      `PORTAL_ALLOWED_REDIRECT_HOSTS is the explicit allowlist for login_url redirects; without it the ` +
+      `middleware refuses to build a redirect (open redirect). ` +
       `Set proper values in your production .env before starting with NODE_ENV=production.`
     );
   }
 }
 
-// Cookie secure flag parsing
-// Explicit true/false wins; absent follows NODE_ENV production equality
-const cookieSecureExplicit = process.env.COOKIE_SECURE;
-let cookieSecure;
-if (cookieSecureExplicit === 'true') {
-  cookieSecure = true;
-} else if (cookieSecureExplicit === 'false') {
-  cookieSecure = false;
-} else {
-  // For tests, skip cookieSecure gate tracking too
-  cookieSecure = skipProductionGate ? false : isProduction;
+function parseHosts(value) {
+  return String(value || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 module.exports = {
@@ -85,8 +56,18 @@ module.exports = {
   dbUrl: process.env.DATABASE_URL || 'postgresql://sgrd:sgrd@localhost:5432/sgrd',
   serveFrontend: process.env.SERVE_FRONTEND === 'true',
   frontendDist: process.env.FRONTEND_DIST || '/app/frontend-dist',
-  jwtAccessSecret: process.env.JWT_ACCESS_SECRET || 'dev-access-secret-change-me-0123456789',
-  jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-me-0123456789',
+
+  // ── Contrato de sessão (docs/session-contract.md) ──
+  redisUrl: process.env.REDIS_URL || 'redis://saga_readonly:saga-dev-ro@localhost:6379/0',
+  sagaJwksUrl: process.env.SAGA_JWKS_URL || 'http://localhost:8000/.well-known/jwks.json',
+  sagaLoginUrl: process.env.SAGA_LOGIN_URL || 'http://localhost:8000/login',
+  // Allowlist explícita de hosts que podem aparecer em login_url. Sem allowlist
+  // o middleware não monta redirect (open redirect).
+  portalAllowedRedirectHosts: parseHosts(process.env.PORTAL_ALLOWED_REDIRECT_HOSTS),
+  // Cookie compartilhado do saga. O sgrf nunca define cookie próprio.
+  sessionCookieName: process.env.SESSION_COOKIE_NAME || 'saga_session',
+  heartbeatKey: 'saga:heartbeat',
+
   smtpEnabled: process.env.SMTP_ENABLED === 'true',
   smtp: {
     host: process.env.SMTP_HOST || '',
@@ -96,7 +77,8 @@ module.exports = {
     pass: process.env.SMTP_PASS || '',
     from: process.env.SMTP_FROM || 'SGRD <nao-responder@utfpr.edu.br>',
   },
-  initialAdminEmail: (process.env.INITIAL_ADMIN_EMAIL || 'ldsampaio@utfpr.edu.br').toLowerCase(),
-  initialAdminPassword: process.env.INITIAL_ADMIN_TEMPORARY_PASSWORD || '',
-  cookieSecure: cookieSecure,
+
+  // Seed: só o papel do admin. A identidade (login) é criada pelo saga no
+  // primeiro login — o sgrf não cria usuário nem credencial.
+  initialAdminLogin: (process.env.INITIAL_ADMIN_LOGIN || 'ldsampaio').toLowerCase(),
 };

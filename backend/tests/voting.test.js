@@ -1,8 +1,52 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { tally, canVote, closeVoting, validateVoteInput } from '../src/services/votingService.js';
 
 const prisma = new PrismaClient();
+// O sgrf nunca escreve em `auth` — o schema é do saga (regra de propriedade,
+// AGENTS.md). Nestes testes de integração o helper faz o papel do saga: registra
+// a identidade. O papel do sgrf vive em `sgrf.user_roles`. Nenhum campo de
+// credencial existe (T10): não há senha, não há contadores de tentativa.
+async function criarIdentidade({ name, email, role, status = 'ATIVO', roleBase = 'UNDEFINIDO' }) {
+  const login = email.split('@')[0];
+  // `login` é unique no banco, mas não é o @id do modelo read-only de `auth`,
+  // então a busca é por findFirst — nunca upsert. O `id` é gerado aqui porque o
+  // modelo read-only não declara o default do banco.
+  const user =
+    (await prisma.authUser.findFirst({ where: { login } })) ||
+    (await prisma.authUser.create({ data: { id: randomUUID(), login, name, email, roleBase } }));
+  const papel = await prisma.userRole.upsert({
+    where: { userId: user.id },
+    create: { userId: user.id, role, status },
+    update: { role, status },
+  });
+  return {
+    id: user.id,
+    login: user.login,
+    name: user.name,
+    email: user.email,
+    roleBase: user.roleBase,
+    role: papel.role,
+    status: papel.status,
+  };
+}
+
+async function removerIdentidades(ids) {
+  await prisma.userRole.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.authUser.deleteMany({ where: { id: { in: ids } } });
+}
+
+async function removerIdentidadesPorEmail(emails) {
+  const users = await prisma.authUser.findMany({ where: { email: { in: emails } }, select: { id: true } });
+  await removerIdentidades(users.map((u) => u.id));
+}
+
+async function removerIdentidadesPorEmailSuffix(sufixo) {
+  const users = await prisma.authUser.findMany({ where: { email: { endsWith: sufixo } }, select: { id: true } });
+  await removerIdentidades(users.map((u) => u.id));
+}
+
 
 describe('votação tally (sem quórum, maioria simples)', () => {
   it('deferido vence', () => {
@@ -45,42 +89,10 @@ describe('VOT-01: Tie-break convergence', () => {
 
     // Create test users
     const users = await Promise.all([
-      prisma.user.create({
-        data: {
-          name: 'Chefe Teste VOT01',
-          email: 'chefe.vot01@utfpr.edu.br',
-          role: 'CHEFE_DEPARTAMENTO',
-          passwordHash: 'hash',
-          status: 'ATIVO',
-        },
-      }),
-      prisma.user.create({
-        data: {
-          name: 'Conselheiro 1 VOT01',
-          email: 'cons1.vot01@utfpr.edu.br',
-          role: 'CONSELHEIRO',
-          passwordHash: 'hash',
-          status: 'ATIVO',
-        },
-      }),
-      prisma.user.create({
-        data: {
-          name: 'Conselheiro 2 VOT01',
-          email: 'cons2.vot01@utfpr.edu.br',
-          role: 'CONSELHEIRO',
-          passwordHash: 'hash',
-          status: 'ATIVO',
-        },
-      }),
-      prisma.user.create({
-        data: {
-          name: 'Requester VOT01',
-          email: 'requester.vot01@utfpr.edu.br',
-          role: 'PROFESSOR',
-          passwordHash: 'hash',
-          status: 'ATIVO',
-        },
-      }),
+      criarIdentidade({ name: 'Chefe Teste VOT01', email: 'chefe.vot01@utfpr.edu.br', role: 'CHEFE_DEPARTAMENTO', status: 'ATIVO', }),
+      criarIdentidade({ name: 'Conselheiro 1 VOT01', email: 'cons1.vot01@utfpr.edu.br', role: 'CONSELHEIRO', status: 'ATIVO', }),
+      criarIdentidade({ name: 'Conselheiro 2 VOT01', email: 'cons2.vot01@utfpr.edu.br', role: 'CONSELHEIRO', status: 'ATIVO', }),
+      criarIdentidade({ name: 'Requester VOT01', email: 'requester.vot01@utfpr.edu.br', role: 'PROFESSOR', status: 'ATIVO', }),
     ]);
 
     chefeId = users[0].id;
@@ -114,11 +126,7 @@ describe('VOT-01: Tie-break convergence', () => {
     // Cleanup
     await prisma.vote.deleteMany({ where: { requestId } });
     await prisma.resourceRequest.delete({ where: { id: requestId } });
-    await prisma.user.deleteMany({
-      where: {
-        id: { in: [chefeId, conselheiro1Id, conselheiro2Id, requesterId] },
-      },
-    });
+    await removerIdentidades([chefeId, conselheiro1Id, conselheiro2Id, requesterId]);
     await prisma.$disconnect();
   });
 
@@ -283,24 +291,8 @@ describe('VOT-01: changeMyVote guard extension', () => {
 
   beforeAll(async () => {
     const users = await Promise.all([
-      prisma.user.create({
-        data: {
-          name: 'Chefe ChangeVote',
-          email: 'chefe.changevote@utfpr.edu.br',
-          role: 'CHEFE_DEPARTAMENTO',
-          passwordHash: 'hash',
-          status: 'ATIVO',
-        },
-      }),
-      prisma.user.create({
-        data: {
-          name: 'Conselheiro ChangeVote',
-          email: 'cons.changevote@utfpr.edu.br',
-          role: 'CONSELHEIRO',
-          passwordHash: 'hash',
-          status: 'ATIVO',
-        },
-      }),
+      criarIdentidade({ name: 'Chefe ChangeVote', email: 'chefe.changevote@utfpr.edu.br', role: 'CHEFE_DEPARTAMENTO', status: 'ATIVO', }),
+      criarIdentidade({ name: 'Conselheiro ChangeVote', email: 'cons.changevote@utfpr.edu.br', role: 'CONSELHEIRO', status: 'ATIVO', }),
     ]);
 
     chefeId = users[0].id;
@@ -336,9 +328,7 @@ describe('VOT-01: changeMyVote guard extension', () => {
   afterAll(async () => {
     await prisma.vote.deleteMany({ where: { requestId } });
     await prisma.resourceRequest.delete({ where: { id: requestId } });
-    await prisma.user.deleteMany({
-      where: { id: { in: [chefeId, conselheiroId] } },
-    });
+    await removerIdentidades([chefeId, conselheiroId]);
   });
 
   it('validates vote input for tie-break change', () => {
@@ -377,42 +367,10 @@ describe('VOT-03: Partial approval arbitration', () => {
 
     // Create test users
     const users = await Promise.all([
-      prisma.user.create({
-        data: {
-          name: 'Chefe VOT03',
-          email: 'chefe.vot03@utfpr.edu.br',
-          role: 'CHEFE_DEPARTAMENTO',
-          passwordHash: 'hash',
-          status: 'ATIVO',
-        },
-      }),
-      prisma.user.create({
-        data: {
-          name: 'Conselheiro 1 VOT03',
-          email: 'cons1.vot03@utfpr.edu.br',
-          role: 'CONSELHEIRO',
-          passwordHash: 'hash',
-          status: 'ATIVO',
-        },
-      }),
-      prisma.user.create({
-        data: {
-          name: 'Conselheiro 2 VOT03',
-          email: 'cons2.vot03@utfpr.edu.br',
-          role: 'CONSELHEIRO',
-          passwordHash: 'hash',
-          status: 'ATIVO',
-        },
-      }),
-      prisma.user.create({
-        data: {
-          name: 'Requester VOT03',
-          email: 'requester.vot03@utfpr.edu.br',
-          role: 'PROFESSOR',
-          passwordHash: 'hash',
-          status: 'ATIVO',
-        },
-      }),
+      criarIdentidade({ name: 'Chefe VOT03', email: 'chefe.vot03@utfpr.edu.br', role: 'CHEFE_DEPARTAMENTO', status: 'ATIVO', }),
+      criarIdentidade({ name: 'Conselheiro 1 VOT03', email: 'cons1.vot03@utfpr.edu.br', role: 'CONSELHEIRO', status: 'ATIVO', }),
+      criarIdentidade({ name: 'Conselheiro 2 VOT03', email: 'cons2.vot03@utfpr.edu.br', role: 'CONSELHEIRO', status: 'ATIVO', }),
+      criarIdentidade({ name: 'Requester VOT03', email: 'requester.vot03@utfpr.edu.br', role: 'PROFESSOR', status: 'ATIVO', }),
     ]);
 
     chefeId = users[0].id;
@@ -448,11 +406,7 @@ describe('VOT-03: Partial approval arbitration', () => {
     await prisma.resourceRequest.delete({ where: { id: requestId } });
     await prisma.financialTransaction.deleteMany({ where: { requestId } });
     await prisma.auditEvent.deleteMany({ where: { entityId: requestId } });
-    await prisma.user.deleteMany({
-      where: {
-        id: { in: [chefeId, conselheiro1Id, conselheiro2Id, requesterId] },
-      },
-    });
+    await removerIdentidades([chefeId, conselheiro1Id, conselheiro2Id, requesterId]);
     await prisma.$disconnect();
   });
 
@@ -661,15 +615,7 @@ describe('VOT-02: Annual cap accounting (CONCLUIDO counts toward cap)', () => {
     });
 
     // Create test user (requester)
-    const user = await prisma.user.create({
-      data: {
-        name: 'Requester VOT02',
-        email: 'requester.vot02@utfpr.edu.br',
-        role: 'PROFESSOR',
-        passwordHash: 'hash',
-        status: 'ATIVO',
-      },
-    });
+    const user = await criarIdentidade({ name: 'Requester VOT02', email: 'requester.vot02@utfpr.edu.br', role: 'PROFESSOR', status: 'ATIVO', });
     requesterId = user.id;
     requesterUser = user;
 
@@ -681,7 +627,7 @@ describe('VOT-02: Annual cap accounting (CONCLUIDO counts toward cap)', () => {
   afterAll(async () => {
     // Cleanup
     await prisma.resourceRequest.deleteMany({ where: { requesterId } });
-    await prisma.user.delete({ where: { id: requesterId } });
+    await removerIdentidades([requesterId]);
     await prisma.$disconnect();
   });
 
@@ -793,7 +739,7 @@ describe('VOT-04: Cancellation after approval', () => {
       await prisma.resourceRequest.deleteMany({ where: { id: { in: requestIds } } });
     }
     if (requesterIds.length > 0) {
-      await prisma.user.deleteMany({ where: { id: { in: requesterIds } } });
+      await removerIdentidades(requesterIds);
     }
 
     // Ensure fund balance exists for test year
@@ -805,26 +751,10 @@ describe('VOT-04: Cancellation after approval', () => {
 
     // Create test users (upsert to handle re-runs)
     const users = await Promise.all([
-      prisma.user.upsert({
-        where: { email: 'admin.vot04@utfpr.edu.br' },
-        create: { name: 'Admin VOT04', email: 'admin.vot04@utfpr.edu.br', role: 'ADMINISTRADOR', passwordHash: 'hash', status: 'ATIVO' },
-        update: { name: 'Admin VOT04', role: 'ADMINISTRADOR', passwordHash: 'hash', status: 'ATIVO' },
-      }),
-      prisma.user.upsert({
-        where: { email: 'chefe.vot04@utfpr.edu.br' },
-        create: { name: 'Chefe VOT04', email: 'chefe.vot04@utfpr.edu.br', role: 'CHEFE_DEPARTAMENTO', passwordHash: 'hash', status: 'ATIVO' },
-        update: { name: 'Chefe VOT04', role: 'CHEFE_DEPARTAMENTO', passwordHash: 'hash', status: 'ATIVO' },
-      }),
-      prisma.user.upsert({
-        where: { email: 'cons.vot04@utfpr.edu.br' },
-        create: { name: 'Conselheiro VOT04', email: 'cons.vot04@utfpr.edu.br', role: 'CONSELHEIRO', passwordHash: 'hash', status: 'ATIVO' },
-        update: { name: 'Conselheiro VOT04', role: 'CONSELHEIRO', passwordHash: 'hash', status: 'ATIVO' },
-      }),
-      prisma.user.upsert({
-        where: { email: 'requester.vot04@utfpr.edu.br' },
-        create: { name: 'Requester VOT04', email: 'requester.vot04@utfpr.edu.br', role: 'PROFESSOR', passwordHash: 'hash', status: 'ATIVO' },
-        update: { name: 'Requester VOT04', role: 'PROFESSOR', passwordHash: 'hash', status: 'ATIVO' },
-      }),
+      criarIdentidade({ name: 'Admin VOT04', email: 'admin.vot04@utfpr.edu.br', role: 'ADMINISTRADOR' }),
+      criarIdentidade({ name: 'Chefe VOT04', email: 'chefe.vot04@utfpr.edu.br', role: 'CHEFE_DEPARTAMENTO' }),
+      criarIdentidade({ name: 'Conselheiro VOT04', email: 'cons.vot04@utfpr.edu.br', role: 'CONSELHEIRO' }),
+      criarIdentidade({ name: 'Requester VOT04', email: 'requester.vot04@utfpr.edu.br', role: 'PROFESSOR' }),
     ]);
 
     adminId = users[0].id;
@@ -1270,7 +1200,7 @@ describe('GA-VOT-05: TOCTOU race guard — concurrent balance mutations', () => 
       'requester.gavot05@utfpr.edu.br'
     ];
     
-    const existingUsers = await prisma.user.findMany({ where: { email: { in: testEmails } } });
+    const existingUsers = await prisma.authUser.findMany({ where: { email: { in: testEmails } } });
     const existingUserIds = existingUsers.map(u => u.id);
     
     if (existingUserIds.length > 0) {
@@ -1282,30 +1212,14 @@ describe('GA-VOT-05: TOCTOU race guard — concurrent balance mutations', () => 
       }
       await prisma.resourceRequest.deleteMany({ where: { requesterId: { in: existingUserIds } } });
     }
-    await prisma.user.deleteMany({ where: { email: { in: testEmails } } });
+    await removerIdentidadesPorEmail(testEmails);
 
     // Create test users
     const users = await Promise.all([
-      prisma.user.upsert({
-        where: { email: 'chefe.gavot05@utfpr.edu.br' },
-        create: { name: 'Chefe GA-VOT-05', email: 'chefe.gavot05@utfpr.edu.br', role: 'CHEFE_DEPARTAMENTO', passwordHash: 'hash', status: 'ATIVO' },
-        update: { role: 'CHEFE_DEPARTAMENTO', status: 'ATIVO' },
-      }),
-      prisma.user.upsert({
-        where: { email: 'cons.gavot05@utfpr.edu.br' },
-        create: { name: 'Conselheiro GA-VOT-05', email: 'cons.gavot05@utfpr.edu.br', role: 'CONSELHEIRO', passwordHash: 'hash', status: 'ATIVO' },
-        update: { role: 'CONSELHEIRO', status: 'ATIVO' },
-      }),
-      prisma.user.upsert({
-        where: { email: 'admin.gavot05@utfpr.edu.br' },
-        create: { name: 'Admin GA-VOT-05', email: 'admin.gavot05@utfpr.edu.br', role: 'ADMINISTRADOR', passwordHash: 'hash', status: 'ATIVO' },
-        update: { role: 'ADMINISTRADOR', status: 'ATIVO' },
-      }),
-      prisma.user.upsert({
-        where: { email: 'requester.gavot05@utfpr.edu.br' },
-        create: { name: 'Requester GA-VOT-05', email: 'requester.gavot05@utfpr.edu.br', role: 'PROFESSOR', passwordHash: 'hash', status: 'ATIVO' },
-        update: { role: 'PROFESSOR', status: 'ATIVO' },
-      }),
+      criarIdentidade({ name: 'Chefe GA-VOT-05', email: 'chefe.gavot05@utfpr.edu.br', role: 'CHEFE_DEPARTAMENTO' }),
+      criarIdentidade({ name: 'Conselheiro GA-VOT-05', email: 'cons.gavot05@utfpr.edu.br', role: 'CONSELHEIRO' }),
+      criarIdentidade({ name: 'Admin GA-VOT-05', email: 'admin.gavot05@utfpr.edu.br', role: 'ADMINISTRADOR' }),
+      criarIdentidade({ name: 'Requester GA-VOT-05', email: 'requester.gavot05@utfpr.edu.br', role: 'PROFESSOR' }),
     ]);
 
     chefeUser = users[0];
@@ -1342,9 +1256,7 @@ describe('GA-VOT-05: TOCTOU race guard — concurrent balance mutations', () => 
     await prisma.auditEvent.deleteMany({ where: { entityId: { in: requestIds } } });
     await prisma.vote.deleteMany({ where: { requestId: { in: requestIds } } });
     await prisma.resourceRequest.deleteMany({ where: { requesterId: requesterUser.id } });
-    await prisma.user.deleteMany({
-      where: { email: { endsWith: '.gavot05@utfpr.edu.br' } },
-    });
+    await removerIdentidadesPorEmailSuffix('.gavot05@utfpr.edu.br');
     await prisma.$disconnect();
   });
 
