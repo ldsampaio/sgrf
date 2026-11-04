@@ -1,4 +1,4 @@
-# SGRF/SGRD v0.1.1 — deploy: app (imagem única, API + SPA) + Postgres.
+# SGRF/SGRD v0.1.4 — deploy: app (imagem única, API + SPA) + Postgres.
 # Porta externa via APP_PORT (default 8081). Segredos via ambiente (ver backend/.env.example).
 #
 # Redis e saga NÃO estão neste compose: são a infra compartilhada (`../compose.dev.yml`

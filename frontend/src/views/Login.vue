@@ -20,9 +20,11 @@
     </div>
   </div>
 </template>
+
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import Icon from '../components/Icon.vue';
 import { useAuth } from '../stores/auth';
 
 // O sgrf não autentica credencial — não há formulário de login aqui. Esta página é
@@ -40,10 +42,10 @@ const loginUrl = computed(() => (auth.acao?.tipo === 'redirect' ? auth.acao.url 
 // Open-redirect protection: só caminho interno, um slash inicial, sem scheme/host.
 function isInternalPath(p) {
   return (
-    typeof p === 'string' &&
-    p.startsWith('/') &&
-    !p.startsWith('//') &&
-    !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(p)
+    typeof path === 'string' &&
+    path.startsWith('/') &&
+    !path.startsWith('//') &&
+    !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)
   );
 }
 

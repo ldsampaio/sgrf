@@ -13,15 +13,15 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     // Página de redirecionamento para o saga — o sgrf não autentica credencial.
-    { path: '/login', name: 'login', component: Login, meta: { public: true } },
+    { path: '/login', name: 'login', component: Login, meta: { public: true, bare: true, title: 'Entrar' } },
     // Página de erro própria (503 IDENTITY_UNAVAILABLE). Não é o caminho do 401:
     // redirecionar para o serviço que caiu é o loop que se quer evitar.
-    { path: '/unavailable', name: 'unavailable', component: Unavailable, meta: { public: true } },
-    { path: '/', component: Dashboard, meta: { auth: true } },
-    { path: '/requests', component: Requests, meta: { auth: true } },
-    { path: '/council', component: Council, meta: { auth: true } },
-    { path: '/reports', component: Reports, meta: { auth: true } },
-    { path: '/admin', component: Admin, meta: { auth: true, roles: ['ADMINISTRADOR', 'CHEFE_DEPARTAMENTO'] } },
+    { path: '/unavailable', name: 'unavailable', component: Unavailable, meta: { public: true, bare: true, title: 'Indisponível' } },
+    { path: '/', component: Dashboard, meta: { auth: true, title: 'Dashboard' } },
+    { path: '/requests', component: Requests, meta: { auth: true, title: 'Solicitações' } },
+    { path: '/council', component: Council, meta: { auth: true, title: 'Conselho' } },
+    { path: '/reports', component: Reports, meta: { auth: true, title: 'Relatórios' } },
+    { path: '/admin', component: Admin, meta: { auth: true, roles: ['ADMINISTRADOR', 'CHEFE_DEPARTAMENTO'], title: 'Administração' } },
   ],
 });
 
@@ -39,6 +39,10 @@ router.beforeEach(async (to) => {
 
   if (to.meta.roles && !to.meta.roles.includes(auth.user.role)) return '/';
   return true;
+});
+
+router.afterEach((to) => {
+  document.title = to.meta.title ? `${to.meta.title} · SGRD UTFPR` : 'SGRD · UTFPR';
 });
 
 export default router;

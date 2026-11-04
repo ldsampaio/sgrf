@@ -1,5 +1,6 @@
 const prisma = require('../config/db');
 const { audit } = require('../services/auditService');
+const { enqueue, getTransporter } = require('../services/emailService');
 const { getSettings, getBalance } = require('../services/requestService');
 const env = require('../config/env');
 
@@ -77,4 +78,19 @@ async function transactions(req, res, next) {
   } catch (e) { next(e); }
 }
 
-module.exports = { get, patchFinancial, patchBalance, transactions };
+async function testEmail(req, res, next) {
+  try {
+    if (!env.smtpEnabled) return res.status(400).json({ error: 'SMTP não configurado' });
+    const to = req.body.to || env.initialAdminEmail;
+    await getTransporter().sendMail({
+      from: env.smtp.from,
+      to,
+      subject: '[SGRD] Teste de e-mail',
+      text: 'Este é um e-mail de teste do SGRD. A configuração SMTP está funcionando corretamente.',
+    });
+    await audit({ actorId: req.user.id, action: 'email_test_sent', entityType: 'settings', entityId: 'default', afterData: { to, smtpHost: env.smtp.host, smtpUser: env.smtp.user }, req });
+    res.json({ ok: true, message: 'E-mail de teste enviado com sucesso' });
+  } catch (e) { next(e); }
+}
+
+module.exports = { get, patchFinancial, patchBalance, transactions, testEmail };
