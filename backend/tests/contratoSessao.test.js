@@ -102,8 +102,8 @@ function respostaCapturada() {
   };
 }
 
-// Env de teste para o caminho de login_url. Sem allowlist o middleware não monta
-// redirect — é o comportamento que o teste abaixo exercita.
+// Env de teste para o caminho de login_url. A allowlist é por host sem porta; o teste
+// 'redirect só aparece quando o host de origem está na allowlist' exercita os dois lados.
 const ENV_TESTE = {
   sagaLoginUrl: 'http://localhost:8000/login',
   portalAllowedRedirectHosts: ['localhost'],
@@ -185,7 +185,9 @@ describe('2–4. Caminhos de sessão', () => {
     expect(passou).toBe(false);
     expect(res.captura.status).toBe(401);
     expect(res.captura.body.code).toBe('NO_SESSION');
-    expect(res.captura.body.login_url).toBe('http://localhost:8000/login');
+    // Allowlist por host sem porta: o header vem `localhost:5174` e a allowlist declara
+    // `localhost`, então o redirect entra. Sem allowlist viria só a base.
+    expect(res.captura.body.login_url).toBe('http://localhost:8000/login?redirect=%2Fapi%2Fauth%2Fme');
   });
 
   it('assinatura de outra chave → 401 BAD_TOKEN', async () => {
