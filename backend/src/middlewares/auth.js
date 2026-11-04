@@ -102,7 +102,7 @@ function createAuthMiddleware(deps = {}) {
     //    os demais papéis só a gestão atribui.
     let roleRow = null;
     try {
-      roleRow = await resolveRole(req.user.id, req.user.roleBase);
+      roleRow = await resolveRole(req.user.id, req.user.roleBase, req.user.login);
     } catch (e) {
       return next(e);
     }

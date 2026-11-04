@@ -115,6 +115,7 @@ const ENV_TESTE = {
 const USR_ALUNO = '11111111-1111-4111-8111-111111111111';
 const USR_INDEF = '22222222-2222-4222-8222-222222222222';
 const USR_PAPEL = '33333333-3333-4333-8333-333333333333';
+const USR_ADMIN = '44444444-4444-4444-8444-444444444444';
 
 function ambiente({ redis, papel = null, resolver, resolveRole } = {}) {
   return {
@@ -140,6 +141,11 @@ function repoFake(linhas = new Map()) {
       create: async ({ data }) => {
         const linha = { userId: String(data.userId), role: data.role, status: data.status };
         linhas.set(linha.userId, linha);
+        return linha;
+      },
+      update: async ({ where, data }) => {
+        const linha = linhas.get(String(where.userId));
+        Object.assign(linha, data);
         return linha;
       },
     },
@@ -301,7 +307,7 @@ describe('5–6. req.user do Redis e papel do sistema', () => {
 
     const repo = repoFake();
     let usuario = null;
-    const middleware = createAuthMiddleware(ambiente({ redis, resolveRole: (id, roleBase) => ensureRole(id, roleBase, repo) }));
+    const middleware = createAuthMiddleware(ambiente({ redis, resolveRole: (id, roleBase, login) => ensureRole(id, roleBase, login, repo) }));
     const req = requisicao(token({ iss: 'saga', sub: USR_ALUNO, sid: 'sidtest0008', gen: 1 }));
     await middleware(req, respostaCapturada(), () => {
       usuario = req.user;
@@ -317,11 +323,11 @@ describe('5–6. req.user do Redis e papel do sistema', () => {
   it('UNDEFINIDO não inventa papel — o mapa de permissão barra', async () => {
     const redis = new RedisFake();
     redis.set('saga:heartbeat', '1');
-    redis.set('saga:sess:sidtest0010:meta', { user_id: USR_INDEF, login: 'ldsampaio', role_base: 'UNDEFINIDO', gen: '1' });
+    redis.set('saga:sess:sidtest0010:meta', { user_id: USR_INDEF, login: 'prof.x', role_base: 'UNDEFINIDO', gen: '1' });
 
     const repo = repoFake();
     let usuario = null;
-    const middleware = createAuthMiddleware(ambiente({ redis, resolveRole: (id, roleBase) => ensureRole(id, roleBase, repo) }));
+    const middleware = createAuthMiddleware(ambiente({ redis, resolveRole: (id, roleBase, login) => ensureRole(id, roleBase, login, repo) }));
     const req = requisicao(token({ iss: 'saga', sub: USR_INDEF, sid: 'sidtest0010', gen: 1 }));
     await middleware(req, respostaCapturada(), () => {
       usuario = req.user;
@@ -337,9 +343,23 @@ describe('5–6. req.user do Redis e papel do sistema', () => {
     const repo = repoFake();
     repo.linhas.set(USR_PAPEL, { userId: USR_PAPEL, role: 'CONSELHEIRO', status: 'INATIVO' });
 
-    const papel = await ensureRole(USR_PAPEL, 'PROFESSOR', repo);
+    const papel = await ensureRole(USR_PAPEL, 'PROFESSOR', 'cons.vot04', repo);
     expect(papel.role).toBe('CONSELHEIRO');
     expect(papel.status).toBe('INATIVO');
+  });
+
+  it('o admin do sistema é ADMINISTRADOR, e a linha existente é corrigida', async () => {
+    const repo = repoFake();
+    // O admin chegou antes pela derivação e ficou PROFESSOR.
+    repo.linhas.set(USR_ADMIN, { userId: USR_ADMIN, role: 'PROFESSOR', status: 'ATIVO' });
+
+    const papel = await ensureRole(USR_ADMIN, 'PROFESSOR', 'Ldsampaio', repo);
+    expect(papel.role).toBe('ADMINISTRADOR');
+
+    const novo = repoFake();
+    const criado = await ensureRole(USR_ADMIN, 'PROFESSOR', 'ldsampaio', novo);
+    expect(criado.role).toBe('ADMINISTRADOR');
+    expect(novo.linhas.get(USR_ADMIN)).toEqual({ userId: USR_ADMIN, role: 'ADMINISTRADOR', status: 'ATIVO' });
   });
 
   it('corrida de criação (unique) relê, nunca sobrescreve', async () => {
@@ -352,7 +372,7 @@ describe('5–6. req.user do Redis e papel do sistema', () => {
       throw erro;
     };
 
-    const papel = await ensureRole(USR_ALUNO, 'ALUNO', repo);
+    const papel = await ensureRole(USR_ALUNO, 'ALUNO', 'a1', repo);
     expect(papel.role).toBe('PROFESSOR');
   });
 });

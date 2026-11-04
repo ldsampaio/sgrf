@@ -4,6 +4,7 @@
 // AGENTS.md). O papel do sgrf mora em `sgrf.user_roles` — nunca no claim
 // `role` do JWT (contrato de sessão, passo 6).
 const prisma = require('../config/db');
+const env = require('../config/env');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,11 +26,24 @@ const PAPEL_DERIVADO = { ALUNO: 'ALUNO', PROFESSOR: 'PROFESSOR' };
 // Find-or-create do papel do sgrf. Sem isto o usuário logado entra e não tem papel
 // nenhum: `req.user.role` fica null e toda rota deny-by-default responde 403.
 // A linha existente manda — o serviço só cria quando não há papel, nunca sobrescreve.
-async function ensureRole(userId, roleBase, repo = prisma) {
-  const existente = await findRoleRow(userId, repo);
-  if (existente) return existente;
+// A única exceção é o admin do sistema (`INITIAL_ADMIN_LOGIN`), que é ADMINISTRADOR
+// em todos os sistemas: nesse caso a linha existente é corrigida, porque é atribuição
+// decidida, não derivação.
+async function ensureRole(userId, roleBase, login, repo = prisma) {
+  const ehAdmin = Boolean(login) && String(login).toLowerCase() === env.initialAdminLogin;
 
-  const role = PAPEL_DERIVADO[String(roleBase || '').toUpperCase()];
+  const existente = await findRoleRow(userId, repo);
+  if (existente) {
+    if (ehAdmin && existente.role !== 'ADMINISTRADOR') {
+      return repo.userRole.update({
+        where: { userId: String(userId) },
+        data: { role: 'ADMINISTRADOR', status: 'ATIVO' },
+      });
+    }
+    return existente;
+  }
+
+  const role = ehAdmin ? 'ADMINISTRADOR' : PAPEL_DERIVADO[String(roleBase || '').toUpperCase()];
   if (!role || !isUuid(userId)) return null;
 
   try {
