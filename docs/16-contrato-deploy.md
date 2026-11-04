@@ -1,6 +1,8 @@
 # Contrato de deploy
 
-Checklist validável do contrato de ambiente (SEC-02 + SEC-04). Cada passo traz comando e resultado esperado. Nenhum valor secreto real aparece neste documento — apenas nomes de variáveis e formatos de placeholder.
+Checklist validável do contrato de ambiente (SEC-02 + SEC-04). Cada passo traz comando e
+resultado esperado. Nenhum valor secreto real aparece neste documento — apenas nomes de
+variáveis e formatos de placeholder.
 
 ## Topologia oficial
 
@@ -15,44 +17,69 @@ O único término TLS é o túnel Cloudflare. Não há Caddy nem outro proxy doc
 
 CORS exige origem exata igual ao host público https, sem barra final. `FRONTEND_URL=https://exemplo.utfpr.edu.br` é válido; `FRONTEND_URL=https://exemplo.utfpr.edu.br/` é inválido.
 
+O **Redis de sessões e o saga não estão neste compose**: são a infra compartilhada. Sem o
+Redis o verifier não confirma liveness e o sgrf responde 503 — indisponibilidade do Redis é
+indisponibilidade do sistema inteiro.
+
 Trust proxy e rate limit são propriedade da Fase 8 (SEC-03). Nada há para configurar aqui.
 
-## Passo 1 — boot recusa segredo inseguro em produção
+## Passo 1 — boot recusa ambiente inseguro em produção
 
 - [ ] Subir com valores em formato placeholder e confirmar a recusa que nomeia os ofensores.
 
 ```bash
 cd backend
 NODE_ENV=production \
-  JWT_ACCESS_SECRET="change-me-access-32chars-min" \
-  JWT_REFRESH_SECRET="change-me-refresh-32chars-min" \
-  INITIAL_ADMIN_EMAIL="admin@utfpr.edu.br" \
-  INITIAL_ADMIN_TEMPORARY_PASSWORD="" \
+  REDIS_URL="redis://saga_readonly:change-me@redis:6379/0" \
+  SAGA_JWKS_URL="change-me" \
+  SAGA_LOGIN_URL="" \
+  PORTAL_ALLOWED_REDIRECT_HOSTS="" \
   node -e "require('./src/config/env.js')"
 ```
 
-Resultado esperado: o processo aborta com erro `SEC-02: Production boot refused`, listando `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` e `INITIAL_ADMIN_TEMPORARY_PASSWORD` como ofensores. Nenhum valor secreto aparece na mensagem, apenas os nomes das variáveis com dica de correção. Fora de `NODE_ENV=production`, os mesmos fallbacks de desenvolvimento carregam sem recusa.
+Resultado esperado: o processo aborta com erro `SEC-02: Production boot refused`, listando
+`REDIS_URL`, `SAGA_JWKS_URL`, `SAGA_LOGIN_URL` e `PORTAL_ALLOWED_REDIRECT_HOSTS` como
+ofensores. Nenhum valor secreto aparece na mensagem, apenas os nomes das variáveis com dica
+de correção. O gate também exige que `REDIS_URL` use o usuário ACL `saga_readonly` — o sgrf
+nunca escreve no store de sessões. Não existem mais `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`
+nem senha de admin: o sgrf não assina token próprio. Fora de `NODE_ENV=production`, os
+fallbacks de desenvolvimento carregam sem recusa.
 
-## Passo 2 — login via URL pública emite cookie Secure e logout apaga
+## Passo 2 — sessão compartilhada na URL pública
 
-- [ ] Com `COOKIE_SECURE=true` e `FRONTEND_URL` apontando ao host público https, fazer login pela URL pública e confirmar o cookie de sessão Secure; depois fazer logout e confirmar a remoção.
+O sgrf **não emite cookie**: quem define `saga_session` é o saga. O que o sgrf pode
+verificar em produção é o caminho de erro do contrato.
+
+- [ ] Com `FRONTEND_URL` apontando ao host público https e `PORTAL_ALLOWED_REDIRECT_HOSTS`
+  contendo esse host, confirmar:
 
 ```bash
-COOKIE_SECURE=true FRONTEND_URL=https://exemplo.utfpr.edu.br docker compose up -d --build
+curl -s https://exemplo.utfpr.edu.br/api/auth/me          # sem cookie
+curl -s https://exemplo.utfpr.edu.br/api/auth/me -H "Cookie: saga_session=<token válido>"
 ```
 
-Resultado esperado: login com credenciais válidas na URL pública responde 200 e retorna para `/` com `Set-Cookie` contendo `access_token` e `refresh_token` com atributos `HttpOnly`, `Secure` e `SameSite=Lax`; o botão de login exibe `Entrando` desabilitado durante a requisição e volta ao normal depois; falha de login exibe o alerta existente com a mensagem do servidor ou `Falha no login`, nunca um silêncio sem login; logout responde 200 e remove ambos os cookies com os mesmos atributos da emissão.
+Resultado esperado: sem cookie, 401 `NO_SESSION` com `login_url` apontando para o login do
+saga e `redirect` montado só porque o host de origem está na allowlist; com cookie de sessão
+viva, 200. Se o host de origem não está na allowlist, `login_url` vem sem `redirect` (anti
+open-redirect). Com `saga:heartbeat` ausente, a resposta é 503 `IDENTITY_UNAVAILABLE` com
+`Retry-After` e **sem** `login_url` — o frontend serve a página própria `/unavailable`.
 
 ## Passo 3 — desenvolvimento local continua intacto
 
-- [ ] Subir o fluxo de desenvolvimento e confirmar login em localhost sem Secure.
+- [ ] Subir o fluxo de desenvolvimento e confirmar o redirecionamento para o portal.
 
 ```bash
 ./start-dev.sh
 ```
 
-Resultado esperado: backend em `:3000` e frontend em `:5173` sobem com os defaults locais; login em `http://localhost:5173` funciona com cookies sem o atributo `Secure`; nenhum gate de produção dispara fora de `NODE_ENV=production`.
+Resultado esperado: backend em `:3000` e frontend em `:5173` sobem com os defaults locais;
+não há formulário de login — `/login` é a página de redirecionamento para o portal do saga
+em `:8000`; nenhum gate de produção dispara fora de `NODE_ENV=production`.
 
-## Falha esperada — login via IP de LAN em HTTP puro
+## Falha esperada — acesso via IP de LAN em HTTP puro
 
-Login via IP de LAN em HTTP puro é falha esperada por desenho do cookie `Secure`, não um bug. Apenas `localhost` é isento da exigência de `Secure` pelos navegadores; IPs de LAN exigem HTTPS. Não desabilite `Secure` como contorno — use a URL pública https ou o fluxo localhost do passo 3.
+O cookie compartilhado `saga_session` é emitido pelo saga com `Secure` fora de `localhost`;
+por isso acesso por IP de LAN em HTTP puro é falha esperada por desenho, não um bug. Apenas
+`localhost` é isento da exigência de `Secure` pelos navegadores; IPs de LAN exigem HTTPS.
+Não desabilite `Secure` como contorno — use a URL pública https ou o fluxo localhost do
+passo 3. O sgrf não tem controle sobre esse atributo: ele só lê o cookie.

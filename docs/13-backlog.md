@@ -9,17 +9,18 @@
 - [ ] implementar logging;
 - [ ] implementar tratamento de erros;
 - [ ] configurar CI;
-- [ ] criar usuário administrador inicial;
-- [ ] implementar autenticação;
-- [ ] implementar troca obrigatória de senha.
+- [ ] criar papel do administrador inicial em `sgrf.user_roles` (a identidade é criada pelo
+  saga no primeiro login);
+- [x] autenticação: **removida do sgrf** — o sgrf verifica a sessão compartilhada do saga;
+- [x] troca obrigatória de senha: **removida** — o sgrf não guarda credencial (T10).
 
 ## Fase 2 — Usuários e permissões
 
-- [ ] CRUD de usuários;
+- [ ] atribuição de papel por sistema (`sgrf.user_roles`) — o CRUD de identidade é do saga;
 - [ ] papéis;
 - [ ] autorização;
-- [ ] convite por e-mail;
-- [ ] redefinição de senha;
+- [x] convite por e-mail: removido — o sgrf não cria usuário nem credencial;
+- [x] redefinição de senha: removida — credencial é do saga (T10);
 - [ ] auditoria de usuários.
 
 ## Fase 3 — Configurações e financeiro

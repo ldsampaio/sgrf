@@ -15,7 +15,7 @@ Estas questões devem ser resolvidas antes da implantação em produção. Para 
 | Pedido de aluno para auxílio estudantil | permitir somente conforme política configurada |
 | Cancelamento após aprovação | permitido apenas por admin ou chefe, com justificativa — decidido 2026-09-23: dono somente RASCUNHO/EM_VOTACAO, ADMINISTRADOR qualquer não-terminal (inclui INDEFERIDO como limpeza), CHEFE_DEPARTAMENTO antes de CONCLUIDO, justificativa obrigatória (400) em metadados REVERSE + AuditEvent request_cancelled/provision_reversed, cancelamento de aprovada/provisionada grava REVERSE compensatória auditada, CONCLUIDO/CANCELADO imutáveis (RN-010, D-05…D-08) |
 | Exclusão de usuário | desativação lógica, nunca exclusão física |
-| Prazo de senha temporária | 24 horas |
+| Prazo de senha temporária | resolvido: não há senha no sgrf — credencial é do saga (T10) |
 | Retenção de anexos | política institucional configurável |
 | E-mails falhos | três tentativas e alerta ao administrador |
 | Aprovação parcial (agregação) | decidido 2026-09-23: PARCIAL → AGUARDANDO_ARBITRAGEM, chefe arbitra (0, solicitado] com justificativa auditada; substitui primeiro-voto-parcial-vence; votos [8000, 5000, 6000] não mais se resolvem sozinhos |

@@ -1,6 +1,7 @@
 const prisma = require('../config/db');
 const { audit } = require('../services/auditService');
 const { enqueue } = require('../services/emailService');
+const { findIdentity, findIdentitiesByIds } = require('../services/identityRepository');
 const { canVote, validateVoteInput, closeVoting, isSuspended } = require('../services/votingService');
 const { canViewRequest } = require('../middlewares/visibility');
 
@@ -13,9 +14,8 @@ function suspendedGuard(r) {
 
 async function enrichVotes(votes) {
   const ids = [...new Set(votes.map((v) => v.voterId).filter(Boolean))];
-  const users = ids.length
-    ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, role: true } })
-    : [];
+  // Identidade em auth.users (leitura); papel em sgrf.user_roles.
+  const users = ids.length ? await findIdentitiesByIds(ids) : [];
   const map = new Map(users.map((u) => [u.id, u]));
   return votes.map((v) => {
     const u = map.get(v.voterId);
@@ -263,8 +263,8 @@ async function collegiateDecision(req, res, next) {
       return u;
     });
     await audit({ actorId: req.user.id, action: 'collegiate_decision', entityType: 'request', entityId: r.id, afterData: up, req });
-    const requester = await prisma.user.findUnique({ where: { id: r.requesterId } });
-    await enqueue(requester.email, `[SGRD] Decisão colegiada ${status}`, `Pedido ${r.title}: ${status}. Ata: ${ataText.slice(0, 200)}`);
+    const requester = await findIdentity(r.requesterId);
+    if (requester?.email) await enqueue(requester.email, `[SGRD] Decisão colegiada ${status}`, `Pedido ${r.title}: ${status}. Ata: ${ataText.slice(0, 200)}`);
     res.json({ request: up });
   } catch (e) { next(e); }
 }
@@ -331,8 +331,8 @@ async function partialArbitration(req, res, next) {
       afterData: { status: 'APROVADO_PARCIALMENTE', approvedAmountCents: amount, justification },
       req,
     });
-    const requester = await prisma.user.findUnique({ where: { id: r.requesterId } });
-    await enqueue(requester.email, `[SGRD] Arbitragem parcial concluída`, `Pedido ${r.title}: valor aprovado ${(amount / 100).toFixed(2)}. Justificativa: ${justification}`);
+    const requester = await findIdentity(r.requesterId);
+    if (requester?.email) await enqueue(requester.email, `[SGRD] Arbitragem parcial concluída`, `Pedido ${r.title}: valor aprovado ${(amount / 100).toFixed(2)}. Justificativa: ${justification}`);
     res.json({ request: up });
   } catch (e) { next(e); }
 }

@@ -3,25 +3,27 @@
 ## Autenticação
 
 ```
-POST /api/auth/login
-POST /api/auth/change-password
-POST /api/auth/logout
-POST /api/auth/forgot-password
-POST /api/auth/reset-password
 GET  /api/auth/me
 ```
+
+Só `me`. O sgrf **não autentica credencial**: não há `login`, `change-password`,
+`forgot-password`, `reset-password` nem `logout` — sessão, cookie e credencial são do saga
+(`docs/session-contract.md`). `me` responde a partir de `req.user`, montado pelo Redis, não
+do banco. Um corpo com campo de credencial é rejeitado por
+`src/middlewares/noCredentialFields.js`.
 
 ## Usuários
 
 ```
 GET    /api/users
-POST   /api/users
-GET    /api/users/{id}
+POST   /api/users/batch/preview
+POST   /api/users/batch/confirm
 PATCH  /api/users/{id}
 PATCH  /api/users/{id}/role
-POST   /api/users/{id}/resend-invite
-POST   /api/users/{id}/force-password-reset
 ```
+
+Removido: criação de usuário, `resend-invite` e `force-password-reset` — identidade e
+credencial são do saga; o sgrf só atribui papel em `sgrf.user_roles`.
 
 ## Configurações
 

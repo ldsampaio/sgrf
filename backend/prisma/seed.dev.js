@@ -1,53 +1,67 @@
 // Seed DEV/Teste manual — NUNCA rodar no deploy.
-// Deploy usa apenas prisma/seed.js (só admin via env).
+// Deploy usa apenas prisma/seed.js (só o papel do admin via env).
 // Uso: SEED_DEV_CONFIRM=1 npm run seed:dev
+//
+// Sem senha: o sgrf não guarda credencial (T10). Este seed NÃO cria identidade —
+// ele lê `auth.users` (dono: saga) e grava papel em `sgrf.user_roles`. A
+// identidade precisa existir (primeiro login no saga) antes do seed.
 const { PrismaClient } = require('@prisma/client');
-const { hashPassword } = require('../src/utils/password');
-
 const prisma = new PrismaClient();
-const DEV_PASSWORD = 'Trocar123!';
 
 const USERS = [
-  { name: 'Admin Teste', email: 'admin.teste@utfpr.edu.br', role: 'ADMINISTRADOR' },
-  { name: 'Chefe Teste', email: 'chefe.teste@utfpr.edu.br', role: 'CHEFE_DEPARTAMENTO' },
-  { name: 'Cons Teste', email: 'cons.teste@utfpr.edu.br', role: 'CONSELHEIRO' },
-  { name: 'Prof Teste', email: 'prof.teste@utfpr.edu.br', role: 'PROFESSOR' },
-  { name: 'Maria Silva', email: 'maria.silva@utfpr.edu.br', role: 'PROFESSOR' },
-  { name: 'Joao Santos', email: 'joao.santos@utfpr.edu.br', role: 'PROFESSOR' },
-  { name: 'Aluno Teste', email: 'aluno.teste@utfpr.edu.br', role: 'ALUNO' },
+  { login: 'a100001', name: 'Admin Teste', email: 'admin.teste@utfpr.edu.br', role: 'ADMINISTRADOR' },
+  { login: 'a100002', name: 'Chefe Teste', email: 'chefe.teste@utfpr.edu.br', role: 'CHEFE_DEPARTAMENTO' },
+  { login: 'a100003', name: 'Cons Teste', email: 'cons.teste@utfpr.edu.br', role: 'CONSELHEIRO' },
+  { login: 'a100004', name: 'Prof Teste', email: 'prof.teste@utfpr.edu.br', role: 'PROFESSOR' },
+  { login: 'a100005', name: 'Maria Silva', email: 'maria.silva@utfpr.edu.br', role: 'PROFESSOR' },
+  { login: 'a100006', name: 'Joao Santos', email: 'joao.santos@utfpr.edu.br', role: 'PROFESSOR' },
+  { login: 'a100007', name: 'Aluno Teste', email: 'aluno.teste@utfpr.edu.br', role: 'ALUNO' },
 ];
 
 const C = (reais) => Math.round(reais * 100);
 
 async function main() {
   if (process.env.SEED_DEV_CONFIRM !== '1') {
-    console.log('Recusei: defina SEED_DEV_CONFIRM=1 para seed de teste. Deploy usa prisma/seed.js (só admin).');
+    console.log('Recusei: defina SEED_DEV_CONFIRM=1 para seed de teste. Deploy usa prisma/seed.js (só o papel do admin).');
     process.exit(1);
   }
-  const hash = await hashPassword(DEV_PASSWORD);
+
+  const missing = [];
+  const byLogin = {};
   for (const u of USERS) {
-    await prisma.user.upsert({
-      where: { email: u.email },
-      update: { name: u.name, role: u.role, status: 'ATIVO', passwordHash: hash, mustChangePassword: false, temporaryPasswordExpiresAt: null, failedLoginAttempts: 0, lockedUntil: null },
-      create: { name: u.name, email: u.email, role: u.role, status: 'ATIVO', passwordHash: hash, mustChangePassword: false },
+    // Leitura: auth.users é do saga. O sgrf não cria identidade.
+    const found = await prisma.authUser.findMany({ where: { login: u.login } });
+    if (!found.length) { missing.push(u.login); continue; }
+    byLogin[u.login] = found[0];
+    await prisma.userRole.upsert({
+      where: { userId: found[0].id },
+      update: { role: u.role, status: 'ATIVO' },
+      create: { userId: found[0].id, role: u.role, status: 'ATIVO' },
     });
   }
+
   await prisma.departmentSettings.upsert({
     where: { id: 'default' },
     update: { automaticApprovalLimitCents: 100000, currentExchangeRate: 5.0, votingDurationHours: 24, viewExtensionHours: 24 },
     create: { id: 'default', automaticApprovalLimitCents: 100000, currentExchangeRate: 5.0 },
   });
+
+  if (missing.length) {
+    console.log(`Pulei ${missing.length} identidades que ainda não existem em auth.users (criadas pelo saga no primeiro login): ${missing.join(', ')}`);
+  }
+
+  const prof = byLogin['a100004'];
+  const maria = byLogin['a100005'];
+  const joao = byLogin['a100006'];
+  const cons = byLogin['a100003'];
+  const chefe = byLogin['a100002'];
+  if (!prof || !maria || !joao || !cons || !chefe) {
+    console.log('Seed de massa interrompido: faltam identidades para os pedidos de exemplo.');
+    return;
+  }
+
   const year = new Date().getFullYear();
   const now = new Date();
-  const byEmail = {};
-  for (const u of USERS) {
-    byEmail[u.email] = await prisma.user.findUnique({ where: { email: u.email } });
-  }
-  const prof = byEmail['prof.teste@utfpr.edu.br'];
-  const maria = byEmail['maria.silva@utfpr.edu.br'];
-  const joao = byEmail['joao.santos@utfpr.edu.br'];
-  const cons = byEmail['cons.teste@utfpr.edu.br'];
-  const chefe = byEmail['chefe.teste@utfpr.edu.br'];
 
   // limpa SMOKE anteriores (votos, mensagens, transações, pedidos)
   const old = await prisma.resourceRequest.findMany({ where: { title: { startsWith: 'SMOKE' } }, select: { id: true } });
@@ -151,8 +165,8 @@ async function main() {
     create: { referenceYear: year, availableCents: available, provisionedCents: provisioned, spentCents: spent },
   });
 
-  console.log(`Seed dev ok. Saldos: disp ${available} prov ${provisioned} gasto ${spent}. Logins (senha ${DEV_PASSWORD}):`);
-  for (const u of USERS) console.log(`  ${u.role}: ${u.email}`);
+  console.log(`Seed dev ok. Saldos: disp ${available} prov ${provisioned} gasto ${spent}. Logins (sem senha — login no saga):`);
+  for (const u of USERS) console.log(`  ${u.role}: ${u.login}`);
 }
 
 main().finally(() => prisma.$disconnect());

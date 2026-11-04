@@ -2,13 +2,23 @@
 
 ## Testes unitários
 
-### Autenticação
-- aceita domínio institucional;
-- rejeita domínio externo;
-- rejeita senha inválida;
-- força troca de senha temporária;
-- expira senha temporária;
-- bloqueia excesso de tentativas.
+### Sessão compartilhada (`tests/contratoSessao.test.js`)
+
+O sgrf não autentica credencial, então não há teste de senha. O que a suíte cobre é o
+contrato de `docs/session-contract.md`:
+
+- sem cookie → 401 `NO_SESSION` com `login_url`;
+- assinatura de outra chave, `kid` desconhecido ou token expirado → 401 `BAD_TOKEN`;
+- `sid` com charset inesperado não monta chave Redis (falha fechada);
+- sessão revogada no Redis → 401 `SESSION_DEAD`; `gen` divergente → 401 `SESSION_STALE`;
+- heartbeat ausente → **503** mesmo com JWT válido e JWKS cacheado; Redis inacessível → 503,
+  sem fallback de cache;
+- 503 não carrega `login_url`: o frontend não redireciona para o serviço que caiu;
+- `redirect` só aparece quando o host de origem está na allowlist;
+- `req.user` vem do Redis e o papel vem de `sgrf.user_roles`, nunca do claim `role`;
+- T10: nenhuma rota aceita campo de credencial, nenhuma coluna de senha existe no schema, o
+  token de sessão nunca é escrito em log;
+- gate de produção recusa ambiente inseguro (`tests/env-gate.test.js`).
 
 ### Cálculo financeiro
 - calcula diárias corretamente;
@@ -65,7 +75,8 @@
 ## Testes end-to-end
 
 ### Cenário 1 — Aluno solicita equipamento
-1. aluno faz login;
+1. aluno entra pelo portal do saga (o sgrf não autentica credencial — a sessão é o cookie
+   compartilhado `saga_session`);
 2. cria solicitação;
 3. informa especificação;
 4. informa valor;

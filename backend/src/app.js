@@ -8,6 +8,7 @@ const pinoHttp = require('pino-http');
 const env = require('./config/env');
 const logger = require('./config/logger');
 const { errorHandler } = require('./middlewares/validate');
+const { rejectCredentialFields } = require('./middlewares/noCredentialFields');
 
 function createApp() {
   const app = express();
@@ -16,6 +17,8 @@ function createApp() {
   app.use(cors({ origin: env.frontendUrl, credentials: true }));
   app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
+  // T10: nenhuma rota do sgrf aceita campo `senha`/`password`.
+  app.use(rejectCredentialFields);
   app.use(pinoHttp({ logger }));
 
   app.get('/health', (req, res) => res.json({ ok: true, service: 'sgrd-backend' }));

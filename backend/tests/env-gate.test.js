@@ -7,221 +7,157 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 
-describe('SEC-02 Production gate on insecure secrets - Throw/No-throw matrix', () => {
+// O sgrf não autentica credencial: não há segredos de JWT próprios, não há cookie
+// próprio e não há senha de admin. O que precisa ser seguro em produção é o acesso
+// ao Redis (ACL read-only) e as URLs do saga. Este arquivo exercita esse gate.
+const CHAVES_GATE = ['REDIS_URL', 'SAGA_JWKS_URL', 'SAGA_LOGIN_URL', 'PORTAL_ALLOWED_REDIRECT_HOSTS'];
+
+describe('SEC-02 Production gate on the session contract - Throw/No-throw matrix', () => {
   const originalEnv = { ...process.env };
+
+  function limpaGate() {
+    for (const chave of CHAVES_GATE) delete process.env[chave];
+  }
 
   beforeEach(() => {
     vi.resetModules();
     delete process.env.NODE_ENV;
+    limpaGate();
   });
 
   afterEach(() => {
-    Object.assign(process.env, originalEnv);
+    process.env = { ...originalEnv };
   });
 
-  function loadEnvWithEnvVars(envVars) {
-    delete process.env.NODE_ENV;
+  function carregarEnv(envVars) {
+    limpaGate();
     Object.assign(process.env, envVars);
     vi.resetModules();
     delete require.cache[require.resolve('../src/config/env.js')];
-    require('../src/config/env.js');
     return require('../src/config/env.js');
   }
 
   describe('Throw cases - production refused to boot with insecure values', () => {
-    it('throws when NODE_ENV=production and JWT_ACCESS_SECRET contains change-me placeholder', () => {
-      const envVars = {
-        NODE_ENV: 'production',
-        JWT_ACCESS_SECRET: 'dev-access-secret-change-me-0123456789',
-        JWT_REFRESH_SECRET: 'secret-refresh-valid-value-1234567890123456789012',
-        INITIAL_ADMIN_EMAIL: 'admin@utfpr.edu.br',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: 'secure-password-1234567890123456789'
-      };
-
-      expect(() => loadEnvWithEnvVars(envVars)).toThrow('insecure');
+    it('throws when REDIS_URL is empty in production', () => {
+      expect(() =>
+        carregarEnv({ NODE_ENV: 'production', REDIS_URL: '', SAGA_JWKS_URL: 'https://saga.utfpr.edu.br/.well-known/jwks.json', SAGA_LOGIN_URL: 'https://saga.utfpr.edu.br/login', PORTAL_ALLOWED_REDIRECT_HOSTS: 'saga.utfpr.edu.br' })
+      ).toThrow('insecure');
     });
 
-    it('throws when NODE_ENV=production and JWT_REFRESH_SECRET starts with dev- prefix', () => {
-      const envVars = {
-        NODE_ENV: 'production',
-        JWT_ACCESS_SECRET: 'random-access-secret-random-1234567890123456789012',
-        JWT_REFRESH_SECRET: 'dev-refresh-secret-change-me-0123456789',
-        INITIAL_ADMIN_EMAIL: 'admin@utfpr.edu.br',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: 'secure-password-1234567890123456789'
-      };
-
-      expect(() => loadEnvWithEnvVars(envVars)).toThrow('insecure');
+    it('throws when REDIS_URL uses the default (full-access) user instead of saga_readonly', () => {
+      expect(() =>
+        carregarEnv({ NODE_ENV: 'production', REDIS_URL: 'redis://dev-redis@redis:6379/0', SAGA_JWKS_URL: 'https://saga.utfpr.edu.br/.well-known/jwks.json', SAGA_LOGIN_URL: 'https://saga.utfpr.edu.br/login', PORTAL_ALLOWED_REDIRECT_HOSTS: 'saga.utfpr.edu.br' })
+      ).toThrow('saga_readonly');
     });
 
-    it('throws when NODE_ENV=production and INITIAL_ADMIN_TEMPORARY_PASSWORD is empty', () => {
-      const envVars = {
-        NODE_ENV: 'production',
-        JWT_ACCESS_SECRET: 'random-access-secret-random-1234567890123456789012',
-        JWT_REFRESH_SECRET: 'random-refresh-secret-random-1234567890123456789012',
-        INITIAL_ADMIN_EMAIL: 'admin@utfpr.edu.br',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: ''
-      };
-
-      expect(() => loadEnvWithEnvVars(envVars)).toThrow('insecure');
+    it('throws when SAGA_JWKS_URL contains the change-me placeholder', () => {
+      expect(() =>
+        carregarEnv({ NODE_ENV: 'production', REDIS_URL: 'redis://saga_readonly:seguro@redis:6379/0', SAGA_JWKS_URL: 'https://change-me/.well-known/jwks.json', SAGA_LOGIN_URL: 'https://saga.utfpr.edu.br/login', PORTAL_ALLOWED_REDIRECT_HOSTS: 'saga.utfpr.edu.br' })
+      ).toThrow('insecure');
     });
 
-    it('throws when NODE_ENV=production and INITIAL_ADMIN_EMAIL missing institutional suffix', () => {
-      const envVars = {
-        NODE_ENV: 'production',
-        JWT_ACCESS_SECRET: 'random-access-secret-random-1234567890123456789012',
-        JWT_REFRESH_SECRET: 'random-refresh-secret-random-1234567890123456789012',
-        INITIAL_ADMIN_EMAIL: 'admin@gmail.com',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: 'secure-password-1234567890123456789'
-      };
-
-      expect(() => loadEnvWithEnvVars(envVars)).toThrow('institutional suffix');
+    it('throws when SAGA_LOGIN_URL starts with the dev- prefix', () => {
+      expect(() =>
+        carregarEnv({ NODE_ENV: 'production', REDIS_URL: 'redis://saga_readonly:seguro@redis:6379/0', SAGA_JWKS_URL: 'https://saga.utfpr.edu.br/.well-known/jwks.json', SAGA_LOGIN_URL: 'dev-login', PORTAL_ALLOWED_REDIRECT_HOSTS: 'saga.utfpr.edu.br' })
+      ).toThrow('insecure');
     });
 
-    it('throws when NODE_ENV=production and INITIAL_ADMIN_EMAIL is empty', () => {
-      const envVars = {
-        NODE_ENV: 'production',
-        JWT_ACCESS_SECRET: 'random-access-secret-random-1234567890123456789012',
-        JWT_REFRESH_SECRET: 'random-refresh-secret-random-1234567890123456789012',
-        INITIAL_ADMIN_EMAIL: '',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: 'secure-password-1234567890123456789'
-      };
-
-      expect(() => loadEnvWithEnvVars(envVars)).toThrow('INITIAL_ADMIN_EMAIL');
+    it('throws when the redirect allowlist is empty (open redirect)', () => {
+      expect(() =>
+        carregarEnv({ NODE_ENV: 'production', REDIS_URL: 'redis://saga_readonly:seguro@redis:6379/0', SAGA_JWKS_URL: 'https://saga.utfpr.edu.br/.well-known/jwks.json', SAGA_LOGIN_URL: 'https://saga.utfpr.edu.br/login', PORTAL_ALLOWED_REDIRECT_HOSTS: '' })
+      ).toThrow('PORTAL_ALLOWED_REDIRECT_HOSTS');
     });
 
     it('throws when multiple variables are insecure simultaneously', () => {
-      const envVars = {
-        NODE_ENV: 'production',
-        JWT_ACCESS_SECRET: 'dev-access-secret-change-me-0123456789',
-        JWT_REFRESH_SECRET: 'dev-refresh-secret-change-me-0123456789',
-        INITIAL_ADMIN_EMAIL: 'admin@gmail.com',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: ''
-      };
+      expect(() =>
+        carregarEnv({ NODE_ENV: 'production', REDIS_URL: '', SAGA_JWKS_URL: 'https://change-me/jwks', SAGA_LOGIN_URL: 'dev-login', PORTAL_ALLOWED_REDIRECT_HOSTS: '' })
+      ).toThrow('insecure');
+    });
 
-      expect(() => loadEnvWithEnvVars(envVars)).toThrow('insecure');
+    it('does not throw when SKIP_GW_ENV=true (test escape hatch)', () => {
+      expect(() =>
+        carregarEnv({ NODE_ENV: 'production', SKIP_GW_ENV: 'true', REDIS_URL: '', SAGA_JWKS_URL: '', SAGA_LOGIN_URL: '', PORTAL_ALLOWED_REDIRECT_HOSTS: '' })
+      ).not.toThrow();
     });
   });
 
   describe('No-throw cases - dev fallbacks intact', () => {
     it('loads without throw when NODE_ENV=development', () => {
-      const envVars = {
-        NODE_ENV: 'development',
-        JWT_ACCESS_SECRET: 'dev-access-secret-change-me-0123456789',
-        JWT_REFRESH_SECRET: 'dev-refresh-secret-change-me-0123456789',
-        INITIAL_ADMIN_EMAIL: 'ldsampaio@utfpr.edu.br',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: ''
-      };
-
-      const config = loadEnvWithEnvVars(envVars);
-      expect(config.jwtAccessSecret).toContain('dev-access-secret');
-      expect(config.initialAdminEmail).toBe('ldsampaio@utfpr.edu.br');
+      const config = carregarEnv({ NODE_ENV: 'development' });
+      expect(config.redisUrl).toContain('saga_readonly');
+      expect(config.sagaJwksUrl).toContain('.well-known/jwks.json');
     });
 
     it('loads without throw when NODE_ENV=test with secure values', () => {
-      const envVars = {
+      const config = carregarEnv({
         NODE_ENV: 'test',
-        JWT_ACCESS_SECRET: 'secure-test-access-secret-1234567890123456789012',
-        JWT_REFRESH_SECRET: 'secure-test-refresh-secret-1234567890123456789012',
-        INITIAL_ADMIN_EMAIL: 'admin@test.utfpr.edu.br',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: 'test-password-12345678901234567890'
-      };
-
-      const config = loadEnvWithEnvVars(envVars);
-      expect(config.jwtAccessSecret).toBeDefined();
-      expect(config.cookieSecure).toBe(false);
+        REDIS_URL: 'redis://saga_readonly:seguro@redis:6379/0',
+        SAGA_JWKS_URL: 'https://saga.utfpr.edu.br/.well-known/jwks.json',
+        SAGA_LOGIN_URL: 'https://saga.utfpr.edu.br/login',
+        PORTAL_ALLOWED_REDIRECT_HOSTS: 'saga.utfpr.edu.br',
+      });
+      expect(config.sagaLoginUrl).toBe('https://saga.utfpr.edu.br/login');
     });
   });
 
-  describe('COOKIE_SECURE parsing - explicit true/false wins', () => {
-    it('explicit COOKIE_SECURE=true yields true in production', () => {
-      const envVars = {
-        NODE_ENV: 'production',
-        JWT_ACCESS_SECRET: 'random-access-secret-random-1234567890123456789012',
-        JWT_REFRESH_SECRET: 'random-refresh-secret-random-1234567890123456789012',
-        INITIAL_ADMIN_EMAIL: 'admin@utfpr.edu.br',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: 'secure-password-1234567890123456789',
-        COOKIE_SECURE: 'true'
-      };
-
-      const config = loadEnvWithEnvVars(envVars);
-      expect(config.cookieSecure).toBe(true);
-    });
-
-    it('explicit COOKIE_SECURE=false yields false in production', () => {
-      const envVars = {
-        NODE_ENV: 'production',
-        JWT_ACCESS_SECRET: 'random-access-secret-random-1234567890123456789012',
-        JWT_REFRESH_SECRET: 'random-refresh-secret-random-1234567890123456789012',
-        INITIAL_ADMIN_EMAIL: 'admin@utfpr.edu.br',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: 'secure-password-1234567890123456789',
-        COOKIE_SECURE: 'false'
-      };
-
-      const config = loadEnvWithEnvVars(envVars);
-      expect(config.cookieSecure).toBe(false);
-    });
-
-    it('absent COOKIE_SECURE yields false when NODE_ENV=production (SKIP_GW_ENV=true)', () => {
-      const envVars = {
-        NODE_ENV: 'production',
-        JWT_ACCESS_SECRET: 'random-access-secret-random-1234567890123456789012',
-        JWT_REFRESH_SECRET: 'random-refresh-secret-random-1234567890123456789012',
-        INITIAL_ADMIN_EMAIL: 'admin@utfpr.edu.br',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: 'secure-password-1234567890123456789',
-        SKIP_GW_ENV: 'true'
-      };
-
-      const config = loadEnvWithEnvVars(envVars);
-      expect(config.cookieSecure).toBe(false);
-    });
-
-    it('absent COOKIE_SECURE yields false when NODE_ENV=development', () => {
-      const envVars = {
-        NODE_ENV: 'development',
-        JWT_ACCESS_SECRET: 'dev-access-secret-change-me-0123456789',
-        JWT_REFRESH_SECRET: 'dev-refresh-secret-change-me-0123456789',
-        INITIAL_ADMIN_EMAIL: 'admin@utfpr.edu.br',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: ''
-      };
-
-      const config = loadEnvWithEnvVars(envVars);
-      expect(config.cookieSecure).toBe(false);
-    });
-
-    it('absent COOKIE_SECURE yields false when NODE_ENV=test', () => {
-      const envVars = {
+  describe('Allowlist de redirect (anti open-redirect)', () => {
+    it('parseja lista separada por vírgula, minúscula e sem wildcard', () => {
+      const config = carregarEnv({
         NODE_ENV: 'test',
-        JWT_ACCESS_SECRET: 'random-access-secret-random-1234567890123456789012',
-        JWT_REFRESH_SECRET: 'random-refresh-secret-random-1234567890123456789012',
-        INITIAL_ADMIN_EMAIL: 'admin@utfpr.edu.br',
-        INITIAL_ADMIN_TEMPORARY_PASSWORD: 'secure-password-1234567890123456789'
-      };
+        SKIP_GW_ENV: 'true',
+        PORTAL_ALLOWED_REDIRECT_HOSTS: 'saga.utfpr.edu.br, localhost , outro.utfpr.edu.br',
+      });
+      expect(config.portalAllowedRedirectHosts).toEqual(['saga.utfpr.edu.br', 'localhost', 'outro.utfpr.edu.br']);
+    });
 
-      const config = loadEnvWithEnvVars(envVars);
-      expect(config.cookieSecure).toBe(false);
+    it('allowlist vazia produz lista vazia — o middleware não monta redirect', () => {
+      const config = carregarEnv({ NODE_ENV: 'test', SKIP_GW_ENV: 'true', PORTAL_ALLOWED_REDIRECT_HOSTS: '' });
+      expect(config.portalAllowedRedirectHosts).toEqual([]);
+    });
+  });
+
+  describe('Cookie compartilhado e chave de heartbeat', () => {
+    it('o sgrf usa o cookie do saga e nunca define cookie próprio', () => {
+      const config = carregarEnv({ NODE_ENV: 'test', SKIP_GW_ENV: 'true' });
+      expect(config.sessionCookieName).toBe('saga_session');
+      expect(config.heartbeatKey).toBe('saga:heartbeat');
+      // Não há cookieSecure: quem define o cookie é o saga.
+      expect(config.cookieSecure).toBeUndefined();
+    });
+  });
+
+  describe('Seed: só papel, nunca credencial', () => {
+    it('initialAdminLogin é normalizado para minúsculas', () => {
+      const config = carregarEnv({ NODE_ENV: 'test', SKIP_GW_ENV: 'true', INITIAL_ADMIN_LOGIN: 'Ldsampaio' });
+      expect(config.initialAdminLogin).toBe('ldsampaio');
+    });
+
+    it('não existe variável de senha de admin', () => {
+      const config = carregarEnv({ NODE_ENV: 'test', SKIP_GW_ENV: 'true' });
+      expect(config.initialAdminPassword).toBeUndefined();
+      expect(config.initialAdminEmail).toBeUndefined();
     });
   });
 });
 
-// Simple test to verify cookieOpts is correctly exported from tokens.js
-describe('SEC-04 cookieOpts exports', () => {
+// T10 no sgrf: o módulo de token não assina nada. Se alguém reintroduzir
+// signAccess/signRefresh/cookieOpts, este teste falha.
+describe('T10 — o sgrf não assina token nem define cookie', () => {
   beforeEach(() => {
     vi.resetModules();
   });
 
-  it('cookieOpts imports env.cookieSecure correctly', () => {
+  it('tokens.js exporta só verificação, nenhuma função de assinatura', () => {
     const tokens = require('../src/utils/tokens.js');
-    expect(tokens.cookieOpts).toHaveProperty('httpOnly', true);
-    expect(tokens.cookieOpts).toHaveProperty('sameSite', 'lax');
-    expect(tokens.cookieOpts).toHaveProperty('path', '/');
+    expect(tokens.verifyAccessToken).toBeInstanceOf(Function);
+    expect(tokens.getSigningKey).toBeInstanceOf(Function);
+    expect(tokens.decodeHeader).toBeInstanceOf(Function);
+    expect(tokens.signAccess).toBeUndefined();
+    expect(tokens.signRefresh).toBeUndefined();
+    expect(tokens.cookieOpts).toBeUndefined();
   });
 
-  it('token module exports required functions', () => {
-    const tokens = require('../src/utils/tokens.js');
-    expect(tokens.signAccess).toBeDefined();
-    expect(tokens.signRefresh).toBeDefined();
-    expect(tokens.verifyAccess).toBeDefined();
-    expect(tokens.verifyRefresh).toBeDefined();
-    expect(tokens.cookieOpts).toBeDefined();
+  it('o utilitário de senha não existe mais', () => {
+    expect(() => require('../src/utils/password.js')).toThrow();
   });
 });

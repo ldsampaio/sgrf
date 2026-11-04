@@ -2,6 +2,7 @@ const prisma = require('../config/db');
 const { canViewRequest, scopeWhere } = require('../middlewares/visibility');
 const { audit } = require('../services/auditService');
 const { enqueue } = require('../services/emailService');
+const { findIdentity } = require('../services/identityRepository');
 const { annualTotalCents, getSettings, getBalance, calcAmount } = require('../services/requestService');
 
 async function list(req, res, next) {
@@ -90,8 +91,8 @@ async function submit(req, res, next) {
     });
 
     await audit({ actorId: req.user.id, action: 'request_submitted', entityType: 'request', entityId: r.id, beforeData: { status: 'RASCUNHO' }, afterData: updated, req });
-    const requester = await prisma.user.findUnique({ where: { id: r.requesterId } });
-    await enqueue(requester.email, `[SGRD] Solicitação ${status}`, `Pedido ${r.title} (${r.id}) valor ${(r.requestedAmountCents / 100).toFixed(2)} status ${status}. Dúvidas: dirplad-cp@utfpr.edu.br`);
+    const requester = await findIdentity(r.requesterId);
+    if (requester?.email) await enqueue(requester.email, `[SGRD] Solicitação ${status}`, `Pedido ${r.title} (${r.id}) valor ${(r.requestedAmountCents / 100).toFixed(2)} status ${status}. Dúvidas: dirplad-cp@utfpr.edu.br`);
 
     res.json({ request: updated, annualTotalCents: totalWithNew, limit: settings.automaticApprovalLimitCents });
   } catch (e) { next(e); }

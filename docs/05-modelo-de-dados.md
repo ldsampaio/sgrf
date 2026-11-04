@@ -2,21 +2,29 @@
 
 ## Entidades principais
 
-### users
+### users (view read-only do schema `auth`, dono: saga)
+
+O sgrf **lê** `auth.users`, nunca escreve: quem cria a identidade é o saga no primeiro
+login. Não existe coluna de senha, de hash, de `must_change_password` nem de contadores de
+tentativa — T10.
 
 | Campo | Tipo | Regra |
 |-------|------|-------|
 | id | UUID | chave primária |
-| name | texto | obrigatório |
-| email | texto | único, institucional |
-| role | enum | obrigatório |
+| login | texto | institucional (fonte da identidade) |
+| name | texto | opcional (preenchido na tela de perfil do saga) |
+| email | texto | opcional, institucional |
+| role_base | texto | inferido pelo saga (`^a\d+$` → ALUNO) |
+
+### user_roles (schema `sgrf`, dono: sgrf)
+
+Papel **por sistema**. O claim `role` do JWT nunca é usado.
+
+| Campo | Tipo | Regra |
+|-------|------|-------|
+| user_id | UUID | referência a `auth.users` (só leitura) |
+| role | texto | ADMINISTRADOR / CHEFE_DEPARTAMENTO / CONSELHEIRO / PROFESSOR / ALUNO |
 | status | enum | ativo/inativo |
-| password_hash | texto | obrigatório |
-| must_change_password | booleano | obrigatório |
-| temporary_password_expires_at | datetime | opcional |
-| last_login_at | datetime | opcional |
-| created_at | datetime | obrigatório |
-| updated_at | datetime | obrigatório |
 
 ### department_settings
 

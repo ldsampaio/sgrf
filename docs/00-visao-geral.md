@@ -21,9 +21,8 @@ Permitir que um departamento da UTFPR:
 
 O sistema deverá contemplar:
 
-- autenticação de usuários;
-- troca obrigatória de senha temporária;
-- gerenciamento de usuários e papéis;
+- verificação da sessão compartilhada do saga (o sgrf não autentica credencial);
+- gerenciamento de papéis por sistema (`sgrf.user_roles`);
 - configuração de e-mail institucional;
 - cadastro de limite anual ou período de aprovação automática;
 - cadastro de saldo financeiro do departamento;

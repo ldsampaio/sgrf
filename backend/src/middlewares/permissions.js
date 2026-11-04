@@ -48,14 +48,11 @@ const PERMISSIONS = Object.freeze({
   'reports:accountability': { roles: ALL_ROLES },
   'reports:integration': { roles: ALL_ROLES },
   'reports:dashboard': { roles: ALL_ROLES },
-  // Usuários
+  // Usuários — o sgrf não cria usuário nem credencial (identidade é do saga).
   'users:list': { roles: LEADERS },
   'users:batch': { roles: ['ADMINISTRADOR'] },
-  'users:create': { roles: LEADERS },
   'users:patch': { roles: ALL_ROLES }, // + canManageUsers no handler (alvo-dependente)
   'users:patch-role': { roles: ALL_ROLES }, // + canManageUsers no handler (alvo-dependente)
-  'users:invite': { roles: LEADERS },
-  'users:force-reset': { roles: LEADERS }, // + canManageUsers no handler (D-11, 04-02)
 });
 
 // Espelha o formato closure de requireRole em middlewares/auth.js:18-24.

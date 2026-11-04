@@ -1,31 +1,68 @@
 // SQLite → Postgres concluído (v0.1.1): provider postgresql.
 // UUID como String. Dinheiro sempre Int (centavos).
+//
+// PROPRIEDADE DE SCHEMA (regra dura — ver AGENTS.md):
+//   - `auth` é do SAGA. O Prisma do sgrf só LÊ auth.*. Nenhuma migration do
+//     sgrf cria ou altera tabela em `auth`. Os modelos de `auth` abaixo são
+//     views read-only, declaradas só para permitir o join de identidade.
+//   - `sgrf` é do sgrf. Toda migration do sgrf muda apenas `sgrf.*`.
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["auth", "sgrf"]
 }
 
 // Enums como String + validação em código/Zod (compatível com SQLite e Postgres).
 
-model User {
-  id                           String    @id @default(uuid())
-  name                         String
-  email                        String    @unique
-  role                         String    @default("PROFESSOR") // Role: ADMINISTRADOR|CHEFE_DEPARTAMENTO|CONSELHEIRO|PROFESSOR|ALUNO (enum nativo no Postgres)
-  status                       String    @default("ATIVO") // ATIVO|INATIVO
-  passwordHash                 String
-  mustChangePassword           Boolean   @default(false)
-  temporaryPasswordExpiresAt   DateTime?
-  failedLoginAttempts          Int       @default(0)
-  lockedUntil                  DateTime?
-  lastLoginAt                  DateTime?
-  createdAt                    DateTime  @default(now())
-  updatedAt                    DateTime  @updatedAt
-  requests                     ResourceRequest[] @relation("Requester")
+// ─────────────────────────────────────────────────────────────────────────
+// Views read-only do schema `auth` (dono: saga; fonte da verdade
+// `saga/db/schema.sql`). O sgrf nunca escreve aqui.
+// ─────────────────────────────────────────────────────────────────────────
+model AuthUser {
+  id          String          @id @db.Uuid
+  login       String
+  name        String?
+  email       String?
+  roleBase    String          @map("role_base")
+  roles       UserRole[]
+  requests    ResourceRequest[]
+  auditEvents AuditEvent[]
+
+  @@schema("auth")
+  @@map("users")
+}
+
+model AuthProfile {
+  userId        String    @id @db.Uuid @map("user_id")
+  matricula     String?
+  curso         String?
+  programaPos   String?   @map("programa_pos")
+  departamento  String?
+  dataMatricula DateTime? @map("data_matricula") @db.Date
+
+  @@schema("auth")
+  @@map("user_profiles")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Schema `sgrf` (dono: sgrf)
+// ─────────────────────────────────────────────────────────────────────────
+// Papel POR SISTEMA. O claim `role` do JWT nunca é usado: o papel do sgrf mora
+// aqui (contrato de sessão, passo 6). Rate limit e bloqueio de login são do
+// saga — não há coluna de senha nem contadores de tentativa neste schema.
+model UserRole {
+  userId String   @id @db.Uuid @map("user_id")
+  role   String // ADMINISTRADOR|CHEFE_DEPARTAMENTO|CONSELHEIRO|PROFESSOR|ALUNO
+  status String   @default("ATIVO") // ATIVO|INATIVO
+  user   AuthUser @relation(fields: [userId], references: [id])
+
+  @@schema("sgrf")
+  @@map("user_roles")
 }
 
 model DepartmentSettings {
@@ -41,56 +78,62 @@ model DepartmentSettings {
   maxViewRequests             Int      @default(1)
   updatedBy                   String?
   updatedAt                   DateTime @updatedAt
+
+  @@schema("sgrf")
 }
 
 model FundBalance {
-  id              String   @id @default(uuid())
-  referenceYear   Int      @unique
-  availableCents  Int      @default(0)
-  provisionedCents Int     @default(0)
-  spentCents      Int      @default(0)
-  version         Int      @default(0)
-  updatedBy       String?
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(uuid())
+  referenceYear    Int      @unique
+  availableCents   Int      @default(0)
+  provisionedCents Int      @default(0)
+  spentCents       Int      @default(0)
+  version          Int      @default(0)
+  updatedBy        String?
+  updatedAt        DateTime @updatedAt
+
+  @@schema("sgrf")
 }
 
 model ResourceRequest {
-  id                    String        @id @default(uuid())
-  requesterId           String
-  requester             User          @relation("Requester", fields: [requesterId], references: [id])
+  id                    String   @id @default(uuid())
+  requesterId           String   @db.Uuid
+  requester             AuthUser @relation(fields: [requesterId], references: [id])
   type                  String // EQUIPAMENTO|PUBLICACAO|VIAGEM|AUXILIO_ESTUDANTIL
   title                 String
-  justification         String        @default("")
-  status                String        @default("RASCUNHO")
+  justification         String   @default("")
+  status                String   @default("RASCUNHO")
   referenceYear         Int
   requestedAmountCents  Int
-  approvedAmountCents   Int           @default(0)
-  originalCurrency      String        @default("BRL")
+  approvedAmountCents   Int      @default(0)
+  originalCurrency      String   @default("BRL")
   exchangeRate          Float?
   convertedAmountCents  Int?
   submittedAt           DateTime?
   votingDeadlineAt      DateTime?
   decidedAt             DateTime?
-  payload               String        @default("{}") // JSON detalhes por tipo
+  payload               String   @default("{}") // JSON detalhes por tipo
   // Suspensão p/ reunião ordinária (só chefe) — read-only até liberação
   suspendedAt           DateTime?
   suspendedBy           String?
-  suspensionReason      String        @default("")
+  suspensionReason      String   @default("")
   meetingDate           DateTime?
   deadlineFrozenAt      DateTime?
   // Decisão colegiada / final
   decidedBy             String?
-  decisionReason        String        @default("")
-  collegiateMinutes     String        @default("") // ata
-  approvedItems         String        @default("[]")
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  decisionReason        String   @default("")
+  collegiateMinutes     String   @default("") // ata
+  approvedItems         String   @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
   files                 RequestFile[]
   transactions          FinancialTransaction[]
+
+  @@schema("sgrf")
 }
 
 model RequestFile {
-  id           String   @id @default(uuid())
+  id           String          @id @default(uuid())
   requestId    String
   request      ResourceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   fileType     String
@@ -100,11 +143,13 @@ model RequestFile {
   sizeBytes    Int
   checksum     String
   uploadedBy   String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime        @default(now())
+
+  @@schema("sgrf")
 }
 
 model FinancialTransaction {
-  id          String   @id @default(uuid())
+  id          String           @id @default(uuid())
   requestId   String?
   request     ResourceRequest? @relation(fields: [requestId], references: [id])
   type        String
@@ -112,69 +157,82 @@ model FinancialTransaction {
   fromState   String
   toState     String
   performedBy String?
-  metadata    String   @default("{}")
-  createdAt   DateTime @default(now())
+  metadata    String           @default("{}")
+  createdAt   DateTime         @default(now())
+
+  @@schema("sgrf")
 }
 
 model AuditEvent {
-  id         String   @id @default(uuid())
-  actorId    String?
+  id         String    @id @default(uuid())
+  actorId    String?   @db.Uuid
+  actor      AuthUser? @relation(fields: [actorId], references: [id])
   action     String
   entityType String
   entityId   String?
-  beforeData String   @default("{}")
-  afterData  String   @default("{}")
+  beforeData String    @default("{}")
+  afterData  String    @default("{}")
   ipAddress  String?
   userAgent  String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
+
+  @@schema("sgrf")
 }
 
 model EmailQueue {
-  id         String   @id @default(uuid())
-  to         String
-  subject    String
-  body       String
-  status     String   @default("PENDING")
-  attempts   Int      @default(0)
-  lastError  String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  to        String
+  subject   String
+  body      String
+  status    String   @default("PENDING")
+  attempts  Int      @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@schema("sgrf")
 }
 
 // Placeholders fase futura (votação/discussão) — tabelas mínimas
 model Vote {
-  id        String   @id @default(uuid())
-  requestId String
-  voterId   String
-  voteType  String // DEFERIR|INDEFERIR|DEFERIR_PARCIALMENTE|ABSTER_SE
-  comment   String   @default("")
-  approvedAmountCents Int @default(0) // exigido no parcial
-  tieBreak  Boolean  @default(false) // desempate do chefe
-  finalizedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(uuid())
+  requestId         String
+  voterId           String
+  voteType          String // DEFERIR|INDEFERIR|DEFERIR_PARCIALMENTE|ABSTER_SE
+  comment           String   @default("")
+  approvedAmountCents Int    @default(0) // exigido no parcial
+  tieBreak          Boolean  @default(false) // desempate do chefe
+  finalizedAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
   @@unique([requestId, voterId])
+
+  @@schema("sgrf")
 }
 
 model DeliberationMessage {
-  id        String   @id @default(uuid())
-  requestId String
-  authorId  String
+  id              String    @id @default(uuid())
+  requestId       String
+  authorId        String
   parentMessageId String?
-  content   String
-  history   String   @default("[]") // edições anteriores p/ auditoria
-  deletedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  content         String
+  history         String    @default("[]") // edições anteriores p/ auditoria
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@schema("sgrf")
 }
 
 model ViewRequest {
-  id            String   @id @default(uuid())
-  requestId     String
-  requestedBy   String
-  justification String
+  id             String    @id @default(uuid())
+  requestId      String
+  requestedBy    String
+  justification  String
   deadlineBefore DateTime?
   deadlineAfter  DateTime?
-  createdAt     DateTime @default(now())
+  createdAt      DateTime  @default(now())
   @@unique([requestId, requestedBy]) // máx 1 vista por conselheiro por solicitação
+
+  @@schema("sgrf")
 }

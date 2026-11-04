@@ -24,14 +24,15 @@ need node; need npm; need docker
 [ -f "$BACKEND/.env" ] || { echo "Criando backend/.env a partir de .env.example"; cp "$BACKEND/.env.example" "$BACKEND/.env"; }
 
 echo "== postgres local (compose, só o db) =="
-# O `docker compose` interpola TODOS os serviços mesmo ao subir só o `db`;
-# os `${VAR:?}` do serviço `app` (só deploy) recebem placeholders aqui.
-# O `app` não é criado, então esses valores nunca são usados.
+# O `docker compose` interpola TODOS os serviços mesmo ao subir só o `db`; os valores
+# do serviço `app` (só deploy) recebem placeholders aqui. O `app` não é criado, então
+# nunca são usados.
 (cd "$ROOT" && \
-  JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET:-dev-only-interpolation}" \
-  JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET:-dev-only-interpolation}" \
-  INITIAL_ADMIN_EMAIL="${INITIAL_ADMIN_EMAIL:-dev-only@utfpr.edu.br}" \
-  INITIAL_ADMIN_TEMPORARY_PASSWORD="${INITIAL_ADMIN_TEMPORARY_PASSWORD:-dev-only-interpolation}" \
+  REDIS_URL="${REDIS_URL:-dev-only-interpolation}" \
+  SAGA_JWKS_URL="${SAGA_JWKS_URL:-dev-only-interpolation}" \
+  SAGA_LOGIN_URL="${SAGA_LOGIN_URL:-dev-only-interpolation}" \
+  PORTAL_ALLOWED_REDIRECT_HOSTS="${PORTAL_ALLOWED_REDIRECT_HOSTS:-dev-only-interpolation}" \
+  INITIAL_ADMIN_LOGIN="${INITIAL_ADMIN_LOGIN:-dev-only-interpolation}" \
   docker compose up -d db)
 
 echo "== aguardando postgres =="
@@ -44,6 +45,8 @@ done
 
 echo "== backend: install + migrate =="
 npm --prefix "$BACKEND" install --no-audit --no-fund
+# O schema `auth` é do saga (definido por ../compose.dev.yml + saga/db/schema.sql).
+# A migração do sgrf cobre só o schema `sgrf`; AuthUser/AuthProfile são views read-only.
 (cd "$BACKEND" && npx prisma migrate dev)
 
 if [ "$SEED_DEV" = 1 ]; then
@@ -70,6 +73,7 @@ fi
 echo ""
 echo "Backend:  http://localhost:3000/health"
 echo "Frontend: http://localhost:5173"
-echo "Logins dev (senha Trocar123!): admin/chefe/cons/prof/aluno.teste@utfpr.edu.br"
+echo "O login é do saga (portal em :8000): o sgrf não tem formulário de credencial."
+echo "Logins dev (papéis em sgrf.user_roles, sem senha): admin/chefe/cons/prof/aluno.teste"
 echo "Ctrl+C encerra ambos."
 wait

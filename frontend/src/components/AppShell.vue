@@ -38,9 +38,9 @@
 <script setup>
 import { ref } from 'vue';
 import { useAuth } from '../stores/auth';
-import { useRouter } from 'vue-router';
 const auth = useAuth();
-const router = useRouter();
 const open = ref(false);
-async function logout() { open.value = false; await auth.logout(); router.push('/login'); }
+// O logout é do saga (derruba a sessão no Redis e remove o cookie compartilhado).
+// O sgrf limpa o estado local e vai para o portal pelo `login_url` do 401.
+function logout() { open.value = false; auth.redirectToSaga(); }
 </script>
