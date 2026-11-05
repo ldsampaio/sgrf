@@ -115,6 +115,7 @@ Bounce/clay-easing apenas onde agrega (botões, pílulas, KPIs). **Regra:** tran
 | `.table` | th com bg canvas + uppercase; hairline `border-soft`; hover indigo .06 |
 | `.tab/.segment` | pílulas clay; ativa = border ink + primary-soft + shadow hard |
 | `.topbar` | **floating clay card** (sticky top 12px), border-3, nav items pill; ativo = primary-soft + border primary |
+| `.pilula-flutuante` | pílula CTA **fixa à esquerda** (centro vertical; canto inferior em ≤767 px), ícone 24 + rótulo — o ícone nunca é o único portador de informação. Dimensões de token, sem px cru fora de `@media`; some com o drawer mobile aberto |
 | `.eyebrow` | pílula amber com diamante brand; nunca só texto uppercase |
 | `.stat` | KPI clay card; ícone em tile pastel rotativo (sky/amber/lilac/mint); número em Space Grotesk |
 | `.progress` / `.medidores` | pílula clay `role="meter"`, border-2 ink, fill do token de status; **valor numérico sempre ao lado** (cor nunca é o único portador). Fill usa `:style` dinâmico (percentual de dados) — única exceção aceita a style inline |
