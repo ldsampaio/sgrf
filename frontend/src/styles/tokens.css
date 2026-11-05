@@ -200,7 +200,7 @@
   --duration-spin: var(--primitive-duration-spin);
 
   /* Layout */
-  --content-max: 1280px;
+  --content-max: 1180px;
   --content-narrow: 760px;
   --topbar-height: 64px;
   --sidebar-width: 300px;

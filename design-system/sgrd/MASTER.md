@@ -114,7 +114,8 @@ Bounce/clay-easing apenas onde agrega (botões, pílulas, KPIs). **Regra:** tran
 | `.alert` | flex com ícone; erro = red-100/red-800; sucesso = mint; dica = canvas |
 | `.table` | th com bg canvas + uppercase; hairline `border-soft`; hover indigo .06 |
 | `.tab/.segment` | pílulas clay; ativa = border ink + primary-soft + shadow hard |
-| `.topbar` | **floating clay card** (sticky top 12px), border-3, nav items pill; ativo = primary-soft + border primary |
+| `.topbar` | **floating clay card** (sticky top 12px), border-3, nav items pill; ativo = primary-soft + border primary. **Teto de largura**: `calc(--content-max + 2×--space-8)`, centralizado — alinha com o conteúdo em vez de esticar até a tela |
+| `.page` | coluna central limitada pelo mesmo teto. `--content-max` = soma dos componentes da linha mais larga do dashboard: 4 cards de 280 + 3 gaps de 20 = **1180** (+ padding 2×40). `.page--narrow` (760) e login ficam fora dessa soma |
 | `.pilula-flutuante` | pílula CTA **fixa à esquerda** (centro vertical; canto inferior em ≤767 px), ícone 24 + rótulo — o ícone nunca é o único portador de informação. Dimensões de token, sem px cru fora de `@media`; some com o drawer mobile aberto |
 | `.eyebrow` | pílula amber com diamante brand; nunca só texto uppercase |
 | `.stat` | KPI clay card; ícone em tile pastel rotativo (sky/amber/lilac/mint); número em Space Grotesk |
