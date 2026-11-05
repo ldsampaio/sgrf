@@ -31,12 +31,6 @@
             <Icon :name="item.icon" :size="18" />
             <span>{{ item.label }}</span>
           </router-link>
-          <!-- Onda 7 do plano ../SGTU.md: o SGTU é outro sistema, então é <a>
-               com URL montada por URLSearchParams — nunca a query bruta. -->
-          <a class="nav__link" :href="urlTicket(route.path)">
-            <Icon name="ticket" :size="18" />
-            <span>Tickets</span>
-          </a>
         </nav>
 
         <div class="topbar__actions">
@@ -88,6 +82,16 @@
       </div>
     </header>
 
+    <!-- Onda 7 do plano ../SGTU.md: o ponto de entrada do ticket saiu do menu.
+         Pílula fixa à esquerda com rótulo sempre visível — o ícone nunca é o único
+         portador de informação. É outro sistema (não rota do SPA), então é <a> com
+         URL montada por URLSearchParams — nunca a query bruta. Some enquanto o
+         drawer mobile está aberto (dialog modal), para não competir com ele. -->
+    <a v-if="auth.user && !mobileOpen" class="pilula-flutuante" :href="urlTicket(route.path)">
+      <Icon name="ticket" :size="24" />
+      <span>Ticket</span>
+    </a>
+
     <main id="main" class="app-main">
       <slot />
     </main>
@@ -138,10 +142,6 @@
             <Icon :name="item.icon" :size="22" />
             {{ item.label }}
           </router-link>
-          <a class="mobile-nav__link" :href="urlTicket(route.path)" @click="mobileOpen = false">
-            <Icon name="ticket" :size="22" />
-            Tickets
-          </a>
         </nav>
 
         <div class="mobile-nav__user">

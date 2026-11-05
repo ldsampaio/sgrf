@@ -389,6 +389,35 @@ button, .btn, .badge, a, .tab, .segment {
 
 /* —————————————————————————————— Page layout —————————————————————————————— */
 
+/* ===== Pílula flutuante (ponto de entrada do SGTU, onda 7 do plano ../SGTU.md) ===== */
+/* Fixa, fora do menu. Dimensões de token; foco e movimento são os globais
+   (:focus-visible, prefers-reduced-motion). O rótulo acompanha o ícone porque o
+   ícone nunca é o único portador de informação. */
+.pilula-flutuante {
+  position: fixed;
+  left: var(--space-4);
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--pill-height);
+  padding: var(--space-2) var(--space-4);
+  background: var(--button-primary-bg);
+  color: var(--button-primary-fg);
+  border: var(--button-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-cta);
+  font-family: var(--font-display);
+  font-weight: var(--weight-bold);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  z-index: 40;
+}
+
+.pilula-flutuante:hover { background: var(--button-primary-bg-hover); box-shadow: var(--shadow-cta); }
+.pilula-flutuante:active { transform: translateY(calc(-50% + 3px)); box-shadow: var(--shadow-cta-press); }
+
 .app-main { display: block; }
 
 .page {
@@ -1506,7 +1535,10 @@ code {
 @media (max-width: 767px) {
   .topbar { top: 8px; }
   .topbar__inner { padding: 8px var(--space-3); }
-  .page { padding: var(--space-6) var(--space-4) var(--space-9); }
+  /* Estreito: a pílula desce para o canto inferior esquerdo e o conteúdo ganha
+     folga para não ser coberto por ela. */
+  .page { padding: var(--space-6) var(--space-4) calc(var(--space-9) + var(--space-6)); }
+  .pilula-flutuante { top: auto; bottom: var(--space-4); transform: none; }
   .page-head { align-items: flex-start; }
   .page-head h1 { font-size: var(--text-xl); }
   .page-head__actions { width: 100%; }
