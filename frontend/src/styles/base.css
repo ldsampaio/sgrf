@@ -159,7 +159,10 @@ button, .btn, .badge, a, .tab, .segment {
   align-items: center;
   gap: var(--space-4);
   width: 100%;
-  max-width: var(--content-max);
+  /* Teto de largura: soma dos componentes da linha mais larga do dashboard
+     (4 cards de 280 + 3 gaps de 20 = 1180) mais o padding lateral da pagina.
+     O cabecalho alinha com a coluna de conteudo em vez de esticar ate a tela. */
+  max-width: calc(var(--content-max) + 2 * var(--space-8));
   min-height: var(--topbar-height);
   margin: 0 auto;
   padding: 10px var(--space-5);
@@ -422,7 +425,9 @@ button, .btn, .badge, a, .tab, .segment {
 
 .page {
   width: 100%;
-  max-width: var(--content-max);
+  /* --content-max e a soma dos componentes (4 cards de 280 + 3 gaps de 20);
+     o padding lateral da pagina fica fora dessa soma. */
+  max-width: calc(var(--content-max) + 2 * var(--space-8));
   margin: 0 auto;
   padding: clamp(24px, 4vw, 52px) clamp(16px, 3vw, 40px) var(--space-10);
   animation: page-rise var(--dur-slow) var(--ease-out) both;
@@ -1350,7 +1355,8 @@ code {
   justify-content: space-between;
   gap: var(--space-5);
   width: 100%;
-  max-width: var(--content-max);
+  /* Alinha com a coluna da pagina (mesmo teto), nao com a tela inteira. */
+  max-width: calc(var(--content-max) + 2 * var(--space-8));
   margin: 0 auto;
   padding: var(--space-7) clamp(16px, 3vw, 40px) var(--space-6);
   flex-wrap: wrap;
