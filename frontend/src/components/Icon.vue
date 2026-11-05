@@ -82,6 +82,13 @@ const ICONS = {
   package: ['M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z', 'm3.3 7 8.7 5 8.7-5', 'M12 22V12'],
   plane: ['M17.8 19.2 16 11l3.5-3.5a2.12 2.12 0 0 0-3-3L13 8 4.8 6.2a1 1 0 0 0-1 1.6l5.6 3.6-3 3-2.2-.4a1 1 0 0 0-.9 1.6l2.4 2.4 2.4 2.4a1 1 0 0 0 1.6-.9l-.4-2.2 3-3 3.6 5.6a1 1 0 0 0 1.6-1z'],
   graduation: ['M22 10 12 5 2 10l10 5 10-5z', 'M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5'],
+  // Ampliado aditivamente pela onda 7 do plano ../SGTU.md (link de ticket).
+  ticket: [
+    'M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z',
+    'M13 5v2',
+    'M13 17v2',
+    'M13 11v2',
+  ],
 };
 
 const paths = computed(() => ICONS[props.name] || ICONS.info);
