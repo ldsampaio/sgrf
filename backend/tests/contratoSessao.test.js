@@ -353,13 +353,19 @@ describe('5–6. req.user do Redis e papel do sistema', () => {
     // O admin chegou antes pela derivação e ficou PROFESSOR.
     repo.linhas.set(USR_ADMIN, { userId: USR_ADMIN, role: 'PROFESSOR', status: 'ATIVO' });
 
-    const papel = await ensureRole(USR_ADMIN, 'PROFESSOR', 'Ldsampaio', repo);
+    // O login do admin é passado explicitamente: o valor vem do ambiente
+    // (INITIAL_ADMIN_LOGIN) e no CI é outro — o teste não pode depender dele.
+    const papel = await ensureRole(USR_ADMIN, 'PROFESSOR', 'Ldsampaio', repo, 'ldsampaio');
     expect(papel.role).toBe('ADMINISTRADOR');
 
     const novo = repoFake();
-    const criado = await ensureRole(USR_ADMIN, 'PROFESSOR', 'ldsampaio', novo);
+    const criado = await ensureRole(USR_ADMIN, 'PROFESSOR', 'ldsampaio', novo, 'ldsampaio');
     expect(criado.role).toBe('ADMINISTRADOR');
     expect(novo.linhas.get(USR_ADMIN)).toEqual({ userId: USR_ADMIN, role: 'ADMINISTRADOR', status: 'ATIVO' });
+
+    // Fora do admin, a derivação não inventa ADMINISTRADOR.
+    const derivado = await ensureRole('55555555-5555-4555-8555-555555555555', 'PROFESSOR', 'outro.login', repoFake(), 'ldsampaio');
+    expect(derivado.role).toBe('PROFESSOR');
   });
 
   it('corrida de criação (unique) relê, nunca sobrescreve', async () => {

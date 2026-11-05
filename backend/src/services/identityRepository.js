@@ -29,8 +29,8 @@ const PAPEL_DERIVADO = { ALUNO: 'ALUNO', PROFESSOR: 'PROFESSOR' };
 // A única exceção é o admin do sistema (`INITIAL_ADMIN_LOGIN`), que é ADMINISTRADOR
 // em todos os sistemas: nesse caso a linha existente é corrigida, porque é atribuição
 // decidida, não derivação.
-async function ensureRole(userId, roleBase, login, repo = prisma) {
-  const ehAdmin = Boolean(login) && String(login).toLowerCase() === env.initialAdminLogin;
+async function ensureRole(userId, roleBase, login, repo = prisma, adminLogin = env.initialAdminLogin) {
+  const ehAdmin = Boolean(login) && String(login).toLowerCase() === String(adminLogin).toLowerCase();
 
   const existente = await findRoleRow(userId, repo);
   if (existente) {
