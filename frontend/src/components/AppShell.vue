@@ -31,6 +31,12 @@
             <Icon :name="item.icon" :size="18" />
             <span>{{ item.label }}</span>
           </router-link>
+          <!-- Onda 7 do plano ../SGTU.md: o SGTU é outro sistema, então é <a>
+               com URL montada por URLSearchParams — nunca a query bruta. -->
+          <a class="nav__link" :href="urlTicket(route.path)">
+            <Icon name="ticket" :size="18" />
+            <span>Tickets</span>
+          </a>
         </nav>
 
         <div class="topbar__actions">
@@ -132,6 +138,10 @@
             <Icon :name="item.icon" :size="22" />
             {{ item.label }}
           </router-link>
+          <a class="mobile-nav__link" :href="urlTicket(route.path)" @click="mobileOpen = false">
+            <Icon name="ticket" :size="22" />
+            Tickets
+          </a>
         </nav>
 
         <div class="mobile-nav__user">
@@ -155,6 +165,7 @@ import { useRoute } from 'vue-router';
 import Icon from './Icon.vue';
 import { useAuth } from '../stores/auth';
 import { initials as initialsOf, roleLabel } from '../utils/labels';
+import { urlTicket } from '../utils/sgtu';
 
 const auth = useAuth();
 const route = useRoute();
