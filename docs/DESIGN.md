@@ -193,7 +193,7 @@ Minimal form surface on the marketing page:
 - **Card internal padding**: 24–32px desktop, ~16–24px mobile
 
 ### Grid & Container
-- **Max content width**: ~1200–1280px, centered, with 48–96px gutters
+- **Max content width**: 1080px total (`--content-ceiling`, o teto compartilhado com SGOA e SGTU), centered; a coluna de conteúdo é o teto menos o padding lateral (1000px)
 - **Hero**: asymmetric two-column — dark copy panel on one side, diamond-masked photo on the other
 - **Feature grid**: 2–3 column grid on desktop, single column on mobile
 - **Professor grid**: evenly spaced row of circular portraits, centered
@@ -255,7 +255,7 @@ On a dark canvas, black shadows disappear. Codemaster replaces directional shado
 | Mobile | ≤ 767px | Nav collapses to logo + hamburger; hero stacks (photo above copy); feature grid becomes single column; H1 drops to ~36px; footer logo lockup and pattern strip stay centered but simplified |
 | Tablet | 768–1023px | Nav shows 2–3 primary links; feature grid arranges 2-up; hero headline ~44px |
 | Desktop | ≥ 1024px | Full nav bar; feature grid 3-up; hero two-column with diamond-masked photo; H1 at 56px |
-| Wide | ≥ 1440px | Content max-width caps at ~1280px; gutters grow symmetrically |
+| Wide | ≥ 1440px | Content caps at the 1080px `--content-ceiling` (shared with SGOA and SGTU); gutters grow symmetrically |
 
 ### Touch Targets
 All interactive elements meet or exceed 44×44px. Pill buttons run 44–52px tall depending on padding; the mobile hamburger and any icon-only controls are 44×44px minimum.

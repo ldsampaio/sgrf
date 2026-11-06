@@ -159,9 +159,8 @@ button, .btn, .badge, a, .tab, .segment {
   align-items: center;
   gap: var(--space-4);
   width: 100%;
-  /* Teto de largura: soma dos componentes da linha mais larga do dashboard
-     (4 cards de 280 + 3 gaps de 20 = 1180) mais o padding lateral da pagina.
-     O cabecalho alinha com a coluna de conteudo em vez de esticar ate a tela. */
+  /* Teto de largura compartilhado (1080 px, o mesmo de sgoa e sgtu): o cabeçalho
+     alinha com a coluna de conteúdo em vez de esticar até a tela. */
   max-width: var(--content-ceiling);
   min-height: var(--topbar-height);
   margin: 0 auto;
@@ -427,8 +426,9 @@ button, .btn, .badge, a, .tab, .segment {
 
 .page {
   width: 100%;
-  /* --content-max e a soma dos componentes (4 cards de 280 + 3 gaps de 20);
-     o padding lateral da pagina fica fora dessa soma. Mesmo teto do cabecalho. */
+  /* --content-ceiling é o teto total (1080); --content-max é a coluna dentro dele
+     (1080 - padding lateral 2x40 = 1000), onde a linha mais larga do dashboard
+     (4 cards + 3 gaps de 20) se reparte. Mesmo teto do cabecalho. */
   max-width: var(--content-ceiling);
   margin: 0 auto;
   padding: clamp(24px, 4vw, 52px) clamp(16px, 3vw, 40px) var(--space-10);
@@ -1358,7 +1358,7 @@ code {
   gap: var(--space-5);
   width: 100%;
   /* Alinha com a coluna da pagina (mesmo teto), nao com a tela inteira. */
-  max-width: calc(var(--content-max) + 2 * var(--space-8));
+  max-width: var(--content-ceiling);
   margin: 0 auto;
   padding: var(--space-7) clamp(16px, 3vw, 40px) var(--space-6);
   flex-wrap: wrap;
@@ -1509,12 +1509,13 @@ code {
 @keyframes shimmer { to { transform: translateX(100%); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* —————————————————————————————— Responsivo (767 / 1023 / 1519 calha / container 1280) —————————————————————————————— */
+/* —————————————————————————————— Responsivo (767 / 1023 / 1339 calha / teto 1080) —————————————————————————————— */
 
-/* Calha estreita: abaixo de 1520 px a calha esquerda não comporta a pílula
-   (~104 px + folga), então ela desce para o canto inferior da coluna, onde não cobre
-   texto. O lado esquerdo continua o teto, nunca o extremo da tela. */
-@media (max-width: 1519px) {
+/* Calha estreita: abaixo de 1340 px a calha esquerda não comporta a pílula
+   (~104 px + folga de 26 por lado sobre o teto de 1080), então ela desce para o
+   canto inferior da coluna, onde não cobre texto. O lado esquerdo continua o teto,
+   nunca o extremo da tela. */
+@media (max-width: 1339px) {
   .pilula-flutuante {
     left: max(var(--space-4), calc((100vw - var(--content-ceiling)) / 2));
     top: auto;
@@ -1525,7 +1526,9 @@ code {
   .page { padding-bottom: calc(var(--space-10) + var(--space-6)); }
 }
 
-@media (max-width: 1180px) {
+/* Na largura da coluna (1000 = teto 1080 - padding 2x40) o rótulo da nav já não
+   cabe junto da marca e da conta, então a nav vira ícones. */
+@media (max-width: 1000px) {
   .nav__link span { display: none; }
   .nav__link { width: 44px; justify-content: center; padding: 8px 0; }
   .user__meta { display: none; }

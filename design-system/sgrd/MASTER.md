@@ -115,8 +115,8 @@ Bounce/clay-easing apenas onde agrega (botões, pílulas, KPIs). **Regra:** tran
 | `.table` | th com bg canvas + uppercase; hairline `border-soft`; hover indigo .06 |
 | `.tab/.segment` | pílulas clay; ativa = border ink + primary-soft + shadow hard |
 | `.topbar` | **floating clay card** (sticky top 12px), border-3, nav items pill; ativo = primary-soft + border primary. **Teto de largura**: `--content-ceiling`, centralizado — alinha com o conteúdo em vez de esticar até a tela |
-| `.page` | coluna central limitada pelo mesmo teto (`--content-ceiling`). `--content-max` = soma dos componentes da linha mais larga do dashboard: 4 cards de 280 + 3 gaps de 20 = **1180** (+ padding 2×40) = **1260**. `.page--narrow` (760) e login ficam fora dessa soma |
-| `.pilula-flutuante` | pílula CTA fixa, **dentro do teto**: o lado direito encosta na coluna de conteúdo (centro vertical), ícone 24 + rótulo — o ícone nunca é o único portador de informação. Quando a calha esquerda não comporta a pílula (≤1519 px), desce para o canto inferior da coluna, onde não cobre texto. Dimensões de token, sem px cru fora de `@media`; some com o drawer mobile aberto |
+| `.page` | coluna central limitada pelo mesmo teto (`--content-ceiling`) — o **teto compartilhado de 1080 px** com sgoa e sgtu, que é a largura total máxima da interface. `--content-max` é o teto menos o padding lateral 2×40 = **1000**; a linha mais larga do dashboard (4 cards + 3 gaps de 20) se reparte por essa coluna. `.page--narrow` (760) e login ficam fora dessa soma |
+| `.pilula-flutuante` | pílula CTA fixa, **dentro do teto**: o lado direito encosta na coluna de conteúdo (centro vertical), ícone 24 + rótulo — o ícone nunca é o único portador de informação. Quando a calha esquerda não comporta a pílula (≤1339 px), desce para o canto inferior da coluna, onde não cobre texto. Dimensões de token, sem px cru fora de `@media`; some com o drawer mobile aberto |
 | `.eyebrow` | pílula amber com diamante brand; nunca só texto uppercase |
 | `.stat` | KPI clay card; ícone em tile pastel rotativo (sky/amber/lilac/mint); número em Space Grotesk |
 | `.progress` / `.medidores` | pílula clay `role="meter"`, border-2 ink, fill do token de status; **valor numérico sempre ao lado** (cor nunca é o único portador). Fill usa `:style` dinâmico (percentual de dados) — única exceção aceita a style inline |
@@ -136,7 +136,7 @@ exercício e distribuição por status (Dashboard.vue `meters`), sempre com valo
 - [x] `prefers-reduced-motion` respeitado (duas coberturas em `base.css`).
 - [x] Ícones SVG consistentes; nenhum emoji estrutural.
 - [x] States disabled/loading/empty estilizados.
-- [ ] Testado visualmente em 375 / 768 / 1024 / 1440 px (breakpoints 767/1023/1280 cobertos estaticamente).
+- [ ] Testado visualmente em 375 / 768 / 1024 / 1440 px (breakpoints 767/1023/1000/1339 cobertos estaticamente).
 
 ---
 
