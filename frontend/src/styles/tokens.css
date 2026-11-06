@@ -200,7 +200,12 @@
   --duration-spin: var(--primitive-duration-spin);
 
   /* Layout */
-  --content-max: 1180px;
+  /* Teto de largura: 1080 px é a largura TOTAL da interface — o mesmo teto de sgoa e
+     sgtu (decisão compartilhada, 2026-11-06). A coluna de conteúdo é o teto menos o
+     padding lateral da página; navbar, page, rodapé e pílula flutuante usam o mesmo
+     valor, é o que os alinha entre si e entre os sistemas. */
+  --content-ceiling: 1080px;
+  --content-max: calc(var(--content-ceiling) - 2 * var(--space-8));
   --content-narrow: 760px;
   --topbar-height: 64px;
   --sidebar-width: 300px;

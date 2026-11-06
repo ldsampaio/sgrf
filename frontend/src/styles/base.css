@@ -159,10 +159,9 @@ button, .btn, .badge, a, .tab, .segment {
   align-items: center;
   gap: var(--space-4);
   width: 100%;
-  /* Teto de largura: soma dos componentes da linha mais larga do dashboard
-     (4 cards de 280 + 3 gaps de 20 = 1180) mais o padding lateral da pagina.
-     O cabecalho alinha com a coluna de conteudo em vez de esticar ate a tela. */
-  max-width: calc(var(--content-max) + 2 * var(--space-8));
+  /* Teto de largura compartilhado (1080 px, o mesmo de sgoa e sgtu): o cabeçalho
+     alinha com a coluna de conteúdo em vez de esticar até a tela. */
+  max-width: var(--content-ceiling);
   min-height: var(--topbar-height);
   margin: 0 auto;
   padding: 10px var(--space-5);
@@ -393,14 +392,16 @@ button, .btn, .badge, a, .tab, .segment {
 /* —————————————————————————————— Page layout —————————————————————————————— */
 
 /* ===== Pílula flutuante (ponto de entrada do SGTU, onda 7 do plano ../SGTU.md) ===== */
-/* Fixa, fora do menu. Dimensões de token; foco e movimento são os globais
+/* Fixa, fora do menu, mas dentro do teto de largura da plataforma: o lado direito
+   encosta na coluna de conteúdo, então a pílula fica à esquerda do bloco e não no
+   extremo da tela. Dimensões de token; foco e movimento são os globais
    (:focus-visible, prefers-reduced-motion). O rótulo acompanha o ícone porque o
    ícone nunca é o único portador de informação. */
 .pilula-flutuante {
   position: fixed;
-  left: var(--space-4);
+  left: calc((100vw - var(--content-ceiling)) / 2 - var(--space-2));
   top: 50%;
-  transform: translateY(-50%);
+  transform: translate(-100%, -50%);
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -419,19 +420,22 @@ button, .btn, .badge, a, .tab, .segment {
 }
 
 .pilula-flutuante:hover { background: var(--button-primary-bg-hover); box-shadow: var(--shadow-cta); }
-.pilula-flutuante:active { transform: translateY(calc(-50% + 3px)); box-shadow: var(--shadow-cta-press); }
+.pilula-flutuante:active { transform: translate(-100%, calc(-50% + 3px)); box-shadow: var(--shadow-cta-press); }
 
-.app-main { display: block; }
-
-.page {
+/* Shell: o teto de largura é a largura TOTAL da interface (1080, o mesmo de sgoa e
+   sgtu). O conteúdo mora dentro dele com o padding lateral; o cabeçalho usa o mesmo
+   teto — é o que alinha os dois. Sem isto as views caíam no viewport inteiro. */
+.app-main {
+  display: block;
   width: 100%;
-  /* --content-max e a soma dos componentes (4 cards de 280 + 3 gaps de 20);
-     o padding lateral da pagina fica fora dessa soma. */
-  max-width: calc(var(--content-max) + 2 * var(--space-8));
+  max-width: var(--content-ceiling);
   margin: 0 auto;
   padding: clamp(24px, 4vw, 52px) clamp(16px, 3vw, 40px) var(--space-10);
   animation: page-rise var(--dur-slow) var(--ease-out) both;
 }
+
+/* Coluna de conteúdo dentro do shell: o teto menos o padding lateral (1000). */
+.page { width: 100%; max-width: var(--content-max); margin: 0 auto; }
 .page--narrow { max-width: var(--content-narrow); }
 
 .page-section { margin-top: var(--space-9); }
@@ -1356,7 +1360,7 @@ code {
   gap: var(--space-5);
   width: 100%;
   /* Alinha com a coluna da pagina (mesmo teto), nao com a tela inteira. */
-  max-width: calc(var(--content-max) + 2 * var(--space-8));
+  max-width: var(--content-ceiling);
   margin: 0 auto;
   padding: var(--space-7) clamp(16px, 3vw, 40px) var(--space-6);
   flex-wrap: wrap;
@@ -1507,9 +1511,26 @@ code {
 @keyframes shimmer { to { transform: translateX(100%); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* —————————————————————————————— Responsivo (767 / 1023 / container 1280) —————————————————————————————— */
+/* —————————————————————————————— Responsivo (767 / 1023 / 1339 calha / teto 1080) —————————————————————————————— */
 
-@media (max-width: 1180px) {
+/* Calha estreita: abaixo de 1340 px a calha esquerda não comporta a pílula
+   (~104 px + folga de 26 por lado sobre o teto de 1080), então ela desce para o
+   canto inferior da coluna, onde não cobre texto. O lado esquerdo continua o teto,
+   nunca o extremo da tela. */
+@media (max-width: 1339px) {
+  .pilula-flutuante {
+    left: max(var(--space-4), calc((100vw - var(--content-ceiling)) / 2));
+    top: auto;
+    bottom: var(--space-4);
+    transform: none;
+  }
+
+  .app-main { padding-bottom: calc(var(--space-10) + var(--space-6)); }
+}
+
+/* Na largura da coluna (1000 = teto 1080 - padding 2x40) o rótulo da nav já não
+   cabe junto da marca e da conta, então a nav vira ícones. */
+@media (max-width: 1000px) {
   .nav__link span { display: none; }
   .nav__link { width: 44px; justify-content: center; padding: 8px 0; }
   .user__meta { display: none; }
@@ -1543,7 +1564,7 @@ code {
   .topbar__inner { padding: 8px var(--space-3); }
   /* Estreito: a pílula desce para o canto inferior esquerdo e o conteúdo ganha
      folga para não ser coberto por ela. */
-  .page { padding: var(--space-6) var(--space-4) calc(var(--space-9) + var(--space-6)); }
+  .app-main { padding: var(--space-6) var(--space-4) calc(var(--space-9) + var(--space-6)); }
   .pilula-flutuante { top: auto; bottom: var(--space-4); transform: none; }
   .page-head { align-items: flex-start; }
   .page-head h1 { font-size: var(--text-xl); }
