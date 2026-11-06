@@ -202,6 +202,9 @@
   /* Layout */
   --content-max: 1180px;
   --content-narrow: 760px;
+  /* Teto de largura: a coluna de conteúdo mais o padding lateral. Navbar, page e
+     pílula flutuante usam este mesmo valor — é o que os alinha entre si. */
+  --content-ceiling: calc(var(--content-max) + 2 * var(--space-8));
   --topbar-height: 64px;
   --sidebar-width: 300px;
 

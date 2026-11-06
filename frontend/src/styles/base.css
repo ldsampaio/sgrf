@@ -162,7 +162,7 @@ button, .btn, .badge, a, .tab, .segment {
   /* Teto de largura: soma dos componentes da linha mais larga do dashboard
      (4 cards de 280 + 3 gaps de 20 = 1180) mais o padding lateral da pagina.
      O cabecalho alinha com a coluna de conteudo em vez de esticar ate a tela. */
-  max-width: calc(var(--content-max) + 2 * var(--space-8));
+  max-width: var(--content-ceiling);
   min-height: var(--topbar-height);
   margin: 0 auto;
   padding: 10px var(--space-5);
@@ -393,14 +393,16 @@ button, .btn, .badge, a, .tab, .segment {
 /* —————————————————————————————— Page layout —————————————————————————————— */
 
 /* ===== Pílula flutuante (ponto de entrada do SGTU, onda 7 do plano ../SGTU.md) ===== */
-/* Fixa, fora do menu. Dimensões de token; foco e movimento são os globais
+/* Fixa, fora do menu, mas dentro do teto de largura da plataforma: o lado direito
+   encosta na coluna de conteúdo, então a pílula fica à esquerda do bloco e não no
+   extremo da tela. Dimensões de token; foco e movimento são os globais
    (:focus-visible, prefers-reduced-motion). O rótulo acompanha o ícone porque o
    ícone nunca é o único portador de informação. */
 .pilula-flutuante {
   position: fixed;
-  left: var(--space-4);
+  left: calc((100vw - var(--content-ceiling)) / 2 - var(--space-2));
   top: 50%;
-  transform: translateY(-50%);
+  transform: translate(-100%, -50%);
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -419,15 +421,15 @@ button, .btn, .badge, a, .tab, .segment {
 }
 
 .pilula-flutuante:hover { background: var(--button-primary-bg-hover); box-shadow: var(--shadow-cta); }
-.pilula-flutuante:active { transform: translateY(calc(-50% + 3px)); box-shadow: var(--shadow-cta-press); }
+.pilula-flutuante:active { transform: translate(-100%, calc(-50% + 3px)); box-shadow: var(--shadow-cta-press); }
 
 .app-main { display: block; }
 
 .page {
   width: 100%;
   /* --content-max e a soma dos componentes (4 cards de 280 + 3 gaps de 20);
-     o padding lateral da pagina fica fora dessa soma. */
-  max-width: calc(var(--content-max) + 2 * var(--space-8));
+     o padding lateral da pagina fica fora dessa soma. Mesmo teto do cabecalho. */
+  max-width: var(--content-ceiling);
   margin: 0 auto;
   padding: clamp(24px, 4vw, 52px) clamp(16px, 3vw, 40px) var(--space-10);
   animation: page-rise var(--dur-slow) var(--ease-out) both;
@@ -1507,7 +1509,21 @@ code {
 @keyframes shimmer { to { transform: translateX(100%); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* —————————————————————————————— Responsivo (767 / 1023 / container 1280) —————————————————————————————— */
+/* —————————————————————————————— Responsivo (767 / 1023 / 1519 calha / container 1280) —————————————————————————————— */
+
+/* Calha estreita: abaixo de 1520 px a calha esquerda não comporta a pílula
+   (~104 px + folga), então ela desce para o canto inferior da coluna, onde não cobre
+   texto. O lado esquerdo continua o teto, nunca o extremo da tela. */
+@media (max-width: 1519px) {
+  .pilula-flutuante {
+    left: max(var(--space-4), calc((100vw - var(--content-ceiling)) / 2));
+    top: auto;
+    bottom: var(--space-4);
+    transform: none;
+  }
+
+  .page { padding-bottom: calc(var(--space-10) + var(--space-6)); }
+}
 
 @media (max-width: 1180px) {
   .nav__link span { display: none; }
