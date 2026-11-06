@@ -422,18 +422,20 @@ button, .btn, .badge, a, .tab, .segment {
 .pilula-flutuante:hover { background: var(--button-primary-bg-hover); box-shadow: var(--shadow-cta); }
 .pilula-flutuante:active { transform: translate(-100%, calc(-50% + 3px)); box-shadow: var(--shadow-cta-press); }
 
-.app-main { display: block; }
-
-.page {
+/* Shell: o teto de largura é a largura TOTAL da interface (1080, o mesmo de sgoa e
+   sgtu). O conteúdo mora dentro dele com o padding lateral; o cabeçalho usa o mesmo
+   teto — é o que alinha os dois. Sem isto as views caíam no viewport inteiro. */
+.app-main {
+  display: block;
   width: 100%;
-  /* --content-ceiling é o teto total (1080); --content-max é a coluna dentro dele
-     (1080 - padding lateral 2x40 = 1000), onde a linha mais larga do dashboard
-     (4 cards + 3 gaps de 20) se reparte. Mesmo teto do cabecalho. */
   max-width: var(--content-ceiling);
   margin: 0 auto;
   padding: clamp(24px, 4vw, 52px) clamp(16px, 3vw, 40px) var(--space-10);
   animation: page-rise var(--dur-slow) var(--ease-out) both;
 }
+
+/* Coluna de conteúdo dentro do shell: o teto menos o padding lateral (1000). */
+.page { width: 100%; max-width: var(--content-max); margin: 0 auto; }
 .page--narrow { max-width: var(--content-narrow); }
 
 .page-section { margin-top: var(--space-9); }
@@ -1523,7 +1525,7 @@ code {
     transform: none;
   }
 
-  .page { padding-bottom: calc(var(--space-10) + var(--space-6)); }
+  .app-main { padding-bottom: calc(var(--space-10) + var(--space-6)); }
 }
 
 /* Na largura da coluna (1000 = teto 1080 - padding 2x40) o rótulo da nav já não
@@ -1562,7 +1564,7 @@ code {
   .topbar__inner { padding: 8px var(--space-3); }
   /* Estreito: a pílula desce para o canto inferior esquerdo e o conteúdo ganha
      folga para não ser coberto por ela. */
-  .page { padding: var(--space-6) var(--space-4) calc(var(--space-9) + var(--space-6)); }
+  .app-main { padding: var(--space-6) var(--space-4) calc(var(--space-9) + var(--space-6)); }
   .pilula-flutuante { top: auto; bottom: var(--space-4); transform: none; }
   .page-head { align-items: flex-start; }
   .page-head h1 { font-size: var(--text-xl); }
